@@ -1,2 +1,2 @@
 # Process-Fastq
-Clips, Aligns, and Accurately Removes Duplicates on Customer Barcode Adapter Paired End Fastqs
+Clip, align and accurately remove duplicates on custom barcode adapter paired-end FASTQ files
