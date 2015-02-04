@@ -1,6 +1,41 @@
+
 import itertools
 
-IUPAC = {'A':['A'],'C':['C'],'G':['G'],'T':['T'],'W':['A','T'],'S':['C','G'],'M':['A','C'],'K':['G','T'],'R':['A','G'],'Y':['C','T'],'B':['C','G','T'],'D':['A','G','T'],'H':['A','C','T'],'V':['A','C','G'],'N':['A','C','G','T']}
+IUPAC = {
+    'A':['A'],
+    'C':['C'],
+    'G':['G'],
+    'T':['T'],
+    'W':['A','T'],
+    'S':['C','G'],
+    'M':['A','C'],
+    'K':['G','T'],
+    'R':['A','G'],
+    'Y':['C','T'],
+    'B':['C','G','T'],
+    'D':['A','G','T'],
+    'H':['A','C','T'],
+    'V':['A','C','G'],
+    'N':['A','C','G','T']
+    }
+
+CAPUI = {
+    'A':'A', 
+    'C':'C', 
+    'G':'G', 
+    'T':'T', 
+    'AC':'M', 
+    'AG':'R',
+    'AT':'W',
+    'CG':'S',
+    'CT':'Y',
+    'GT':'K', 
+    'ACG':'V',
+    'ACT':'H',
+    'AGT':'D',
+    'CGT':'B', 
+    'ACGT':'N'
+    }
 
 
 ### Check if characters in seq are IUPAC nucleotide symbols
@@ -79,3 +114,44 @@ def make_unambiguous( seq ):
         unambiguous_nucleotides.append(''.join(chars))
 
     return unambiguous_nucleotides
+
+def make_ambiguous(list_of_seq):
+
+    ambiguous_list = []
+
+    for i in range(len(list_of_seq[0])):
+        ambiguous_list.append([])
+
+    for seq in list_of_seq:
+        for i in range(len(seq)):
+            if not seq[i] in ambiguous_list[i]:
+                ambiguous_list[i].append(seq[i])
+
+    ambiguous_seq = ''
+
+    for seq in ambiguous_list:
+        seq.sort()
+        ambiguous_seq = ''.join([ambiguous_seq, CAPUI[''.join(seq)]])
+
+    return ambiguous_seq
+
+def distance( seq, ref ):
+    distance = 0
+    for i in range(len(seq)):
+        if not set(IUPAC[seq[i]]).issubset(IUPAC[ref[i]]):
+            distance = distance + 1
+
+    return distance
+
+
+
+
+
+
+
+
+
+
+
+
+
