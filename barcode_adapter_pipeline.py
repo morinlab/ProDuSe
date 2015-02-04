@@ -10,6 +10,10 @@ import argparse
 import os
 import nucleotide
 import fastq
+import qsub
+import random
+import subprocess
+import sys
 
 if __name__ == '__main__':
 
@@ -57,7 +61,7 @@ if __name__ == '__main__':
         )
     parser.add_argument(
         "-r", "--reference",
-        required=True,
+        required=False,
         help="Specify the reference genome to align each set of sub-fastqs to"
         )
     parser.add_argument(
@@ -69,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "-fb", "--fix_barcode",
         action="store_true",
-        default="True",
+        default=True,
         help="Attempt to determine if a unique sequence still exists even though there are mismatches in barcode"
         )
     parser.add_argument(
@@ -84,10 +88,17 @@ if __name__ == '__main__':
         default=False,
         help="Remove any temporary files (e.g. sub-bams and sub-fastqs)"
         )
+    parser.add_argument(
+        "-F", "--fastq_preprocess",
+        action="store_true",
+        default=False,
+        help="If specified, only trim barcode sequence from fastq (skip other stages in pipeline)"
+        )
     args = parser.parse_args()
 
 
-    ### INPUT CHECK ###
+    ### INPUT CHECK ################################################################################
+
     #if not os.path.isfile(args.paired_end[0]):
         #sys.exit("The forward fastq file does not exist")
 
@@ -108,132 +119,163 @@ if __name__ == '__main__':
 
     if nucleotide.is_unambiguous(args.adapter_sequence):
         sys.exit("The adapter sequence you provided is unambiguous, there is no need for this method")
-
+    if not args.reference:
+        if not args.fastq_preprocess:
+            sys.exit("The reference sequence must be provided")
 
     ### DETERMINE POSSIBLE ADAPTERS ###
     ref_adapter = ''.join([args.adapter_sequence, args.adapter_sequence])
     good_adapters = nucleotide.make_unambiguous(ref_adapter)
+
+
+    ### CREATE TEMPORARY DIRECTORY AND FILES FOR THIS RUN ##########################################
     
-    forward_files = {}
-    reverse_files = {}
-    sam_files = {}
-    bwa_job_id = {}
-    forward_outputs = {}
-    reverse_outputs = {}
+    # Define the file names for all possible output/input
+    forward_output_file = 'forward.fastq'
+    reverse_output_file = 'reverse.fastq'
+    bwa_sam_file = 'bwa.sam'
+    read_group_bam_file = 'read_group.bam'
+    picard_bam_file = 'picard.bam'
+    picard_metric_file = 'metric_file.txt'
+    filtered_bam_file = 'filtered.bam'
 
-    good_adapters.append('MISC')
+    # Append the output prefix to these file names if specified as a 
+    # command line argument
+    if not args.file_prefix == '':
+        forward_output_file = '.'.join([args.file_prefix, forward_output_file])
+        reverse_output_file = '.'.join([args.file_prefix, reverse_output_file])
+        bwa_sam_file = '.'.join([args.file_prefix, bwa_sam_file])
+        read_group_bam_file = '.'.join([args.file_prefix, read_group_bam_file])
+        picard_bam_file = '.'.join([args.file_prefix, picard_bam_file])
+        picard_metric_file = '.'.join([args.file_prefix, picard_metric_file])
+        filtered_bam_file ='.'.join([args.file_prefix, filtered_bam_file])
 
-    # Create file names for all good adapters as well as a miscellaneous file for mismatching sequences
-    for adapter in good_adapters:
-        forward_files[adapter] = '.'.join(['1',adapter,'fastq'])
-        reverse_files[adapter] = '.'.join(['2',adapter,'fastq'])
-        sam_files[adapter] = '.'.join([adapter, 'sam'])
-        if not args.file_prefix == '':
-            forward_files[adapter] = '.'.join([args.file_prefix, forward_files[adapter]])
-            reverse_files[adapter] = '.'.join([args.file_prefix, reverse_files[adapter]])
-            sam_files[adapter] = '.'.join([args.file_prefix, sam_files[adapter]])
-        if args.sge:
-            bwa_job_id[adapter] = '-'.join(['BWA', sam_files[adapter]])
-
-    ### PROCESS FASTQ INPUT / OUTPUT ###
-
-    forward_input = open(args.paired_end[0], 'r')
-    reverse_input = open(args.paired_end[1], 'r')
-
-    end_of_file = False
-    while not end_of_file:
-
-        forward_records = {}
-        reverse_records = {}  
-
-        for adapter in good_adapters:
-            forward_records[adapter] = []
-            reverse_records[adapter] = []
-
-        forward_read = list(itertools.islice(forward_input, 4 * args.record_parse_amount))
-        reverse_read = list(itertools.islice(reverse_input, 4 * args.record_parse_amount))
- 
-        if len(forward_read) < args.record_parse_amount:
-            end_of_file = True
-
-        for i in range(len(forward_read)):
-            
-            if i%4 == 0:
-                adapter = ''.join([forward_read[i+1][:len(args.adapter_sequence)],reverse_read[i+1][:len(args.adapter_sequence)]])
-
-                if nucleotide.is_match(adapter,ref_adapter):
-                    forward_records[adapter].append(forward_read[i])
-                    reverse_records[adapter].append(reverse_read[i])
-                    forward_records[adapter].append(forward_read[i+1][len(args.adapter_sequence):])
-                    reverse_records[adapter].append(reverse_read[i+1][len(args.adapter_sequence):])
-                    forward_records[adapter].append(forward_read[i+2])
-                    reverse_records[adapter].append(reverse_read[i+2])    
-                    forward_records[adapter].append(forward_read[i+3][len(args.adapter_sequence):])
-                    reverse_records[adapter].append(reverse_read[i+3][len(args.adapter_sequence):])                                   
-                else:
-                    forward_records['MISC'].append(forward_read[i])
-                    reverse_records['MISC'].append(reverse_read[i])
-                    forward_records['MISC'].append(forward_read[i+1][len(args.adapter_sequence):])
-                    reverse_records['MISC'].append(reverse_read[i+1][len(args.adapter_sequence):])
-                    forward_records['MISC'].append(forward_read[i+2])
-                    reverse_records['MISC'].append(reverse_read[i+2])    
-                    forward_records['MISC'].append(forward_read[i+3][len(args.adapter_sequence):])
-                    reverse_records['MISC'].append(reverse_read[i+3][len(args.adapter_sequence):])  
-
-            else:
-                continue
-
-        for adapter in good_adapters:
-            handler = open('/'.join([args.output_directory, forward_files[adapter]]), 'a')
-            handler.write(''.join(forward_records[adapter]))
-            handler.close()
-            handler = open('/'.join([args.output_directory, reverse_files[adapter]]), 'a')
-            handler.write(''.join(reverse_records[adapter]))
-            handler.close()
-
-    ### BWA ###
-
-    for adapter in good_adapters:
-        
-        print ':'.join(['BWA', adapter])
-
-        commands = ' '.join([
-            'bwa', 'mem',
-            '-M', 
-            '-t', str(args.number_of_threads),
-            args.reference,
-            '/'.join([args.output_directory, forward_files[adapter]]),
-            '/'.join([args.output_directory, reverse_files[adapter]]),
-            '>', '/'.join([args.output_directory, sam_files[adapter]])
-            ])
-
-        if args.sge:
-            qsub_commands = ' '.join([
-                'qsub', '-cwd',
-                '-b', 'y',
-                '-N', bwa_id[adapter],
-                commands
-                ])
-        else:
-            os.popen(commands, 'r')
-
-    ### MARK DUPLICATES ###
-
-    
+    # Make a new unique temporary directory
+    prev_tmp_dir = '/'.join([args.output_directory, 'tmp'])
+    tmp_dir = prev_tmp_dir
+    while os.path.exists(tmp_dir):
+        tmp_dir = ''.join([prev_tmp_dir, str(random.randint(1000000000, 9999999999))])
+    os.makedirs(tmp_dir)
+    print ':'.join(['PROCESS-FASTQ\tCreated Temporary Directory', tmp_dir[3:]])
 
 
-    ### MERGE BAMS ####
+    ### PROCESS FASTQ INPUT / OUTPUT ###############################################################
+    print ':'.join(['PROCESS-FASTQ\tTrimming Adapter Sequence', args.adapter_sequence])
+
+
+    # Open Fastq files for reading and writing
+    forward_input = fastq.FastqOpen(args.paired_end[0], 'r')
+    reverse_input = fastq.FastqOpen(args.paired_end[1], 'r')
+    forward_output = fastq.FastqOpen('/'.join([tmp_dir, forward_output_file]), 'w')
+    reverse_output = fastq.FastqOpen('/'.join([tmp_dir, reverse_output_file]), 'w')
+
+    # For each read in the forward and reverse fastq files, trim the adapter, at it to the read id
+    # and output this new fastq record to the temprary output fastq
+    count = 0
+    for forward_read in forward_input:
+        count = count + 1
+        reverse_read = reverse_input.next()
+        forward_adapter = forward_read.trim(len(args.adapter_sequence))
+        reverse_adapter = reverse_read.trim(len(args.adapter_sequence))
+        forward_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, forward_read.id[1:]])
+        reverse_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, reverse_read.id[1:]])
+        forward_output.next(forward_read)
+        reverse_output.next(reverse_read)
+        if count % 100000 == 0:
+            print ':'.join(['PROCESS-FASTQ\tProcessed Reads', str(count)])
+
+    print ':'.join(['PROCESS-FASTQ\tProcessed Reads', str(count)])
+    # Close the Fastq Files (especially since these files buffer the records), want to make sure
+    # BWA has all the records
+    forward_input.close()
+    reverse_input.close()
+    forward_output.close()
+    reverse_output.close()
+
+    if args.fastq_preprocess:
+        sys.exit(0)
+
+    ### SETUP SGE ##################################################################################
+
+    # These variables will only be used if args.sge is true
+
+    sge = qsub.Qsub()
+
+    ### FASTQ PRE-PROCESSING #######################################################################
 
 
 
-    ### FILTER MISC BAM AND MERGE ###
+
+
+    ### BWA ########################################################################################
+
+    commands = [
+        'bwa', 'mem',
+        '-M', 
+        '-t', str(args.number_of_threads),
+        args.reference,
+        '/'.join([tmp_dir, forward_output_file]),
+        '/'.join([tmp_dir, reverse_output_file]),
+        '>', '/'.join([tmp_dir, bwa_sam_file])
+        ]
+
+    if args.sge:
+        sge.change(job_name='PROCESS-FASTQ:BWA')
+        sge.run(commands)
+    else:
+        subprocess.call(commands)
+
+
+    ### ADD READGROUPS #############################################################################
+
+    commands = [
+        'python', 'add_readgroups.py',
+        '--input', '/'.join([tmp_dir, bwa_sam_file]),
+        '--output', '/'.join([tmp_dir, read_group_bam_file]),
+        '--adapter_sequence', args.adapter_sequence
+        ]
+
+    if args.sge:
+        sge.change(job_name='PROCESS-FASTQ:ADD_READ_GROUP')
+        sge.run(commands)
+    else:
+        subprocess.call(commands)
+
+
+    ### PICARD #####################################################################################
+
+    commands = [
+        'java', '-Xmx4g',
+        '-jar', '$PICARDROOT/MarkDuplicates.jar',
+        ''.join(["INPUT=", '/'.join([tmp_dir, bwa_sam_file])]),
+        ''.join(["OUTPUT=", '/'.join([tmp_dir, picard_bam_file])]),
+        ''.join(["METRIC_FILE=", '/'.join([tmp_dir, picard_metric_file])]),
+        'REMOVE_DUPLICATES=True'
+        'ASSUME_SORTED=False',
+        'SORT_ORDER=coordinate'
+        ]
+
+    if args.sge:
+        sge.change(job_name='PROCESS-FASTQ:PICARD')
+        sge.run(commands)
+    else:
+        subprocess.call(commands)
+
+
+    ### REMARK DUPLICATES ##########################################################################
 
 
 
-    ### PROCESS FINAL BAM AND REMOVE READS AT SAME POSITION with different adapters that have an edit distance greater than default ###
 
 
 
-    ### CLEAN UP ###
+    ### CLEAN UP ###################################################################################
 
-    #for i in 0:(len(forward_file)-1):
+
+
+
+
+
+
+
+
