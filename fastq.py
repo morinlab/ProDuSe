@@ -64,15 +64,15 @@ class FastqRead:
 		return self
 
 	def next(self):
-		
+
 		if self.end and len(self.data) == 0:
 			raise StopIteration()
 		
 		elif len(self.data) == 0:
 			self.data = list(itertools.islice(self.fh, 20000))
-			self.end = self.data < 20000
-			return next(self)
-		
+			self.end = len(self.data) < 20000
+			return self.next()
+
 		else:
 			return Fastq(
 				self.data.pop(0)[:-1], 
@@ -82,9 +82,12 @@ class FastqRead:
 				)
 
 	def __del__(self):
-		self.fh.close()
+		self.close()
 
 	def __exit__(self):
+		self.close()
+
+	def close(self):
 		self.fh.close()
 
 
@@ -95,32 +98,37 @@ class FastqWrite:
 		self.data = []
 		self.data_len = len(self.data)
 
-	def __iter__(self, fastq):
+	def force_write(self):
+		tmp = open(self.file, 'a')
+		tmp.write(''.join(self.data))
+		self.data = []
+		tmp.close()
+
+	def next(self, fastq):
+
 		self.data.append(
-			''.join(fastq.id,'\n')
+			''.join([fastq.id,'\n'])
 			)
 		self.data.append(
-			''.join(fastq.seq,'\n')
+			''.join([fastq.seq,'\n'])
 			)
 		self.data.append(
-			''.join(fastq.strand,'\n')
+			''.join([fastq.strand,'\n'])
 			)
 		self.data.append(
-			''.join(fastq.qual,'\n')
+			''.join([fastq.qual,'\n'])
 			)
-		if len(self.data) == 20000:
-			force_write(self)
+		if len(self.data) >= 20000:
+			self.force_write()
 
 	def __exit__(self):
-		force_write(self)
+		self.force_write()
 
 	def __del__(self):
-		force_write(self)
+		self.force_write()
 
-	def force_write(self):
-		tmp = open(self.file, 'w')
-		tmp.write(self.data)
-		tmp.close()
+	def close(self):
+		self.force_write()
 
 
 def FastqOpen(file, mode):
