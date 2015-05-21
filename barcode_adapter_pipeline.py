@@ -172,19 +172,25 @@ if __name__ == '__main__':
     # For each read in the forward and reverse fastq files, trim the adapter, at it to the read id
     # and output this new fastq record to the temprary output fastq
     count = 0
+    discard = 0
     for forward_read in forward_input:
         count = count + 1
         reverse_read = reverse_input.next()
         forward_adapter = forward_read.trim(len(args.adapter_sequence))
         reverse_adapter = reverse_read.trim(len(args.adapter_sequence))
+        sequenced_adapter = ''.join([forward_adapter.seq, reverse_adapter.seq]);
+        true_adapter = ''.join([args.adapter_sequence, args.adapter_sequence]);
+        if nucleotide.distance(sequenced_adapter, true_adapter) > args.max_mismatch:
+            discard = discard + 1
+            continue
         forward_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, forward_read.id[1:]])
         reverse_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, reverse_read.id[1:]])
         forward_output.next(forward_read)
         reverse_output.next(reverse_read)
         if count % 100000 == 0:
-            print ':'.join(['PROCESS-FASTQ\tProcessed Reads', str(count)])
+            print 'PROCESS-FASTQ\tProcessed Reads:%s\tDiscarded Reads:%s' % (str(count), str(discard))
 
-    print ':'.join(['PROCESS-FASTQ\tProcessed Reads', str(count)])
+    print 'PROCESS-FASTQ\tProcessed Reads:%s\tDiscarded Reads:%s' % (str(count), str(discard))
     # Close the Fastq Files (especially since these files buffer the records), want to make sure
     # BWA has all the records
     forward_input.close()
