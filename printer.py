@@ -39,3 +39,6 @@ def general( task ):
         general_print(['REMARKING ADAPTER DUPLICATES'])
     else:
         general_print([task])
+
+def trim(count, discard):
+    print '    '.join([program, time.strftime('%X'), 'TRIM  '] + [':'.join(['Reads Processed', str(count)])] + [':'.join(['Reads Discarded', str(discard)])])

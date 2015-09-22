@@ -12,6 +12,7 @@ class Setup:
         self.trimmed_reverse = None
         self.bam = None
         self.marked_bam = None
+        self.metric_file = None
         self.remarked_bam = None
         self.trim = False
         self.bwa = False
@@ -34,6 +35,7 @@ class Setup:
         else:
             self.picard = True
             self.marked_bam = '/'.join([tmp_dir, 'marked.bam'])
+            self.metric_file = '/'.join([tmp_dir, 'metric_file.txt'])
             if args.bam != None:
                 self.bam = args.bam
             else:
