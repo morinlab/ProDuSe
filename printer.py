@@ -40,5 +40,14 @@ def general( task ):
     else:
         general_print([task])
 
+def fastq(count, mode):
+    if mode == 'r':
+        print '    '.join([program, time.strftime('%X'), 'FASTQ '] + [': '.join(['Fastq Reads', str(count)])])
+    elif mode == 'w':
+        print '    '.join([program, time.strftime('%X'), 'FASTQ '] + [':'.join(['Fastq Writes', str(count)])])
+
 def trim(count, discard):
     print '    '.join([program, time.strftime('%X'), 'TRIM  '] + [':'.join(['Reads Processed', str(count)])] + [':'.join(['Reads Discarded', str(discard)])])
+
+def mark(count, discard):
+    print '    '.join([program, time.strftime('%X'), 'MARK  '] + [':'.joing(['Adapter Classes Processed', str(count)])]) 
