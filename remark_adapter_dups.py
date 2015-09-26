@@ -3,6 +3,7 @@ import sys
 import bam
 import fastq
 import printer
+import pysam
 
 desc = "Trim paired-end fastq files that contain an adapter sequence (paste this sequence in QNAME)"
 parser = argparse.ArgumentParser(description=desc)
@@ -28,14 +29,11 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-bamfile = bam.BamOpen(args.input[0], 'r')
+bamfile = pysam.AlignmentFile(args.input[0], 'r')
 forward_fastq = fastq.FastqOpen(args.output[0], "w")
 reverse_fastq = fastq.FastqOpen(args.output[1], "w")
-
-counter = 1
+collection_creator = bam.AlignmentCollectionCreate(bamfile)
 while True:
-    printer.mark
-    collection = bam.CreateCollection(bamfile)
-    collection['+'].consensus_average(args.max_mismatch, forward_fastq, reverse_fastq)
-    collection['-'].consensus_average(args.max_mismatch, forward_fastq, reverse_fastq)
+    collection = collection_creator.next()
+    collection.consensus_average(args.max_mismatch, forward_fastq, reverse_fastq)
 
