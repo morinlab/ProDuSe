@@ -138,8 +138,9 @@ def make_ambiguous(list_of_seq):
 def distance( seq, ref ):
     distance = 0
     for i in range(len(seq)):
-        if not set(IUPAC[seq[i]]).issubset(IUPAC[ref[i]]):
-            distance = distance + 1
+        if not seq[i] == 'N' or not ref[i] == 'N':
+            if not set(IUPAC[seq[i]]).issubset(IUPAC[ref[i]]):
+                distance = distance + 1
 
     return distance
 

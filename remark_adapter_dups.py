@@ -26,6 +26,10 @@ parser.add_argument(
     default=3,
     help="The maximum mismatch acceptable for a new adapter to be considered in an adapter class"
     )
+#parser.add_argument(
+#    "-a", "--algorithm",
+#    choices = ['mapq', 'consensus'],
+
 
 args = parser.parse_args()
 
@@ -35,5 +39,6 @@ reverse_fastq = fastq.FastqOpen(args.output[1], "w")
 collection_creator = bam.AlignmentCollectionCreate(bamfile)
 while True:
     collection = collection_creator.next()
+    print collection
     collection.consensus_average(args.max_mismatch, forward_fastq, reverse_fastq)
 
