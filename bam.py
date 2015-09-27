@@ -55,7 +55,7 @@ class AlignmentCollectionCreate:
                     self.tmp_collections[id] = { read.qname : [ read ] }
                     read = self.data.next()
 
-			    # Process Reads until the start position changes
+			          # Process Reads until the start position changes
                 while True:
 
                     while not read.reference_id == read.next_reference_id:
@@ -108,25 +108,37 @@ class AlignmentCollectionCreate:
                 if not self.next_collection_to_output == []:
                     break
 
-        
+        # Get the next collection id from the collection queue
         collection_id = self.next_collection_to_output.pop(0)
+
+        # Prepare a list of positive and negateive alignments
         list_of_alignments_positive = []
         list_of_alignments_negative = []
+
+        # for each alignment in the collection, determine the sense
         for pairs in self.tmp_collections[collection_id]:
             tmp_align = Alignment(self.tmp_collections[collection_id][pairs][0], self.tmp_collections[collection_id][pairs][0])
             
             del self.qnames_to_id[tmp_align.read_one.qname]
+
+            # Add that alignment to their respected sense list
             if tmp_align.is_positive():
                 list_of_alignments_positive.append(tmp_align)
             else:
                 list_of_alignments_negative.append(tmp_align)
+
+        # Delete no longer necessary data entries
         del self.tmp_collections[collection_id]
         del self.collection_count_read_one[collection_id]
         del self.collection_count_read_two[collection_id]
+
+        # Push the next collections to a output queue
         if not list_of_alignments_positive == []:
             self.tmp_collection_sense.append(AlignmentCollection(list_of_alignments_positive, collection_type='+', collection_id=collection_id))
         if not list_of_alignments_negative == []:
             self.tmp_collection_sense.append(AlignmentCollection(list_of_alignments_negative, collection_type='-', collection_id=collection_id))
+        
+        # Output one of the collections 
         return self.tmp_collection_sense.pop(0)
 
 class AlignmentCollection:
@@ -156,7 +168,7 @@ class AlignmentCollection:
                 str(self.data[0].read_one.reference_id), 
                 str(self.data[0].read_one.reference_start),
                 str(self.data[0].read_two.reference_id),
-                str(self.data[0].read_two.reference_end),
+                str(self.data[0].read_one.reference_start + abs(self.data[0].read_one.tlen)),
                 str(len(self.data))
                 ])
 
@@ -173,7 +185,7 @@ class AlignmentCollection:
             fastq_forward.next(forward)
             fastq_reverse.next(reverse)
 
-        elif self.is_adapters:
+        else:
             
             # We are trying to identify all of the adapter classes in the collection of Reads
             adapter_to_adapter_class = {}
@@ -187,12 +199,11 @@ class AlignmentCollection:
 
                 # Otherwise we need to determine if this new adapter is its own class or already in a class
                 elif not key in adapter_to_adapter_class:
-                    
+                    print adapter_class
                     # Calculate the distance of the adapter to each known adapter classes
                     distance_to_adapter_class = [ nucleotide.distance(x, key) for x in adapter_class ]
                     # Determine which class (i.e. find the index) the adapter belongs to
                     index = [ n for n,i in enumerate(distance_to_adapter_class) if i <= max_mismatch ]
-                    
                     # If no index was created, the adapter is distant from all current adapter classes
                     # Define this as a new adapter class
                     if index == []:
@@ -204,8 +215,7 @@ class AlignmentCollection:
                         index = index[0]
                         adapter_to_adapter_class[key] = adapter_class[index]
 
-
-						# Here we are grouping all adlignments to their respected adapter class
+            # Here we are grouping all adlignments to their respected adapter class
             adapter_class_to_reads = {}
             for alignment in self.data:
                 adapter = alignment.read_one.qname.split("M00")[0]
@@ -215,14 +225,14 @@ class AlignmentCollection:
                     adapter_class_to_reads[adapter_to_adapter_class[adapter]] = [alignment]
 
             # Here we are creating the consensus of each adapter class grouping
-            for key in adapter_class_to_reads.iterkeys():
-                value = adapter_class_to_reads[key]
+            for key in adapter_class:
+                value = adapter_class_to_reads[key]    
                 id = ':'.join([
                     ''.join(['@', key]), 
                     str(value[0].read_one.reference_id),
                     str(value[0].read_one.reference_start),
                     str(value[0].read_two.reference_id),
-                    str(value[0].read_two.reference_end),
+                    str(value[0].read_one.reference_start + abs(value[0].read_one.tlen)),
                     str(len(self.data))
                     ])
 
@@ -241,6 +251,7 @@ class AlignmentCollection:
                     qual_reverse.append(collections.Counter([ x.read_two.qual[i-1] for x in value]).most_common(1)[0][0])
 
                 # Write to Fastq
+                #print '\n'.join([str(id),''.join(seq_forward), '+', ''.join(qual_forward)])
                 fastq_forward.next(fastq.Fastq(str(id), ''.join(seq_forward), '+', ''.join(qual_forward)))
                 fastq_reverse.next(fastq.Fastq(str(id), ''.join(seq_reverse), '+', ''.join(qual_reverse)))                
 
