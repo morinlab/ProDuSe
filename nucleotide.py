@@ -37,6 +37,13 @@ CAPUI = {
     'ACGT':'N'
     }
 
+COMPLEMENT = {
+    'A':'T',
+    'C':'G',
+    'G':'C',
+    'T':'A',
+    'N':'N'
+    }
 
 ### Check if characters in seq are IUPAC nucleotide symbols
 def is_iupac( seq ):
@@ -135,18 +142,45 @@ def make_ambiguous(list_of_seq):
 
     return ambiguous_seq
 
-def distance( seq, ref ):
-    distance = 0
+def which_ambiguous( seq ):
+    indexes = []
     for i in range(len(seq)):
-        if not seq[i] == 'N' or not ref[i] == 'N':
+        if len(IUPAC[seq[i]]) > 1:
+            indexes.append(i)
+
+    return indexes
+
+def distance( seq, ref, indexes = [] ):
+    distance = 0
+    if indexes == []:
+        indexes = range(len(seq))
+    for i in indexes:
+        if not seq[i] == 'N' and not ref[i] == 'N':
             if not set(IUPAC[seq[i]]).issubset(IUPAC[ref[i]]):
                 distance = distance + 1
 
     return distance
 
+def complement( seq ):
+    complementSeq = list(seq)
+    for i in range(len(seq)):
+        complementSeq[i] = COMPLEMENT[seq[i]]
+    return ''.join(complementSeq)
 
 
+def reverse( seq ):
+    reverseSeq = list(seq)
+    length = len(seq)
+    for i in range(length):
+        reverseSeq[i] = seq[length - i - 1]
+    return ''.join( reverseSeq )
 
+def reverseComplement( seq ):
+    reverseComplementSeq = list(seq)
+    length = len(seq)
+    for i in range(length):
+        reverseComplementSeq[i] = COMPLEMENT[seq[length - i - 1]]
+    return ''.join(reverseComplementSeq)
 
 
 

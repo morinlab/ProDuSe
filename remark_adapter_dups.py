@@ -26,6 +26,11 @@ parser.add_argument(
     default=3,
     help="The maximum mismatch acceptable for a new adapter to be considered in an adapter class"
     )
+parser.add_argument(
+    "-as", "--adapter_sequence",
+    default="WSWSWGACTWSWSWGACT",
+    type=str
+    )
 #parser.add_argument(
 #    "-a", "--algorithm",
 #    choices = ['mapq', 'consensus'],
@@ -36,9 +41,7 @@ args = parser.parse_args()
 bamfile = pysam.AlignmentFile(args.input[0], 'r')
 forward_fastq = fastq.FastqOpen(args.output[0], "w")
 reverse_fastq = fastq.FastqOpen(args.output[1], "w")
-collection_creator = bam.AlignmentCollectionCreate(bamfile)
-while True:
-    collection = collection_creator.next()
-    print collection
-    collection.consensus_average(args.max_mismatch, forward_fastq, reverse_fastq)
-
+printer = printer.open('PROCESS_FASTQ', 'MARK', 'START', ['read'], 3)
+collection_creator = bam.AlignmentCollectionCreate(bamfile, printer=printer)
+for collection in collection_creator:
+    collection.consensus_average(args.max_mismatch, forward_fastq, reverse_fastq, args.adapter_sequence)
