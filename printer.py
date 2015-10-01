@@ -49,5 +49,41 @@ def fastq(count, mode):
 def trim(count, discard):
     print '    '.join([program, time.strftime('%X'), 'TRIM  '] + [':'.join(['Reads Processed', str(count)])] + [':'.join(['Reads Discarded', str(discard)])])
 
-def mark(count, discard):
-    print '    '.join([program, time.strftime('%X'), 'MARK  '] + [':'.joing(['Adapter Classes Processed', str(count)])]) 
+class open:
+
+    def __init__(self, pipeline, pipeline_stage, stage_task, list_of_counters, verbose):
+        self.pipeline = pipeline
+        self.stage = pipeline_stage
+        self.task = stage_task
+        self.verbose = verbose
+        self.counter = {}
+        for i in list_of_counters:
+            self.counter_strs = 0;
+        self.base = 0
+        print '    '.join([self.pipeline, time.strftime('%X'), self.stage, self.task,] + [':'.join([x, self.counter[x]]) for x in self.counter])
+
+    def pipeline(self, pipeline):
+        self.pipeline = pipeline
+
+    def stage(self, stage):
+        self.stage = stage
+
+    def task(self, task):
+        self.task = tas
+        if self.verbose == 3:
+            print '    '.join([self.pipeline, time.strftime('%X'), self.stage, self.task,] + [':'.join([x, self.counter[x]]) for x in self.counter])
+
+    def count(self, counter):
+        self.counter[counter] =+ 1
+        self.base =+ 1
+
+    def update(self):       
+        
+        if self.verbose == 0:
+            pass
+
+        elif self.verbose == 1:
+            if self.base % 100000:
+                print '    '.join([self.pipeline, time.strftime('%X'), self.stage, self.task,] + [':'.join([x, self.counter[x]]) for x in self.counter])     
+
+
