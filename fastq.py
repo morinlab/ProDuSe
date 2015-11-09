@@ -68,12 +68,8 @@ class FastqRead:
     def next(self):
 
         if self.end and len(self.data) == 0:
-            printer.fastq(self.data, 'r')
             raise StopIteration()
 
-        elif self.data % 100000:
-            printer.fastq(self.count, 'r')
-        
         elif len(self.data) == 0:
             self.data = list(itertools.islice(self.fh, 20000))
             self.end = len(self.data) < 20000
@@ -107,8 +103,6 @@ class FastqWrite:
         self.count = len(self.data)
 
     def force_write(self):
-        if self.count % 100000 == 0:
-            printer.fastq(self.count, 'w')
         tmp = open(self.file, 'a')
         tmp.write(''.join(self.data))
         self.data = []

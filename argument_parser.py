@@ -4,105 +4,136 @@ import printer
 def parse():
     desc = "Convert paired-end fastq files with variable adapters into sub-fastq's containing same variable adapter sequence"
     parser = argparse.ArgumentParser(description=desc)
+
     parser.add_argument(
-        "-pe", "--paired_end",
+        "-f", "--fastqs",
         nargs=2,
-        help="Takes the forward and reverse fastq files from paired end sequencing"
+        help="The untrimmed, raw fastqs generated from paired end sequencing"
         )
+
     parser.add_argument(
-        "-tpe", "--trimmed_paired_end",
+        "-tf", "--trimmed_fastqs",
         nargs=2,
-        help="Takes the forward and reverse fastq files from paired end sequencing whose adapters have already been trimmed"
+        help="The trimmed fastqs generated from the first stage of the pipeline"
         )
+
     parser.add_argument(
-        "-b", "--bam",
-        nargs=1,
-        help="Takes the sorted, aligned bam file"
+        "-tb", "--trimmed_bam",
+        help="The aligned bam generated from the second stage of the pipeline"
         )
+
     parser.add_argument(
-        "-mb", "--marked_bam",
-        nargs=1,
-        help="Takes the marked, sorted, aligned bam file"
+        "-cf", "--collapsed_fastqs",
+        nargs=2,
+        help="The collapsed fastqs generated from the third stage of the pipeline"
         )
+
+    parser.add_argument(
+        "-cb", "--collapsed_bam",
+        help="The collapsed bam generated from the fourth stage of the pipeline"
+        )
+
     parser.add_argument(
         "-mm", "--max_mismatch",
         type=int,
+        default=3,
         help="The maximum number of mismatching nucleotides to see in the adapter and reads. Default is the length of the adapter (i.e. do not discard any reads)"
         )
+
     parser.add_argument(
-        "-fp", "--file_prefix",
-        default='',
-        help="The prefix to include on all the sub-fastq's, if not specified the files will be named 1.NNNNN.fastq or 2.NNNNN.fastq, where NNNNN is the respected variable adapter sequence"
+        '-as', "--adapter_sequence",
+        type=str,
+        default="WSWSWGACT"
         )
+
     parser.add_argument(
         "-o", "--output_directory",
-        default="./",
+        default=".",
         help="Specify and output directory, otherwise the current working directory will be used"
         )
+
     parser.add_argument(
-        "-rpa", "--record_parse_amount",
-        type=int,
-        default=100000,
-        help="The number of records to read before writing to sub-fastq files"
+        "-p", "--prefix",
+        default="tmp",
+        help="Specify a prefix instead of tmp"
         )
-    parser.add_argument(
-        "-t", "--number_of_threads",
-        type=int,
-        default=1,
-        help="Specify the number of threads to each alignment, mark duplicates, and the final merge"
-        )
+
     parser.add_argument(
         "-r", "--reference",
-        help="Specify the reference genome to align each set of sub-fastqs to"
+        help="Specify the reference genome to align each set of sub-fastqs to, must contain bwa indexes"
         )
-    parser.add_argument(
-        "-pj", "--picard_jar",
-        help="Specify the picard jar file to run MarkDuplicates"
-        )
+
     parser.add_argument(
         "-s", "--sge",
         action="store_true",
         default=False,
         help="If cluster services are available, jobs will be submitted using qsub"
         )
+
     parser.add_argument(
-        "-c", "--clean",
-        action="store_true",
-        default=False,
-        help="Remove any temporary files (e.g. sub-bams and sub-fastqs)"
+        "--source_directory",
+        default="",
+        help="A directory to Source before each qsub submition"
         )
+
     parser.add_argument(
-        "-F", "--trim_fastq",
+        "-1", "--trim_fastq",
         action="store_true",
         default=False,
         help="Only trim Barcodes"
         )
+
     parser.add_argument(
-        "-B", "--bwa",
+        "-2", "--trim_bam",
         action="store_true",
         default=False,
         help="Only run BWA"
         )
+
     parser.add_argument(
-        "-P", "--picard",
+        "-3", "--collapse_fastq",
         action="store_true",
-        default=False,
-        help="Only run Picard"
+        default="True",
+        help="Only collapse Fastqs"
         )
+
     parser.add_argument(
-       "-R", "--remark_bam",
-       action="store_true",
-       default="True",
-       help="Only remark Bam"
-       )
+        "-4", "--collapse_bam",
+        action="store_true",
+        default="True",
+        help="Only run BWA on collapsed fastqs"
+        )
+
+    parser.add_argument(
+        "-5", "--variants",
+        action="store_true",
+        default="True",
+        help="Only call variants"
+        )
+
+    parser.add_argument(
+        "-6", "--clean",
+        action = "store_true",
+        default="False",
+        help="Only Clean tmp Directory"
+        )
+
+    parser.add_argument(
+        "--batch",
+        type=str,
+        help="Submit Multiple Jobs At Once"
+        )
 
     args = parser.parse_args()  
 
     return args
 
 def check( args ):
-    if sum([args.paired_end != None, args.trimmed_paired_end != None, args.bam != None, args.marked_bam != None]) != 1:
-        printer.issue('You must specify exactly one of the paired_end, trimmed_paired_end, bam or marked_bam options')
+    if not sum([not args.fastqs == None, not args.trimmed_fastqs == None, not args.trimmed_bam == None, not args.collapsed_fastqs == None, not args.batch == None]) == 1:
+        printer.issue('You must specify exactly one of the fastqs, trimmed_fastqs, trimmed_bam, collapsed_fastqs or batch options')
+
+
+        
 
 
 

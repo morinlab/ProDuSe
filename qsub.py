@@ -9,12 +9,13 @@ class Qsub:
 	previous_job_names=[]
 	previous_job_commands={}
 
-	def __init__(self, job_name, virtual_memory='4G', wait_on_previous_job=False):
+	def __init__(self, job_name, virtual_memory='4G', wait_on_previous_job=False, source_directory=""):
 
 		# Job Attributes		
 		self.job_name=job_name
 		self.virtual_memory=virtual_memory
 		self.wait_on_previous_job=wait_on_previous_job
+                self.source_directory=source_directory
 
 
 	def change(self, job_name='', virtual_memory='', wait_on_previous_job=''):
@@ -45,7 +46,9 @@ class Qsub:
 
 		# Write the commands to this new tmp file
 		tmp_handler = open(tmp_file, 'w')
-		tmp_handler.write(commands)
+                if not self.source_directory == "":
+                    tmp_handler.write(' '.join(["source", self.source_directory, ";"]))
+		tmp_handler.write(' '.join(commands))
 		tmp_handler.close()
 
 		# Change this file to be an executable
@@ -54,6 +57,8 @@ class Qsub:
 		# Create tmp command
 		tmp_command = '/'.join(['.', tmp_file])
 
+                subprocess.call(['chmod', '777', tmp_command])
+
 		hold_jid = ""
 		if self.wait_on_previous_job:
 			hold_jid = ','.join(self.previous_job_ids)
@@ -61,20 +66,26 @@ class Qsub:
 		qsub_command=[
 			'qsub',			'-cwd',
 			'-b',			'y',
-			'-N',			self.job_name,
-			'-hold_jid',	hold_jid,
+			'-N',			self.job_name
+                        ]
+                if not hold_jid == "":
+                        qsub_command = qsub_command + ['-hold_jid', hold_jid]
+                qsub_command = qsub_command + [
 			'-l',			''.join(['h_vmem=',self.virtual_memory]),
 			tmp_command
 			]
 
+
 		# Call the Qsub while storing the stdout
-		qsub_output = subprocess.check_output(tmp_command)
+		qsub_output = subprocess.Popen(qsub_command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+                err, std = qsub_output.communicate()
+
 
 		# Grab the id from the stdout
-		# Potentially add error checking!!!!
-		id = re.search("[0-9]+", qsub_output).group()
+		id = re.search("[0-9]+", err).group()
+
 
 		# Store information about this job
-		self.previous_job_ids.append(qsub_output)
-		self.previous_name_ids.append(self.job_name)
-		self.previous_commands[id] = self.commands
+		self.previous_job_ids.append(id)
+		self.previous_job_names.append(self.job_name)
+		self.previous_job_commands[id] = commands
