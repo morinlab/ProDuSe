@@ -71,6 +71,12 @@ def parse():
         )
 
     parser.add_argument(
+        "--source_directory",
+        default="",
+        help="A directory to Source before each qsub submition"
+        )
+
+    parser.add_argument(
         "-1", "--trim_fastq",
         action="store_true",
         default=False,

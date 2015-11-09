@@ -28,6 +28,8 @@ if __name__ == '__main__':
 
     printer.general('TRIM')
 
+    sge = qsub.Qsub('PRODUSE', wait_on_previous_job=True, source_directory=args.source_directory)
+
     if data.trim:    
         
         commands = [
@@ -67,7 +69,7 @@ if __name__ == '__main__':
 
         if args.sge:
             printer.general('Running on SGE')
-            sge.change(job_name='PRODUSE:TRIM-ALIGNMENT')
+            sge.change(job_name='PRODUSE-TRIM-ALIGNMENT', virtual_memory='8G')
             sge.run(commands)
 
         else:
@@ -96,7 +98,7 @@ if __name__ == '__main__':
 
         if args.sge:
             printer.general('Running on SGE')
-            sge.change(job_name='PROCESS-FASTQ:COLLAPSE')
+            sge.change(job_name='PROCESS-FASTQ-COLLAPSE', virtual_memory='4G')
             sge.run(commands)
 
         else:
@@ -125,7 +127,7 @@ if __name__ == '__main__':
 
         if args.sge:
             printer.general('Running on SGE')
-            sge.change(job_name='PRODUSE:COLLAPSED-ALIGNMENT')
+            sge.change(job_name='PRODUSE-COLLAPSED-ALIGNMENT', virtual_memory='8G')
             sge.run(commands)
 
         else:
