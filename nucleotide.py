@@ -167,7 +167,6 @@ def complement( seq ):
         complementSeq[i] = COMPLEMENT[seq[i]]
     return ''.join(complementSeq)
 
-
 def reverse( seq ):
     reverseSeq = list(seq)
     length = len(seq)

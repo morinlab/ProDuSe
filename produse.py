@@ -4,6 +4,10 @@ import argument_parser
 import printer
 import setup
 import subprocess
+import sys
+import select
+import os
+import signal
 
 if __name__ == '__main__':
 
@@ -23,16 +27,19 @@ if __name__ == '__main__':
     ### TRIM FASTQ #################################################################################
 
     printer.general('TRIM')
-		
-		if data.trim:    
+
+    if data.trim:    
+        
         commands = [
-            'python', 'trim_fastq.py',
+            'python', 'trim.py',
             '-i', data.forward, data.reverse,
             '-o', data.trimmed_forward, data.trimmed_reverse,
-            '-mm', args.max_mismatch,
+            '-mm', str(args.max_mismatch),
             '-as', args.adapter_sequence
             ]
-    
+   
+        printer.command(commands)
+
         if args.sge:
             printer.general('Running on SGE')
             sge.change()
@@ -47,78 +54,86 @@ if __name__ == '__main__':
 
     printer.general('BWA')
 
-    if data.bwa:
-        
+    if data.trim_bam:
+  
         commands = [
-            'bwa', 'mem',
-            '-M',
-            '-t', str(args.number_of_threads),
-            args.reference,
-            data.trimmed_forward,
-            data.trimmed_reverse,
-            '>', data.bam
+            'python', 'bwa.py',
+            '-f', data.trimmed_forward, data.trimmed_reverse,
+            '-b', data.trimmed_bam,
+            '-r', args.reference
             ]
-    
-        if args.sge:
-            sge.change(job_name='PROCESS-FASTQ:BWA')
-            sge.run(commands)
-        else:
-            subprocess.call(commands)
-    
-    else:
-        printer.general('Alignment Ignored')
 
-    ### PICARD MARKDUPS ############################################################################
-
-    printer.general('PICARD')
-
-    if data.picard:
-        
-        commands = [
-            'java', '-Xmx4g',
-            '-jar', args.picard_jar, "MarkDuplicates",
-            ''.join(["INPUT=", data.bam]),
-            ''.join(["OUTPUT=", data.marked_bam]),
-            ''.join(["METRIC_FILE=", data.metric_file]),
-            'REMOVE_DUPLICATES=True',
-            'ASSUME_SORTED=False',
-            'SORT_ORDER=coordinate'
-            ]
-    
-        if args.sge:
-            sge.change(job_name='PROCESS-FASTQ:PICARD')
-            sge.run(commands)
-        else:
-            subprocess.call(commands)
-
-    else:
-        printer.general('Mark Duplicates Ignored')
-
-
-    ### REMARK DUPS ################################################################################
-
-    printer.general('REMARK')
-
-    if data.remark:
-        
-        commands = [
-            'python', 'remark_adapter_dups.py',
-            '-i', data.marked_bam,
-            '-o', data.remarked.bam,
-            '-mm', args.max_mismatch,
-            '-as', args.adapter_sequence
-            ]
+        printer.command(commands)
 
         if args.sge:
             printer.general('Running on SGE')
-            sge.change()
+            sge.change(job_name='PRODUSE:TRIM-ALIGNMENT')
             sge.run(commands)
+
+        else:
+            printer.general('Running on Command Line')
+            subprocess.call(commands)
+
+    else:
+        printer.general('Alignment Ignored')
+
+
+    ### COLLAPSE DUPS ##############################################################################
+
+    printer.general('COLLAPSE')
+
+    if data.collapse:
+       
+        commands = [
+            'python', 'collapse.py',
+            '-i', '.'.join([data.trimmed_bam, "bam"]),
+            '-o', data.collapsed_forward, data.collapsed_reverse,
+            '-mm', str(args.max_mismatch),
+            '-as', args.adapter_sequence
+            ]
+
+        printer.command(commands)
+
+        if args.sge:
+            printer.general('Running on SGE')
+            sge.change(job_name='PROCESS-FASTQ:COLLAPSE')
+            sge.run(commands)
+
         else:
             printer.general('Running on Command Line')
             subprocess.call(commands)
 
     else:
         printer.general('Remark Duplicates Ignored')
+
+    ### COLLAPSE BWA ###############################################################################
+
+    printer.general('BWA')
+
+    if data.collapse_bam:
+
+        printer.general('BWA')
+  
+        commands = [
+            'python', 'bwa.py',
+            '-f', data.collapsed_forward, data.collapsed_reverse,
+            '-b', data.collapsed_bam,
+            '-r', args.reference
+            ]
+
+        printer.command(commands)
+
+        if args.sge:
+            printer.general('Running on SGE')
+            sge.change(job_name='PRODUSE:COLLAPSED-ALIGNMENT')
+            sge.run(commands)
+
+        else:
+            printer.general('Running on Command Line')
+            subprocess.call(commands)
+
+    else:
+        printer.general('Alignment Ignored')
 
     ### CLEAN ######################################################################################
 
