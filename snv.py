@@ -40,11 +40,12 @@ if __name__ == '__main__':
     bamfile = pysam.AlignmentFile(args.input, 'r');
     fastafile = pysam.FastaFile(args.reference);
     posCollection = position.PosCollectionCreate(bamfile, fastafile);
-    output = open(args.output, 'w');
+    # output = open(args.output, 'w');
 
     for pos in posCollection:
         if pos.is_variant(adapter_sequence=args.adapter_sequence, max_mismatch=args.max_mismatch):
-            output.write(str(pos));
-            output.write('\n');
+            print str(pos);
+    #         output.write(str(pos));
+    #         output.write('\n');
 
-    output.close();
+    # output.close();
