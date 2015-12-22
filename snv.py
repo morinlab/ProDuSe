@@ -16,7 +16,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "-as", "--adapter_sequence",
         type=str,
-        default="WSWSWGACT",
+        required=True,
         help="The adapter sequence following IUPAC DNA naming"
         )
     parser.add_argument(
@@ -35,17 +35,47 @@ if __name__ == '__main__':
         required=True,
         help="Output variant file"
         )
+    parser.add_argument(
+        "-abct", "--alt_base_count_threshold",
+        default=5,
+        help="The minimum number of alternative bases to identify separately in the positive and negative read collections"
+        );
+    parser.add_argument(
+        "-sbt", "--strand_bias_threshold", # smaller over total (less then .2)
+        default=.2,
+        type=float,
+        help=""
+        );
+    parser.add_argument(
+        "-vaft", "--variant_allele_fraction_threshold", # Either Strand 
+        default=.1,
+        type=float,
+        help=""
+        );
     args = parser.parse_args()
 
     bamfile = pysam.AlignmentFile(args.input, 'r');
     fastafile = pysam.FastaFile(args.reference);
-    posCollection = position.PosCollectionCreate(bamfile, fastafile);
-    # output = open(args.output, 'w');
+    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads = True);
+    
+    output = None;
+    if not args.output == "-":
+        output = open(args.output, 'w');
 
     for pos in posCollection:
-        if pos.is_variant(adapter_sequence=args.adapter_sequence, max_mismatch=args.max_mismatch):
-            print str(pos);
-    #         output.write(str(pos));
-    #         output.write('\n');
 
-    # output.close();
+        if pos.is_variant( \
+            adapter_sequence = args.adapter_sequence, \
+            max_mismatch = args.max_mismatch, \
+            alt_base_count_threshold = args.alt_base_count_threshold, \
+            strand_bias_threshold = args.strand_bias_threshold, \
+            variant_allele_fraction_threshold = args.variant_allele_fraction_threshold ):
+
+            if args.output == "-":
+                print(str(pos));
+            else:
+                output.write(str(pos));
+                output.write('\n');
+    
+    if not args.output == "-":
+        output.close();
