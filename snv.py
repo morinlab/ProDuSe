@@ -38,22 +38,22 @@ if __name__ == '__main__':
     parser.add_argument(
         "-abct", "--alt_base_count_threshold",
         default=5,
+        type=int,
         help="The minimum number of alternative bases to identify separately in the positive and negative read collections"
         );
     parser.add_argument(
-        "-sbt", "--strand_bias_threshold", # smaller over total (less then .2)
-        default=.2,
+        "-sbt", "--strand_bias_threshold",
+        default=0.2,
         type=float,
         help=""
         );
     parser.add_argument(
-        "-vaft", "--variant_allele_fraction_threshold", # Either Strand 
-        default=.1,
+        "-vaft", "--variant_allele_fraction_threshold", 
+        default=0.1,
         type=float,
         help=""
         );
     args = parser.parse_args()
-
     bamfile = pysam.AlignmentFile(args.input, 'r');
     fastafile = pysam.FastaFile(args.reference);
     posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads = True);
