@@ -71,7 +71,7 @@ def parse():
         )
 
     parser.add_argument(
-        "--source_directory",
+        "-sd', --source_directory",
         default="",
         help="A directory to Source before each qsub submition"
         )
