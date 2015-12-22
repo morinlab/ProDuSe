@@ -45,6 +45,26 @@ COMPLEMENT = {
     'N':'N'
     }
 
+CAPITAL = {
+    'a':'A',
+    'A':'A',
+    'c':'C',
+    'C':'C',
+    'g':'G',
+    'G':'G',
+    't':'T',
+    'T':'T',
+    'n':'N',
+    'N':'N'
+    }
+
+BASE_TO_INDEX = {
+    'A':0,
+    'C':1,
+    'G':2,
+    'T':3
+    }
+
 ### Check if characters in seq are IUPAC nucleotide symbols
 def is_iupac( seq ):
     is_seq_iupac = True
@@ -181,11 +201,5 @@ def reverseComplement( seq ):
         reverseComplementSeq[i] = COMPLEMENT[seq[length - i - 1]]
     return ''.join(reverseComplementSeq)
 
-
-
-
-
-
-
-
-
+def makeCapital ( base ):
+    return CAPITAL[base];
