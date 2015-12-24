@@ -75,15 +75,17 @@ class Order:
 
 class Pos:
 
-    def __init__(self, base, qual, qname):
+    def __init__(self, base, qual, qname, sense):
         self.base = base
         self.qual = qual
+        self.qname = qname
         split = qname.split(':')
         self.adapter = split[0]
         self.start = int(split[2])
         self.end = int(split[4])
-        self.sense = split[6]
+        self.collection = split[6]
         self.count = int(split[5])
+        self.is_positive = sense;
 
     def equal_coords(self, other):
         if self.start == other.start and self.end == other.end:
@@ -91,9 +93,11 @@ class Pos:
         else:
             return False
 
+    def same_qname(self, other):
+        return self.qname == other.qname
 
     def __eq__(self, other):
-        if self.start == other.start and self.end == other.end and self.base == other.base and self.sense != other.sense:
+        if self.start == other.start and self.end == other.end and self.base == other.base and self.collection != other.collection:
             return True
         else:
             return False
@@ -144,9 +148,7 @@ class PosCollection:
         start = self.list_of_pos[0].start;
         end = self.list_of_pos[0].end;
         bases = [];
-        score = [];
         indexes = nucleotide.which_ambiguous(adapter_sequence);
-        outputs = [];
 
         for pos in self.list_of_pos:
 
@@ -166,10 +168,10 @@ class PosCollection:
                 start = pos.start;
                 end = pos.end;
 
-            if pos.sense == "+":
+            if pos.collection == "+":
                 positive.append(pos);
 
-            elif pos.sense == "-":
+            elif pos.collection == "-":
                 negative.append(pos);
 
         return bases;
@@ -177,13 +179,13 @@ class PosCollection:
 
     def is_variant(self, adapter_sequence, max_mismatch = 3, alt_base_count_threshold = 5, strand_bias_threshold = 0.2, variant_allele_fraction_threshold = 0.1):
 
-        self.neg_bases = [ pos.base if pos.sense == "-" else None for pos in self.list_of_pos ];
-        self.pos_bases = [ pos.base if pos.sense == "+" else None for pos in self.list_of_pos ];
+        self.pos_bases = [ pos.base if pos.is_positive else None for pos in self.list_of_pos ];
+        self.neg_bases = [ pos.base if not pos.is_positive else None for pos in self.list_of_pos ];
         self.neg_tally = Tally(self.neg_bases);
         self.pos_tally = Tally(self.pos_bases);
         self.all_bases = [ pos.base for pos in self.list_of_pos ];
-        self.norm_neg_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if pos.sense == "-" else [] for pos in self.list_of_pos ] )))
-        self.norm_pos_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if pos.sense == "+" else [] for pos in self.list_of_pos ] )))
+        self.norm_pos_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if pos.is_positive else [] for pos in self.list_of_pos ] )))
+        self.norm_neg_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if not pos.is_positive else [] for pos in self.list_of_pos ] )))
         self.true_bases = self.find_true_bases(adapter_sequence, max_mismatch);
 
         if not len(self.true_bases) == 0: 
@@ -198,10 +200,10 @@ class PosCollection:
                 self.alt_count = sum([ True if x == self.alt else False for x in self.true_bases]);
                 self.ref_count = sum([ True if x == self.ref else False for x in self.true_bases]);
 
-                if self.neg_tally.get_count(self.alt) >= alt_base_count_threshold and  \
+                if self.neg_tally.get_count(self.alt) >= alt_base_count_threshold and \
                    self.pos_tally.get_count(self.alt) >= alt_base_count_threshold and \
-                   float(min(self.neg_tally.sum(),self.pos_tally.sum())) / float(self.neg_tally.sum() + self.pos_tally.sum()) >= strand_bias_threshold and \
-                   float(self.alt_count) / float(self.ref_count + self.alt_count) >= variant_allele_fraction_threshold:                       
+                   (float( min( self.neg_tally.sum(), self.pos_tally.sum() ) ) / float( self.neg_tally.sum() + self.pos_tally.sum() ) ) >= strand_bias_threshold and \
+                   (float(self.alt_count) / float(self.ref_count + self.alt_count)) >= variant_allele_fraction_threshold:                       
                     return True;
                 else:
                     return False;
@@ -239,6 +241,7 @@ class PosCollectionCreate:
         self.order = []
         self.read_processed = False
         self.qnames = {};
+        self.first = True;
 
     def __iter__(self):
         return self.next()
@@ -266,7 +269,7 @@ class PosCollectionCreate:
                 base = read.seq[pairs[0]]
                 qual = read.qual[pairs[0]]
                 
-                current_pos = Pos(base, qual, read.qname)
+                current_pos = Pos(base, qual, read.qname, not read.is_reverse)
 
                 if not order in self.pos_collections:
                     self.pos_collections[order] = []
@@ -276,9 +279,32 @@ class PosCollectionCreate:
                 if not self.filter_overlapping_reads:
                     bisect.insort(self.pos_collections[order], current_pos)
 
-                elif read.qname not in self.qname_collections[order]:
+                elif not read.qname in self.qname_collections[order]:
                     self.qname_collections[order][read.qname] = True
                     bisect.insort(self.pos_collections[order], current_pos)
+
+                elif read.qname in self.qname_collections[order]:
+
+                    left = bisect.bisect_left(self.pos_collections[order], current_pos)
+                    right = bisect.bisect_right(self.pos_collections[order], current_pos);
+                    index = None
+                    for i in range(left, right):
+                        if self.pos_collections[order][i].qname == current_pos.qname:
+                            index = i;
+                    
+                    if self.pos_collections[order][index].qual > current_pos.qual:
+                        pass
+
+                    elif self.pos_collections[order][index].qual < current_pos.qual:
+                        self.pos_collections[order][index] = current_pos;
+
+                    elif self.first:
+                        self.first = False;
+
+                    elif not self.first:
+                        self.first = True;
+                        self.pos_collections[order][index] = current_pos;
+
 
 
             # Blah Blah
