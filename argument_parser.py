@@ -71,7 +71,7 @@ def parse():
         )
 
     parser.add_argument(
-        "-sd', --source_directory",
+        "-sd", "--source_directory",
         default="",
         help="A directory to Source before each qsub submition"
         )
@@ -105,14 +105,28 @@ def parse():
         )
 
     parser.add_argument(
-        "-5", "--variants",
+        "-5", "--call_snv",
         action="store_true",
         default="True",
         help="Only call variants"
         )
 
     parser.add_argument(
-        "-6", "--clean",
+        "-6", "--call_sv",
+        action="store_true",
+        default="True",
+        help="Only call variants"
+        )
+
+    parser.add_argument(
+        "-7", "--call_cnv",
+        action="store_true",
+        default="True",
+        help="Only call variants"
+        )
+
+    parser.add_argument(
+        "-8", "--clean",
         action = "store_true",
         default="False",
         help="Only Clean tmp Directory"
