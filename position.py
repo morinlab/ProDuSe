@@ -187,6 +187,10 @@ class PosCollection:
         self.norm_pos_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if pos.is_positive else [] for pos in self.list_of_pos ] )))
         self.norm_neg_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if not pos.is_positive else [] for pos in self.list_of_pos ] )))
         self.true_bases = self.find_true_bases(adapter_sequence, max_mismatch);
+        self.is_variant = True;
+        self.reason = 'VAR';
+        self.alt = '.';
+        self.red = '.';
 
         if not len(self.true_bases) == 0: 
             if not all(x == self.true_bases[0] for x in self.true_bases):
@@ -200,15 +204,33 @@ class PosCollection:
                 self.alt_count = sum([ True if x == self.alt else False for x in self.true_bases]);
                 self.ref_count = sum([ True if x == self.ref else False for x in self.true_bases]);
 
-                if self.neg_tally.get_count(self.alt) >= alt_base_count_threshold and \
-                   self.pos_tally.get_count(self.alt) >= alt_base_count_threshold and \
-                   (float( min( self.neg_tally.sum(), self.pos_tally.sum() ) ) / float( self.neg_tally.sum() + self.pos_tally.sum() ) ) >= strand_bias_threshold and \
-                   (float(self.alt_count) / float(self.ref_count + self.alt_count)) >= variant_allele_fraction_threshold:                       
-                    return True;
-                else:
-                    return False;
+                if not self.neg_tally.get_count(self.alt) >= alt_base_count_threshold:
+                    self.is_variant = False;
+                    self.reason = 'ABC';
+
+                elif not self.pos_tally.get_count(self.alt) >= alt_base_count_threshold:
+                    self.is_variant = False;
+                    self.reason = 'ABC';
+
+                elif not (float( min( self.neg_tally.sum(), self.pos_tally.sum() ) ) / float( self.neg_tally.sum() + self.pos_tally.sum() ) ) >= strand_bias_threshold:
+                    self.is_variant = False;
+                    self.reason = 'SB';
+
+                elif not (float(self.alt_count) / float(self.ref_count + self.alt_count)) >= variant_allele_fraction_threshold:
+                    self.is_variant = False;
+                    self.reason = 'VAF';
+
+                return self.is_variant;
+
+            else:
+                self.is_variant = False;
+                self.reason = 'ABC';
+
         else:
-            return False
+            self.is_variant = False;
+            self.reason = 'COV';
+
+        return self.is_variant;
 
 
     def __str__(self):
@@ -222,12 +244,17 @@ class PosCollection:
                 self.alt
                 ]),
             "1",
+            self.reason,
             str(Tally(self.true_bases)),
             str(Tally(self.pos_bases)),
             str(Tally(self.neg_bases)),
             str(self.norm_pos_tally),
             str(self.norm_neg_tally)
             ]);
+
+    def coords(self):
+
+        return ''.join([ str(self.chrom), ':', str(self.start+1) ]);
 
 class PosCollectionCreate:
 
