@@ -5,6 +5,7 @@ import collections
 import sys
 import itertools
 from collections import Counter
+import bed
 
 
 class ID:
@@ -258,7 +259,7 @@ class PosCollection:
 
 class PosCollectionCreate:
 
-    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads = True):
+    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads = True, target_bed = None):
         self.pysam_alignment_file = pysam_alignment_file
         self.pysam_fasta_file = pysam_fasta_file
         self.pos_collections = {}
@@ -269,7 +270,16 @@ class PosCollectionCreate:
         self.read_processed = False
         self.qnames = {};
         self.first = True;
-
+        self.target_bed = target_bed;
+        self.pysam_alignment_generator = None
+        ### READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later).
+        if not self.target_bed == None:
+            for region in self.target_bed.regions:
+                if self.pysam_alignment_generator == None:
+                    self.pysam_alignment_generator = self.pysam_alignment_file.fetch(region=region);
+                else:
+                    self.pysam_alignment_generator = itertools.chain(self.pysam_alignment_generator, self.pysam_alignment_file.fetch(region=region));
+        
     def __iter__(self):
         return self.next()
 
@@ -278,12 +288,21 @@ class PosCollectionCreate:
 
     def next(self):
 
+        if 
+
         while True:
            
             # Get the next Sequence from the pysam object
-            read = self.pysam_alignment_file.next()
-            read_order = Order(read.reference_id, read.reference_start)
+            read = None;
+           
+            if self.target_bed == None:
+                read = self.pysam_alignment_file.next()
+                
+            else:
+                read = self.pysam_alignment_generator.next()
 
+
+            read_order = Order(read.reference_id, read.reference_start)
     
             # For each base in the alignment, add to the collection structure
             for pairs in read.get_aligned_pairs():
