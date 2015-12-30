@@ -53,6 +53,12 @@ if __name__ == '__main__':
         )
 
     parser.add_argument(
+        "-tb", "--target_bed",
+        required=False,
+        help="Restrict read fetching to intervals defined in this file"
+        )
+
+    parser.add_argument(
         "-abct", "--alt_base_count_threshold",
         default=5,
         type=int,
@@ -81,9 +87,14 @@ if __name__ == '__main__':
     if args.mode == 'discovery' and args.positional_bed:
         sys.warning("Mode is set to discovery, the positional bed file will be ignored.");
 
-    bamfile = pysam.AlignmentFile(args.input, 'r');
+    bamfile = pysam.AlignmentFile(args.input, 'rb');
     fastafile = pysam.FastaFile(args.reference);
-    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads = True);
+    targetbed = None
+    if args.target_bed:
+        targetbed = bed.BedOpen(args.target_bed, 'r');
+        print targetbed.regions
+
+    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads = True, target_bed = targetbed);
 
     bedfile = None;
     if args.positional_bed:
@@ -94,6 +105,7 @@ if __name__ == '__main__':
         output = open(args.output, 'w');
 
     if args.mode == 'validation':
+
         for pos in posCollection:
             if pos.coords() in bedfile:
                 is_variant = pos.is_variant( \
