@@ -257,6 +257,10 @@ class PosCollection:
 
         return ''.join([ str(self.chrom), ':', str(self.start+1) ]);
 
+    def coords2(self):
+
+        return ''.join([ str(self.chrom), ':', str(self.start+1), '-', str(self.start+1) ]);
+
 class PosCollectionCreate:
 
     def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads = True, target_bed = None):
@@ -272,6 +276,7 @@ class PosCollectionCreate:
         self.first = True;
         self.target_bed = target_bed;
         self.pysam_alignment_generator = None
+
         ### READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later).
         if not self.target_bed == None:
             for region in self.target_bed.regions:
@@ -286,24 +291,40 @@ class PosCollectionCreate:
     def __next__(self):
         return self.next()
 
+    def return_pos(self):
+        chrom = self.pysam_alignment_file.getrname( self.order[0].chrom );
+        start = int(self.order[0].start)
+        item = PosCollection(
+            self.pos_collections[self.order[0]], 
+            self.order[0], 
+            chrom,
+            start,
+            self.pysam_fasta_file.fetch(chrom, start, start+1)
+            )
+
+        del self.pos_collections[self.order[0]]
+        del self.qname_collections[self.order[0]]
+        del self.order[0]
+        return item;
+
     def next(self):
 
-        if 
-
         while True:
-           
+
             # Get the next Sequence from the pysam object
             read = None;
-           
-            if self.target_bed == None:
-                read = self.pysam_alignment_file.next()
-                
-            else:
-                read = self.pysam_alignment_generator.next()
 
+            try:
+                if self.target_bed == None:
+                    read = self.pysam_alignment_file.next()
+                    
+                else:
+                    read = self.pysam_alignment_generator.next()
+            except StopIteration:
+                break;
 
             read_order = Order(read.reference_id, read.reference_start)
-    
+
             # For each base in the alignment, add to the collection structure
             for pairs in read.get_aligned_pairs():
 
@@ -337,35 +358,16 @@ class PosCollectionCreate:
                     for i in range(left, right):
                         if self.pos_collections[order][i].qname == current_pos.qname:
                             index = i;
-                    
-                    if self.pos_collections[order][index].qual > current_pos.qual:
-                        pass
 
-                    elif self.pos_collections[order][index].qual < current_pos.qual:
-                        self.pos_collections[order][index] = current_pos;
-
-                    elif self.first:
+                    if self.first:
                         self.first = False;
 
                     elif not self.first:
                         self.first = True;
                         self.pos_collections[order][index] = current_pos;
 
-
-
-            # Blah Blah
             while not len(self.order) == 0 and self.order[0].lessthen(read_order, self.base_buffer):
+                yield self.return_pos();
 
-                chrom = self.pysam_alignment_file.getrname( self.order[0].chrom );
-                start = int(self.order[0].start)
-                yield PosCollection(
-                    self.pos_collections[self.order[0]], 
-                    self.order[0], 
-                    chrom,
-                    start,
-                    self.pysam_fasta_file.fetch(chrom, start, start+1)
-                    )
-
-                del self.pos_collections[self.order[0]]
-                del self.qname_collections[self.order[0]]
-                del self.order[0]
+        while not len(self.order) == 0:
+            yield self.return_pos();
