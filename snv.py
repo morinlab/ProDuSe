@@ -81,7 +81,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if (args.mode == 'validation' or args.mode == 'both') and not args.positional_bed:
+    if (args.mode == 'validation' or args.mode == 'both') and not args.target_bed:
         sys.exit("You must specify a positional bed in validation mode.");
 
     if args.mode == 'discovery' and args.positional_bed:
@@ -92,7 +92,6 @@ if __name__ == '__main__':
     targetbed = None
     if args.target_bed:
         targetbed = bed.BedOpen(args.target_bed, 'r');
-        print targetbed.regions
 
     posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads = True, target_bed = targetbed);
 
@@ -105,9 +104,8 @@ if __name__ == '__main__':
         output = open(args.output, 'w');
 
     if args.mode == 'validation':
-
         for pos in posCollection:
-            if pos.coords() in bedfile:
+            if pos.coords2() in targetbed:
                 is_variant = pos.is_variant( \
                     adapter_sequence = args.adapter_sequence, \
                     max_mismatch = args.max_mismatch, \
