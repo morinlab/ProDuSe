@@ -37,6 +37,25 @@ CAPUI = {
     'ACGT':'N'
     }
 
+DIST = {
+    'A':[1,0,0,0],
+    'C':[0,1,0,0],
+    'G':[0,0,1,0],
+    'T':[0,0,0,1],
+    'W':[0.5,0,0,0.5],
+    'S':[0,0.5,0.5,0],
+    'M':[0.5,0.5,0,0],
+    'K':[0,0,0.5,0.5],
+    'R':[0.5,0,0.5,0],
+    'Y':[0,0.5,0,0.5],
+    # 'B':[0.0,1.0/3.0,1.0/3.0,1.0/3.0],
+    # 'D':[1.0/3.0,0.0,1.0/3.0,1.0/3.0],
+    # 'H':[1.0/3.0,1.0/3.0,0.0,1.0/3.0],
+    # 'V':[1.0/3.0,1.0/3.0,1.0/3.0,0.0],
+    'N':[0.25,0.25,0.25,0.25]
+    }
+
+
 COMPLEMENT = {
     'A':'T',
     'C':'G',
@@ -89,7 +108,7 @@ def is_ambiguous( seq ):
     return is_seq_ambiguous
 
 
-### Determines logical AND of seq being a subset of ref across all pos
+### Determines /home/malbuque/projects/produse/produse2/ProDuSeical AND of seq being a subset of ref across all pos
 def is_match( seq, ref ):
     is_seq_match = True
     for i in range(0, len(seq)):
