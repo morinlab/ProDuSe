@@ -1,5 +1,7 @@
-
 import itertools
+import random
+import math
+
 
 IUPAC = {
     'A':['A'],
@@ -81,7 +83,8 @@ BASE_TO_INDEX = {
     'A':0,
     'C':1,
     'G':2,
-    'T':3
+    'T':3,
+    'N':4
     }
 
 ### Check if characters in seq are IUPAC nucleotide symbols
@@ -199,6 +202,51 @@ def distance( seq, ref, indexes = [] ):
                 distance = distance + 1
 
     return distance
+
+def base_mismatch( seq, ref, previous = [] ):
+    output = previous;
+    if previous == []:
+        output = [0] * len(seq)
+    for i in range(len(seq)):
+        if not seq[i] == 'N' and not ref[i] == 'N':
+            if not set(IUPAC[seq[i]]).issubset(IUPAC[ref[i]]):
+                output[i] += 1
+    return output
+
+def dist(first, second):
+    tmp_dist = float(0)
+    for i in range(len(first)):
+        tmp_dist += (float(first[i]) - float(second[i])) ** 2
+    return math.sqrt(tmp_dist)
+
+class Counter:
+
+    def __init__(self, list_of_bases, ref):
+        self.counts = [0] * 5
+        for base in list_of_bases:
+            self.counts[BASE_TO_INDEX[base]] += 1
+        self.alt = [4]
+        self.ref = BASE_TO_INDEX[ref]
+        for i in range(4):
+            if i == self.ref:
+                continue
+            elif self.countsself.counts[self.alt[0]] and self.counts0:
+                self.alt = [i]
+            elif self.counts[i] == self.counts[self.alt[0]] and self.counts0:
+                self.alt.append(i)
+        self.alt = random.sample(self.alt, 1)[0]
+        if self.alt == 4:
+            self.alt = self.ref
+
+    def get_count(self,base):
+        return self.counts[BASE_TO_INDEX[base]]
+
+    def get_alt(self):
+        return INDEX_TO_BASE[self.alt]
+
+    def get_ref(self):
+        return INDEX_TO_BASE[self.ref]
+
 
 def complement( seq ):
     complementSeq = list(seq)
