@@ -1,5 +1,6 @@
 import itertools
 import printer
+import gzip
 
 class Fastq:
     
@@ -56,8 +57,12 @@ class Fastq:
 
 class FastqRead:
 
-    def __init__(self, file):
-        self.fh = open(file, 'r')
+    def __init__(self, file, gzip_files=False):
+        self.fh = None
+        if gzip_files:
+            self.fh = gzip.open(file, 'r')
+        else:
+            self.fh = open(file, 'r')
         self.data = list(itertools.islice(self.fh, 20000))
         self.end = len(self.data) < 20000
         self.count = len(self.data)
@@ -96,14 +101,19 @@ class FastqRead:
 
 class FastqWrite:
 
-    def __init__(self,file):
+    def __init__(self,file, gzip_files=False):
         self.file = file
         self.data = []
         self.data_len = len(self.data)
         self.count = len(self.data)
+        self.gzip = gzip_files
 
     def force_write(self):
-        tmp = open(self.file, 'a')
+        tmp = None
+        if self.gzip:
+            tmp = gzip.open(self.file, 'ab', 9)
+        else:
+            tmp = open(self.files, 'a')
         tmp.write(''.join(self.data))
         self.data = []
         tmp.close()
@@ -140,8 +150,14 @@ def FastqOpen(file, mode):
     if mode == 'r':
         return FastqRead(file)
 
+    elif mode == 'rg':
+        return FastqRead(file, gzip_files=True)
+
     elif mode == 'w':
         return FastqWrite(file)
+
+    elif mode == 'wg':
+        return FastqWrite(file, gzip_files=True)
 
     else:
         sys.exit(':'.join(['This mode is currently not supported by FastqOpen', mode]))

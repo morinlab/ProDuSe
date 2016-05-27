@@ -35,15 +35,35 @@ if __name__ == '__main__':
         )
     args = parser.parse_args()
 
+
     # Determine Possible Adapters
     ref_adapter = ''.join([args.adapter_sequence, args.adapter_sequence])
-    good_adapters = nucleotide.make_unambiguous(ref_adapter)
 
+    # Check If Input is Gzip and call appropariate FastqOpen
+    read = 'r'
+    is_input_one_gzipped = not not re.search('.*\.gz', args.input[0])
+    is_input_two_gzipped = not not re.search('.*\.gz', args.input[1])
+    if is_input_one_gzipped and is_input_two_gzipped:
+        read = ''.join([read, 'g']);
+    elif is_input_one_gzipped or is_input_two_gzipped:
+        print 'Input files must both be gzipped or both uncompressed\n'
+        sys.exit()
+
+    # Check If Output is Gzip and call appropariate FastqOpen
+    write = 'w'
+    is_output_one_gzipped = not not re.search('.*\.gz', args.output[0])
+    is_output_two_gzipped = not not re.search('.*\.gz', args.output[1])
+    if is_output_one_gzipped and is_output_two_gzipped:
+        write = ''.join([write, 'g']);
+    elif is_output_one_gzipped or is_output_two_gzipped:
+        print 'Output files must both be gzipped or both uncompressed\n'
+        sys.exit()
+        
     # Open Fastq files for reading and writing
-    forward_input = fastq.FastqOpen(args.input[0], 'r')
-    reverse_input = fastq.FastqOpen(args.input[1], 'r')
-    forward_output = fastq.FastqOpen(args.output[0], 'w')
-    reverse_output = fastq.FastqOpen(args.output[1], 'w')
+    forward_input = fastq.FastqOpen(args.input[0], read)
+    reverse_input = fastq.FastqOpen(args.input[1], read)
+    forward_output = fastq.FastqOpen(args.output[0], write)
+    reverse_output = fastq.FastqOpen(args.output[1], write)
 
     # For each read in the forward and reverse fastq files, trim the adapter, at it to the read id
     # and output this new fastq record to the temprary output fastq
