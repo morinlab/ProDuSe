@@ -247,6 +247,18 @@ class Counter:
     def get_ref(self):
         return INDEX_TO_BASE[self.ref]
 
+def random_unambiguous(seq):
+    output = list(seq)
+    for i in range(len(seq)):
+        output[i] = random.choice(IUPAC[seq[i]])
+    return ''.join(output)
+
+def random_mismatch(seq, prob):
+    output = list(seq)
+    for i in range(len(seq)):
+        if random.uniform(0,1) <= prob:
+            output[i] = random.choice(IUPAC["N"])
+    return ''.join(output)
 
 def complement( seq ):
     complementSeq = list(seq)

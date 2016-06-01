@@ -113,7 +113,7 @@ class FastqWrite:
         if self.gzip:
             tmp = gzip.open(self.file, 'ab', 9)
         else:
-            tmp = open(self.files, 'a')
+            tmp = open(self.file, 'a')
         tmp.write(''.join(self.data))
         self.data = []
         tmp.close()
