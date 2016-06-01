@@ -22,7 +22,6 @@ parser.add_argument(
     )
 parser.add_argument(
     "-mm", "--max_mismatch",
-    nargs=1,
     type=int,
     default=3,
     help="The maximum mismatch acceptable for a new adapter to be considered in an adapter class"
@@ -34,7 +33,6 @@ parser.add_argument(
     )
 
 args = parser.parse_args()
-
 
 bamfile = pysam.AlignmentFile(args.input[0], 'r')
 

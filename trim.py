@@ -2,6 +2,7 @@ import argparse
 import printer
 import fastq
 import nucleotide
+import re
 
 if __name__ == '__main__':
 

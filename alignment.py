@@ -70,8 +70,8 @@ class Read:
                 self.end_clip = pysam_read.cigartuples[-1][1]
 
             # Get the True start and end position of the sequence
-            self.start = pysam_read.reference_start# - self.start_clip 
-            self.end = pysam_read.reference_end# + self.end_clip
+            self.start = pysam_read.reference_start - self.start_clip 
+            self.end = pysam_read.reference_end + self.end_clip
             
         # Determine if the read is a split alignment
         self.is_split = any(['SA' in x for x in pysam_read.tags])
@@ -132,6 +132,7 @@ class AlignmentCollection:
     def __len__(self):
         return self.length
 
+
     def adapter_average_consensus(self, forward_fastq, reverse_fastq, max_mismatch=3, adapter_sequence="WSWSWGACT"):
 
         # We are trying to identify all of the adapter classes in the collection of Reads
@@ -175,18 +176,23 @@ class AlignmentCollection:
             else:
                 adapter_class_to_reads[adapter_to_adapter_class[alignment.adapter]] = [alignment]
 
-
         # Here we are creating the consensus of each adapter class grouping
         for key in adapter_class:
 
+            adapter = key
+
             value = adapter_class_to_reads[key]
+            
+            if self.collection_type == "-":
+                adapter = key[(len(key)/2):(len(key))] + key[0:(len(key)/2)]
 
             id = ':'.join([
-                ''.join(['@', key]),
+                ''.join(['@', adapter]),
                 str(value[0].id),
-                str(len(self.data)),
+                str(len(value)),
                 str(self.collection_type)
                 ])
+
             forward_consensus = consensus([x.r1 for x in value], 'first')
             reverse_consensus = consensus([x.r2 for x in value], 'second')
 
@@ -250,11 +256,56 @@ class AlignmentCollectionCreate:
         return self.next()
 
     def next(self):
-        
+
         while True:
             
-            # Obtain a Read
-            read = self.pysam_alignment_file.next()
+            try:
+                read = self.pysam_alignment_file.next()
+            
+            except StopIteration:
+
+                while len(self.next_id) >= 0:
+
+                    list_of_alignments = []
+                    list_of_positive_alignments = []
+                    list_of_negative_alignments = []
+
+                    collection_id = str(self.id)
+
+                    # for each alignment in the collection, determine the sense
+                    for qname in self.tmp_collections[collection_id]:
+
+                        tmp_align = self.tmp_collections[collection_id][qname]
+
+                        # Add that alignment to their respected sense list
+                        if not self.sense_matters:
+                            list_of_alignments.append(tmp_align)
+
+                        elif tmp_align.is_positive():
+                            list_of_positive_alignments.append(tmp_align)
+
+                        else:
+                            list_of_negative_alignments.append(tmp_align)
+
+                    del self.tmp_collections[collection_id]
+
+                    if not list_of_alignments == []:
+                        yield AlignmentCollection(list_of_alignments, collection_type="?", collection_id=collection_id)
+
+                    if not list_of_positive_alignments == []:
+                        yield AlignmentCollection(list_of_positive_alignments, collection_type='+', collection_id=collection_id)
+
+                    if not list_of_negative_alignments == []:
+                        yield AlignmentCollection(list_of_negative_alignments, collection_type='-', collection_id=collection_id)
+
+
+                    if len(self.next_id) == 0:
+
+                        raise StopIteration
+
+                    else:
+
+                        self.id = self.next_id.pop(0)
 
             # Have we seen this read before?
             if not read.qname in self.qname_to_read:
@@ -301,10 +352,11 @@ class AlignmentCollectionCreate:
                 list_of_alignments = []
                 list_of_positive_alignments = []
                 list_of_negative_alignments = []
- 
+
                 collection_id = str(self.id)
 
                 # for each alignment in the collection, determine the sense
+                print 'hello'
                 for qname in self.tmp_collections[collection_id]:
 
                     tmp_align = self.tmp_collections[collection_id][qname]
@@ -318,7 +370,9 @@ class AlignmentCollectionCreate:
 
                     else:
                         list_of_negative_alignments.append(tmp_align)
-                
+
+                del self.tmp_collections[collection_id]
+
                 if not list_of_alignments == []:
                     yield AlignmentCollection(list_of_alignments, collection_type="?", collection_id=collection_id)
 
@@ -328,9 +382,7 @@ class AlignmentCollectionCreate:
                 if not list_of_negative_alignments == []:
                     yield AlignmentCollection(list_of_negative_alignments, collection_type='-', collection_id=collection_id)
 
-                # Delete this values from the collections
-                del self.tmp_collections[collection_id]
-
+                
                 self.id = self.next_id.pop(0)
 
             if not str(id) in self.tmp_collections:
