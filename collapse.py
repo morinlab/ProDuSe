@@ -51,4 +51,4 @@ reverse_fastq = fastq.FastqOpen(args.output[1], write)
 
 collection_creator = alignment.AlignmentCollectionCreate(bamfile)
 for collection in collection_creator:
-    collection.adapter_average_consensus(forward_fastq, reverse_fastq, args.max_mismatch, args.adapter_sequence)
+    collection.adapter_table_average_consensus(forward_fastq, reverse_fastq, args.max_mismatch, args.adapter_sequence)

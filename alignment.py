@@ -78,6 +78,8 @@ class Read:
                 
         # Is this read the first in pair?
         self.is_read1 = pysam_read.is_read1
+        self.is_read2 = pysam_read.is_read2
+        self.is_reverse = pysam_read.is_reverse
 
 
 class Alignment:
@@ -85,8 +87,8 @@ class Alignment:
     def __init__(self, pysam_read_one, pysam_read_two):
         self.r1 = Read(pysam_read_one)
         self.r2 = Read(pysam_read_two)
-        self.adapter = self.r1.qname.split(":")[0]
-        self.id = ID(self.r1.ref_id, self.r1.start, self.r2.ref_id, self.r2.end)
+        self.adapter = self.r1.qname.split(":")[0]          
+        self.id = ID(self.r1.ref_id, min(self.r1.start, self.r2.start), self.r2.ref_id, max(self.r1.end, self.r2.end))
 
     def __str__(self):
         return "{0}\t{1}".format(
@@ -95,11 +97,11 @@ class Alignment:
             )
     # Return the start of read one
     def start(self):
-        return self.r1.start
+        return min(self.r1.start, self.r2.start)
 
     # Return the end of read two
     def end(self):
-        return self.r2.end
+        return max(self.r1.end, self.r2.end)
 
     def qname(self):
         return self.r1.qname
@@ -132,8 +134,12 @@ class AlignmentCollection:
     def __len__(self):
         return self.length
 
+    def adapter_graph_average_consensus(self, forward_fastq, reverse_fastq, max_mismatch=3, adapter_sequence="WSWSWGACT"):
 
-    def adapter_average_consensus(self, forward_fastq, reverse_fastq, max_mismatch=3, adapter_sequence="WSWSWGACT"):
+        pass
+
+
+    def adapter_table_average_consensus(self, forward_fastq, reverse_fastq, max_mismatch=3, adapter_sequence="WSWSWGACT"):
 
         # We are trying to identify all of the adapter classes in the collection of Reads
         adapter = ''.join([adapter_sequence, adapter_sequence])
@@ -196,14 +202,15 @@ class AlignmentCollection:
             forward_consensus = consensus([x.r1 for x in value], 'first')
             reverse_consensus = consensus([x.r2 for x in value], 'second')
 
-            # Write to Fastq
+            #Write to Fastq
             if self.collection_type == "+":
                 forward_fastq.next(fastq.Fastq(str(id), forward_consensus[0], '+', forward_consensus[1]))
                 reverse_fastq.next(fastq.Fastq(str(id), nucleotide.reverseComplement(reverse_consensus[0]), '+', reverse_consensus[1][::-1]))
 
             if self.collection_type == "-":
                 forward_fastq.next(fastq.Fastq(str(id), nucleotide.reverseComplement(reverse_consensus[0]), '+', reverse_consensus[1][::-1]))
-                reverse_fastq.next(fastq.Fastq(str(id), forward_consensus[0], '+', forward_consensus[1]))             
+                reverse_fastq.next(fastq.Fastq(str(id), forward_consensus[0], '+', forward_consensus[1]))    
+
 
 
 def index_max(values):
@@ -356,7 +363,6 @@ class AlignmentCollectionCreate:
                 collection_id = str(self.id)
 
                 # for each alignment in the collection, determine the sense
-                print 'hello'
                 for qname in self.tmp_collections[collection_id]:
 
                     tmp_align = self.tmp_collections[collection_id][qname]
