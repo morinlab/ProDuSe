@@ -34,7 +34,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument(
         "-as", "--adapter_sequence",
-        #required=True,
+        required=True,
         help="Specify the contiguous arrangement of nucleotides in the adapter sequence using any symbol defined by the IUPAC"
         )
 
@@ -47,15 +47,27 @@ if __name__ == '__main__':
     parser.add_argument(
         "-o", "--output",
         nargs=2,
-        #required=True,
+        required=True,
         help="Output Fastq Files"
         )
 
     parser.add_argument(
         "-r", "--reference",
-        #required=True,
+        required=True,
         help="Reference To Create sequences from"
         )
+
+    # parser.add_argument(
+    #     "tb", "--target_bed",
+    #     required=True,
+    #     help="Regions to generate reads"
+    #     )
+
+    # parser.add_argument(
+    #     "-pb", "--positional_bed",
+    #     required=True,
+    #     help="Points to spike somatic variants with variant allele fraction in 4th column"
+    #     )
 
     args = parser.parse_args()
 
@@ -120,6 +132,6 @@ if __name__ == '__main__':
     for i in range(len(list_of_dna)):
         read_id = "".join(["@R",str(i)])
         forward = nucleotide.random_mismatch(list_of_dna[i].forward[0:seq_read_length], seq_error_rate)
-        reverse = nucleotide.random_mismatch(nucleotide.reverse(list_of_dna[i].reverse[len(list_of_dna[i].reverse)-seq_read_length:len(list_of_dna[i].reverse)]), seq_error_rate)
-        forward_output.next(fastq.Fastq(read_id, forward, '+', ''.join(numpy.random.choice(['A','B','C','D','E','F','G','H'], seq_read_length, replace=True))))
-        reverse_output.next(fastq.Fastq(read_id, reverse, '+', ''.join(numpy.random.choice(['A','B','C','D','E','F','G','H'], seq_read_length, replace=True))))
+        reverse = nucleotide.random_mismatch(nucleotide.reverse(list_of_dna[i].reverse[max(0,len(list_of_dna[i].reverse)-seq_read_length):len(list_of_dna[i].reverse)]), seq_error_rate)
+        forward_output.next(fastq.Fastq(read_id, forward, '+', ''.join(numpy.random.choice(['A','B','C','D','E','F','G','H'], len(forward), replace=True))))
+        reverse_output.next(fastq.Fastq(read_id, reverse, '+', ''.join(numpy.random.choice(['A','B','C','D','E','F','G','H'], len(reverse), replace=True))))
