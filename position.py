@@ -42,6 +42,23 @@ class Tally:
         return (self.a + self.c + self.g + self.t);
 
 
+class Qname:
+
+    def __init__(self, pysam_read):
+        self.qname = pysam_read.qname
+        split = self.qname.split(":")
+        self.adapter_sequence = split[0]
+        self.ref_start = split[1]
+        self.pos_start = int(split[2])
+        self.ref_end = split[3]
+        self.pos_end = int(split[4])
+        self.support = int(split[5])
+        self.strand = split[6]
+        self.duplex_id = int(split[7]) 
+
+    def __eq__(self, other):
+        return self.qname == other.qname
+
 class Order:
 
     def __init__(self, chrom, start):
@@ -76,51 +93,46 @@ class Order:
 
 class Pos:
 
-    def __init__(self, base, qual, qname, sense):
+    def __init__(self, base, qual, qname, order):
+        self.order = order
         self.base = base
         self.qual = qual
         self.qname = qname
-        split = qname.split(':')
-        self.adapter = split[0]
-        self.start = int(split[2])
-        self.end = int(split[4])
-        self.collection = split[6]
-        self.count = int(split[5])
-        self.is_positive = sense;
 
-    def equal_coords(self, other):
-        if self.start == other.start and self.end == other.end:
-            return True
-        else:
-            return False
-
-    def same_qname(self, other):
-        return self.qname == other.qname
+    def is_positive(self):
+        return self.qname.strand == "+"
 
     def __eq__(self, other):
-        if self.start == other.start and self.end == other.end and self.base == other.base and self.collection != other.collection:
-            return True
-        else:
-            return False
+        return self.qname.duplex_id == qname.other.duplex_id
 
     def __lt__(self, other):
-        if self.start < other.start:
-            return True
-        elif self.start == other.start:
-            if self.end < other.end:
-                return True
-        else:
-            return False
+        return self.qname.duplex_id < other.qname.duplex_id
 
     def __le__(self, other):
-        return self < other or self == other
+        return self.qname.duplex_id <= other.qname.duplex_id
 
     def __gt__(self, other):
-        return not self < other and not self == other
+        return self.qname.duplex_id > other.qname.duplex_id
 
     def __ge__(self, other):
-        return not self < other
+        return self.qname.duplex_id >= other.qname.duplex_id
 
+
+class Pos2(Pos):
+
+    def __init__(self, pos):
+        self.count = pos.count * -1
+        self.base = pos.base
+        self.adapter = pos.adapter
+
+    def __lt__(self, other):
+        return self.count < other.count
+
+    def __eq__(self, other):
+        return self.count == other.count
+
+    def __gt__(self, other):
+        return self.count > other.count
 
 class PosCollection:
 
@@ -138,100 +150,110 @@ class PosCollection:
         self.pos_bases = []
         self.neg_bases = []
         self.true_bases = []
-  
+        self.bases = {}
+        self.duplex_bases = []
+        self.good_singleton_bases = [] 
+        self.bad_singleton_bases = []
+        self.good_duplex_bases = []
+        self.bad_duplex_bases = []
+        self.good_conflicting_bases = []
+        self.bad_conflicting_bases = []
 
-    def find_true_bases(self, adapter_sequence, max_mismatch):
-
-        pos_set = set();
-        neg_set = set();
-        positive = [];
-        negative = [];
-        start = self.list_of_pos[0].start;
-        end = self.list_of_pos[0].end;
-        bases = [];
-        indexes = nucleotide.which_ambiguous(adapter_sequence);
+    def calc_base_stats(self, min_reads_per_uid):
 
         for pos in self.list_of_pos:
+            if not pos.qname.duplex_id in self.bases:
+                self.bases[pos.qname.duplex_id] = []
+            self.bases[pos.qname.duplex_id].append(pos)
 
-            if pos.start != start or pos.end != end:
+        for duplex_id in self.bases:
 
-                if len(positive) > 0 and len(negative) > 0:
-                    for i in positive:
-                        for j in negative:
-                            if nucleotide.distance(i.adapter, j.adapter, indexes) <= max_mismatch:
-                                if i.base == j.base:
-                                    bases.append(i.base);
+            if len(self.bases[duplex_id]) == 1:
 
-                positive = [];
-                negative = [];
-                pos_set = set();
-                neg_set = set();
-                start = pos.start;
-                end = pos.end;
+                if self.bases[duplex_id][0].qname.support >= min_reads_per_uid:
+                    self.good_singleton_bases.append(self.bases[duplex_id][0].base)
 
-            if pos.collection == "+":
-                positive.append(pos);
-
-            elif pos.collection == "-":
-                negative.append(pos);
-
-        return bases;
-             
-
-    def is_variant(self, adapter_sequence, max_mismatch = 3, alt_base_count_threshold = 5, strand_bias_threshold = 0.2, variant_allele_fraction_threshold = 0.1):
-
-        self.pos_bases = [ pos.base if pos.is_positive else None for pos in self.list_of_pos ];
-        self.neg_bases = [ pos.base if not pos.is_positive else None for pos in self.list_of_pos ];
-        self.neg_tally = Tally(self.neg_bases);
-        self.pos_tally = Tally(self.pos_bases);
-        self.all_bases = [ pos.base for pos in self.list_of_pos ];
-        self.norm_pos_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if pos.is_positive else [] for pos in self.list_of_pos ] )))
-        self.norm_neg_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if not pos.is_positive else [] for pos in self.list_of_pos ] )))
-        self.true_bases = self.find_true_bases(adapter_sequence, max_mismatch);
-        self.is_variant = True;
-        self.reason = 'VAR';
-        self.alt = '.';
-        self.red = '.';
-
-        if not len(self.true_bases) == 0: 
-            if not all(x == self.true_bases[0] for x in self.true_bases):
-                tmp = Counter(self.true_bases);
-                most = tmp.most_common(2);
-                if most[0][0] == self.ref:
-                    self.alt = most[1][0];
                 else:
-                    self.alt = most[0][0];
+                    self.bad_singleton_bases.append(self.bases[duplex_id][0].base)
 
-                self.alt_count = sum([ True if x == self.alt else False for x in self.true_bases]);
-                self.ref_count = sum([ True if x == self.ref else False for x in self.true_bases]);
+            elif len(self.bases[duplex_id]) == 2:
+                if self.bases[duplex_id][0].base == self.bases[duplex_id][1].base:
+                    
+                    if self.bases[duplex_id][0].qname.support >= min_reads_per_uid and \
+                       self.bases[duplex_id][1].qname.support >= min_reads_per_uid:
+                        self.good_duplex_bases.append(self.bases[duplex_id][0].base)
+                    
+                    else:
+                        self.bad_duplex_bases.append(self.bases[duplex_id][0].base)
 
-                if not self.neg_tally.get_count(self.alt) >= alt_base_count_threshold:
-                    self.is_variant = False;
-                    self.reason = 'ABC';
+                else:
 
-                elif not self.pos_tally.get_count(self.alt) >= alt_base_count_threshold:
-                    self.is_variant = False;
-                    self.reason = 'ABC';
+                    if self.bases[duplex_id][0].qname.support >= min_reads_per_uid and \
+                       self.bases[duplex_id][1].qname.support >= min_reads_per_uid:
+                        self.good_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
 
-                elif not (float( min( self.neg_tally.sum(), self.pos_tally.sum() ) ) / float( self.neg_tally.sum() + self.pos_tally.sum() ) ) >= strand_bias_threshold:
-                    self.is_variant = False;
-                    self.reason = 'SB';
+                    else:
+                        self.bad_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
 
-                elif not (float(self.alt_count) / float(self.ref_count + self.alt_count)) >= variant_allele_fraction_threshold:
-                    self.is_variant = False;
-                    self.reason = 'VAF';
 
-                return self.is_variant;
+        # self.pos_bases = [ pos.base for pos in self.list_of_pos if pos.is_positive() ];
+        # self.neg_bases = [ pos.base for pos in self.list_of_pos if not pos.is_positive() ];
+        # print self.list_of_pos[0].order 
+        # print self.pos_bases
+        # print self.neg_bases
+        # return (False, [])
+        # self.neg_tally = Tally(self.neg_bases);
+        # self.pos_tally = Tally(self.pos_bases);
+        # self.all_bases = [ pos.base for pos in self.list_of_pos ];
+        # self.norm_pos_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if pos.is_positive else [] for pos in self.list_of_pos ] )))
+        # self.norm_neg_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if not pos.is_positive else [] for pos in self.list_of_pos ] )))
+        # self.stuff = self.find_true_bases(adapter_indexes, max_mismatch);
+        # self.true_bases = self.stuff[0]
+        # self.wrong_bases = self.stuff[1]
+        # self.is_variant = True;
+        # self.reason = 'VAR';
+        # self.alt = '.';
 
-            else:
-                self.is_variant = False;
-                self.reason = 'ABC';
+        # if not len(self.true_bases) == 0: 
+        #     if not all(self.ref == x for x in self.true_bases):
+        #         tmp = Counter(self.true_bases);
+        #         most = tmp.most_common(2);
 
-        else:
-            self.is_variant = False;
-            self.reason = 'COV';
+        #         if most[0][0] == self.ref:
+        #             self.alt = most[1][0];
+        #         else:
+        #             self.alt = most[0][0];
 
-        return self.is_variant;
+        #         self.alt_count = sum([ True if x == self.alt else False for x in self.true_bases]);
+        #         self.ref_count = sum([ True if x == self.ref else False for x in self.true_bases]);
+
+        #         if not self.neg_tally.get_count(self.alt) >= alt_base_count_threshold:
+        #             self.is_variant = False;
+        #             self.reason = 'ABC';
+    
+        #         elif not self.pos_tally.get_count(self.alt) >= alt_base_count_threshold:
+        #             self.is_variant = False;
+        #             self.reason = 'ABC';
+
+        #         elif not (float( min( self.neg_tally.sum(), self.pos_tally.sum() ) ) / float( self.neg_tally.sum() + self.pos_tally.sum() ) ) >= strand_bias_threshold:
+        #             self.is_variant = False;
+        #             self.reason = 'SB';
+
+        #         elif not (float(self.alt_count) / float(self.ref_count + self.alt_count)) >= variant_allele_fraction_threshold:
+        #             self.is_variant = False;
+        #             self.reason = 'VAF';
+
+        #         return (self.is_variant, self.wrong_bases);
+
+        #     else:
+        #         self.is_variant = False;
+        #         self.reason = 'ABC';
+
+        # else:
+        #     self.is_variant = False;
+        #     self.reason = 'COV';
+
+        # return (self.is_variant, self.wrong_bases)
 
 
     def __str__(self):
@@ -239,18 +261,9 @@ class PosCollection:
         return '\t'.join([
             str(self.chrom),
             str(self.start + 1),
-            str(self.start + 1),
-            '/'.join([
-                self.ref,
-                self.alt
-                ]),
-            "1",
-            self.reason,
-            str(Tally(self.true_bases)),
-            str(Tally(self.pos_bases)),
-            str(Tally(self.neg_bases)),
-            str(self.norm_pos_tally),
-            str(self.norm_neg_tally)
+            str(Tally(self.good_duplex_bases)),
+            str(Tally(self.good_singleton_bases)),
+            ':'.join(self.good_conflicting_bases),
             ]);
 
     def coords(self):
@@ -263,8 +276,9 @@ class PosCollection:
 
 class PosCollectionCreate:
 
-    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads = True, target_bed = None):
+    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads = True, target_bed = None, min_reads_per_uid = 2):
         self.pysam_alignment_file = pysam_alignment_file
+        self.min_reads_per_uid = min_reads_per_uid
         self.pysam_fasta_file = pysam_fasta_file
         self.pos_collections = {}
         self.filter_overlapping_reads = filter_overlapping_reads
@@ -309,6 +323,7 @@ class PosCollectionCreate:
 
     def next(self):
 
+        counts = 0
         while True:
 
             # Get the next Sequence from the pysam object
@@ -320,10 +335,17 @@ class PosCollectionCreate:
                     
                 else:
                     read = self.pysam_alignment_generator.next()
+
             except StopIteration:
+
                 break;
 
             read_order = Order(read.reference_id, read.reference_start)
+
+            qname = Qname(read)
+
+            if qname.support < self.min_reads_per_uid:
+                  continue
 
             # For each base in the alignment, add to the collection structure
             for pairs in read.get_aligned_pairs():
@@ -332,11 +354,11 @@ class PosCollectionCreate:
                     continue
 
                 order = Order(read.reference_id, pairs[1])
-                
+
                 base = read.seq[pairs[0]]
                 qual = read.qual[pairs[0]]
-                
-                current_pos = Pos(base, qual, read.qname, not read.is_reverse)
+
+                current_pos = Pos(base, qual, qname, order)
 
                 if not order in self.pos_collections:
                     self.pos_collections[order] = []
@@ -367,7 +389,10 @@ class PosCollectionCreate:
                         self.pos_collections[order][index] = current_pos;
 
             while not len(self.order) == 0 and self.order[0].lessthen(read_order, self.base_buffer):
+
                 yield self.return_pos();
 
         while not len(self.order) == 0:
             yield self.return_pos();
+
+        raise StopIteration

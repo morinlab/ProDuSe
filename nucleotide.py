@@ -79,6 +79,13 @@ CAPITAL = {
     'N':'N'
     }
 
+VARIANT = {
+    'A':['C','G','T'],
+    'C':['A','G','T'],
+    'G':['A','C','T'],
+    'T':['A','C','G']
+    }
+
 BASE_TO_INDEX = {
     'A':0,
     'C':1,
@@ -200,7 +207,6 @@ def distance( seq, ref, indexes = [] ):
         if not seq[i] == 'N' and not ref[i] == 'N':
             if not set(IUPAC[seq[i]]).issubset(IUPAC[ref[i]]):
                 distance = distance + 1
-
     return distance
 
 def base_mismatch( seq, ref, previous = [] ):
@@ -247,11 +253,14 @@ class Counter:
     def get_ref(self):
         return INDEX_TO_BASE[self.ref]
 
-def random_unambiguous(seq):
-    output = list(seq)
-    for i in range(len(seq)):
-        output[i] = random.choice(IUPAC[seq[i]])
-    return ''.join(output)
+def random_unambiguous(seq, n=1):
+    all_output = [None] * n
+    for j in range(n):
+        output = list(seq)
+        for i in range(len(seq)):
+            output[i] = random.choice(IUPAC[seq[i]])
+        all_output[j] = ''.join(output)
+    return all_output
 
 def random_mismatch(seq, prob):
     output = list(seq)
@@ -260,10 +269,30 @@ def random_mismatch(seq, prob):
             output[i] = random.choice(IUPAC["N"])
     return ''.join(output)
 
+def dist_list(list_of_seq, indexes = []):
+    n = len(list_of_seq)
+    distances = [0] * (math.factorial(n) / math.factorial(2) / math.factorial(n-2))
+    n_index = 0
+    for i in range(n):
+        for j in range(i+1, n):
+            distances[n_index] = distance(list_of_seq[i], list_of_seq[j], indexes)
+            n_index += 1
+    return distances
+
+def dist_pairwise(indexes=[], *lists_of_seqs):
+    n = len(lists_of_seqs)
+    distances = []
+    for i in range(n):
+        for j in range(i+1, n):
+            for k in range(len(lists_of_seqs[i])):
+                for l in range(len(lists_of_seqs[j])):
+                    distances.append(distance(lists_of_seqs[i][k], lists_of_seqs[j][l], indexes))
+    return distances
+
 def complement( seq ):
     complementSeq = list(seq)
     for i in range(len(seq)):
-        complementSeq[i] = COMPLEMENT[seq[i]]
+        complementSeq[i] = COMPLEMENT[CAPITAL[seq[i]]]
     return ''.join(complementSeq)
 
 def reverse( seq ):
@@ -277,8 +306,11 @@ def reverseComplement( seq ):
     reverseComplementSeq = list(seq)
     length = len(seq)
     for i in range(length):
-        reverseComplementSeq[i] = COMPLEMENT[seq[length - i - 1]]
+        reverseComplementSeq[i] = COMPLEMENT[CAPITAL[seq[length - i - 1]]]
     return ''.join(reverseComplementSeq)
+
+def make_variant( ref ):
+    return random.sample(VARIANT[ref], 1)[0]
 
 def makeCapital ( base ):
     return CAPITAL[base];

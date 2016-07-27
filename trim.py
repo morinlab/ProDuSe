@@ -1,44 +1,84 @@
-import argparse
-import printer
+import configargparse
 import fastq
 import nucleotide
 import re
+import time
+import sys
+import os
 
 if __name__ == '__main__':
 
-    printer.general('TRIM')
-    printer.general('Parsing Arguments for trim_fastq.py')	
     desc = "Trim paired-end fastq files that contain an adapter sequence (paste this sequence in QNAME)"
-    parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument(
+    parser = configargparse.ArgParser( description=desc )
+    parser.add(
+        "-c", "--config",
+        required=False,
+        is_config_file=True,
+        help="An optional configuration file for any of the input arguments."
+        )
+    parser.add(
         "-i", "--input",
-        nargs=2,
         required=True,
-        help="Takes the file locations of the forward and reverse fastq files from paired end sequencing"
+        action="append",
+        type=str,
+        help="A pair of fastq files for reading which contain flanked randomized adapter sequences"
         )
-    parser.add_argument(
+    parser.add(
         "-o", "--output",
-        nargs=2,
         required=True,
-        help="Takes the file locations to store the trimmed forward and reverse fastq files"
+        action="append",
+        type=str,
+        help="A pair of empty fastq files for writing"
         )
-    parser.add_argument(
+    parser.add(
         "-as", "--adapter_sequence",
         type=str,
-        default="WSWSWGACT",
-        help="The adapter sequence following IUPAC DNA naming"
+        required=True,
+        help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
         )
-    parser.add_argument(
+    parser.add(
+        "-ap", "--adapter_position",
+        type=str,
+        required=True,
+        help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
+        )
+    parser.add(
         "-mm", "--max_mismatch",
         type=int,
-        default=3,
-        help="The maximum number of mismatches to accept in reads when trimming, set to the length of the adapter sequence to filter no reads"
+        required=True,
+        help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
         )
+
     args = parser.parse_args()
 
+    if not len(args.input) == 2:
+        parser.error('--input must be a pair (i.e. a sized two list) of fastq files')
+
+    if not len(args.output) == 2:
+        parser.error('--output must be a pair (i.e. a sized two list) of fastq files')
+
+    print_prefix = "PRODUSE-TRIM       " ;
+    sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Starting...\n")
+
+    if not len(args.adapter_position) == len(args.adapter_sequence):
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: adapter_position and adapter_sequence must have same length\n")
+        sys.exit(1)
+
+    if not os.path.isfile(args.input[0]):
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: input fastq files does not exist - " + args.input[0] + "\n")
+        sys.exit(1)
+
+    if not os.path.isfile(args.input[1]):
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: input fastq files does not exist - " + args.input[1] + "\n")
+        sys.exit(1)       
+
+    if os.path.isfile(args.output[0]) or os.path.isfile(args.output[1]) :
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Warning: output fastq file(s) already exist, appending to file(s)\n")
 
     # Determine Possible Adapters
     ref_adapter = ''.join([args.adapter_sequence, args.adapter_sequence])
+    ref_indexes = list(''.join([args.adapter_position, args.adapter_position]))
+    ref_indexes = [ i for i in range(len(ref_indexes)) if ref_indexes[i] == "1" ]
 
     # Check If Input is Gzip and call appropariate FastqOpen
     read = 'r'
@@ -46,9 +86,9 @@ if __name__ == '__main__':
     is_input_two_gzipped = not not re.search('.*\.gz', args.input[1])
     if is_input_one_gzipped and is_input_two_gzipped:
         read = ''.join([read, 'g']);
-    elif is_input_one_gzipped or is_input_two_gzipped:
-        print 'Input files must both be gzipped or both uncompressed\n'
-        sys.exit()
+    elif is_input_one_gzipped or iqs_input_two_gzipped:
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: input files must both be gzipped or both uncompressed\n")
+        sys.exit(1)
 
     # Check If Output is Gzip and call appropariate FastqOpen
     write = 'w'
@@ -57,9 +97,9 @@ if __name__ == '__main__':
     if is_output_one_gzipped and is_output_two_gzipped:
         write = ''.join([write, 'g']);
     elif is_output_one_gzipped or is_output_two_gzipped:
-        print 'Output files must both be gzipped or both uncompressed\n'
-        sys.exit()
-        
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: output files must both be gzipped or both uncompressed\n")
+        sys.exit(1)
+
     # Open Fastq files for reading and writing
     forward_input = fastq.FastqOpen(args.input[0], read)
     reverse_input = fastq.FastqOpen(args.input[1], read)
@@ -68,30 +108,48 @@ if __name__ == '__main__':
 
     # For each read in the forward and reverse fastq files, trim the adapter, at it to the read id
     # and output this new fastq record to the temprary output fastq
-    count = 0
-    discard = 0
-    printer.trim(count, discard)
+    count , discard = 0 , 0
+    #sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Discard Rate:" + str(discard / count) + "\tCount:" + str(count) + "\n")
+    # Loop over every fastq entry in file
     for forward_read in forward_input:
-        count = count + 1
+
+        count += 1
+
+        if count % 100000 == 0:
+            sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%    Count:" + str(count) + "\n")
+
+        # Fetch associated reverse read
         reverse_read = reverse_input.next()
+
+        # Get the actual adapter sequence from both fastq files
+        # As well as trimming the seq and qual bases from these regions
         forward_adapter = forward_read.trim(len(args.adapter_sequence))
         reverse_adapter = reverse_read.trim(len(args.adapter_sequence))
+
+        # Glue these together
         sequenced_adapter = ''.join([forward_adapter.seq, reverse_adapter.seq]);
-        true_adapter = ''.join([args.adapter_sequence, args.adapter_sequence]);
-        if nucleotide.distance(sequenced_adapter, true_adapter) > args.max_mismatch:
-            discard = discard + 1
+        
+        # Determine the distance between the actual and expected adapter sequence
+        if nucleotide.distance(sequenced_adapter, ref_adapter, ref_indexes) > args.max_mismatch:
+            
+            # Do not include in output fastq files if distance is greater then max_mismatch
+            discard += 1
             continue
+
+        # Update read names to include adapter sequence prefixes
         forward_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', forward_read.id[1:]])
         reverse_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', reverse_read.id[1:]])
+        
+        # Write entries to fastq outputs
         forward_output.next(forward_read)
         reverse_output.next(reverse_read)
-        if count % 100000 == 0:
-            printer.trim(count, discard)
-    printer.trim(count, discard)
 
+    sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%    Count:" + str(count) + "\n")
+    
     # Close Fastq Files
     forward_input.close()
     reverse_input.close()
     forward_output.close()
     reverse_output.close()
 
+    sys.exit(0)
