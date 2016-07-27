@@ -97,7 +97,17 @@ if __name__ == '__main__':
     print "Extracting DNA from Cells..."
 
     fastafile = pysam.FastaFile(args.reference)
-    seq = fastafile.fetch("chr1", 1, 1000);
+    seq = fastafile.fetch("chr1", 2490000, 2492000);
+    # snv1 = 6500
+    # vaf1 = 0.01
+    # ref1 = nucleotide.CAPITAL[seq[snv1]]
+    # alt1 = nucleotide.make_variant(ref1)
+    # print ref1 + " " + alt1
+    snv2 = 500
+    vaf2 = 0.1
+    ref2 = nucleotide.CAPITAL[seq[snv2]]
+    alt2 = nucleotide.make_variant(ref2)
+    print ref2 + " " + alt2
     indexes_start = list(numpy.random.choice( range(len(seq))[ 0 : len(seq) - lib_template_length_avg ] , lib_molecule_count, replace=True))
     template_lengths = [ int(a) for a in list(numpy.random.normal(lib_template_length_avg, lib_template_length_sd, lib_molecule_count))]
     indexes_end = [None] * len(indexes_start)
@@ -112,6 +122,22 @@ if __name__ == '__main__':
     list_of_dna = [None] * lib_molecule_count
     for i in range(len(indexes_start)):
         cur_seq = seq[indexes_start[i]:indexes_end[i]]
+        # if indexes_start[i] <= snv1 and indexes_end[i] >= snv1:
+        #     if numpy.random.uniform() <= vaf1:
+        #         cur_seq = list(cur_seq)
+        #         cur_seq[snv1 - indexes_start[i]-1] = alt1
+        #         cur_seq = ''.join(cur_seq)
+        #         print "REF1"
+        #         print ref1 + " " + alt1
+        if indexes_start[i] <= snv2 and indexes_end[i] >= snv2:
+            print indexes_start[i]
+            print len(cur_seq)
+            if numpy.random.uniform() <= vaf2:
+                cur_seq = list(cur_seq)
+                cur_seq[snv2 - indexes_start[i]-1] = alt2
+                cur_seq = ''.join(cur_seq)
+                print "REF2"
+                print ref2 + " " + alt2
         cur_seq_complement = nucleotide.complement(cur_seq)
         alpha = nucleotide.random_unambiguous(args.adapter_sequence)
         alpha_complement = nucleotide.complement(alpha)
@@ -122,6 +148,7 @@ if __name__ == '__main__':
     print "Running Polymerase Chain Reaction..."
 
     for i in range(pcr_cycle_count):
+        print len(list_of_dna)
         list_of_rna = [ item for dna in list_of_dna for item in dna.denature() ]
         list_of_dna = [ rna.polymerase(pcr_cycle_error_rate) for rna in list_of_rna ] 
 
