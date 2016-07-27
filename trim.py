@@ -86,7 +86,7 @@ if __name__ == '__main__':
     is_input_two_gzipped = not not re.search('.*\.gz', args.input[1])
     if is_input_one_gzipped and is_input_two_gzipped:
         read = ''.join([read, 'g']);
-    elif is_input_one_gzipped or iqs_input_two_gzipped:
+    elif is_input_one_gzipped or is_input_two_gzipped:
         sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: input files must both be gzipped or both uncompressed\n")
         sys.exit(1)
 
@@ -151,5 +151,3 @@ if __name__ == '__main__':
     reverse_input.close()
     forward_output.close()
     reverse_output.close()
-
-    sys.exit(0)
