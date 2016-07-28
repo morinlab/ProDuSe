@@ -1,0 +1,38 @@
+#!/usr/bin/env python
+
+import argparse
+
+parser = argparse.ArgumentParser()
+
+subparsers = parser.add_subparsers()
+
+parser_workflow = subparsers.add_parser("workflow")
+parser_workflow.add_argument(
+    "--produse_config", "-pc", 
+    required=True
+    )
+parser_workflow.add_argument(
+    "--sample_config", "-sc",
+    required=True
+    )
+parser_workflow.add_argument(
+    "--reference", "-r",
+    required=True
+    )
+parser_workflow.add_argument(
+    "--output_directory", "-o",
+    required=True
+    )
+ 
+
+parser_qc = subparsers.add_parser("qc")
+
+parser_barcode = subparsers.add_parser(
+    "predadap",
+    description
+
+    )
+
+args = parser.parse_args()
+
+print args
