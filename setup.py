@@ -13,7 +13,7 @@ setup(
     classifiers=[
        "Programming Language :: Python :: 2.7"
        ],
-    install_requires=["pysam>=0.9.0","ConfigArgParse>=0.10.0"],
+    download_url="https://github.com/morinlab/ProDuSe/tarball/0.1.1",
     license="GNU GPLv3",
     scripts=["bin/produse"],
     data_files = ["LICENSE", "README.md"]

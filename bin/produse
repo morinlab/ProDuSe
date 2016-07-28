@@ -6,7 +6,7 @@ parser = argparse.ArgumentParser()
 
 subparsers = parser.add_subparsers()
 
-parser_workflow = subparsers.add_parser("workflow")
+parser_workflow = subparsers.add_parser("analysis_pipeline")
 parser_workflow.add_argument(
     "--produse_config", "-pc", 
     required=True
