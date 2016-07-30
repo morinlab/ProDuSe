@@ -24,6 +24,16 @@ pip install ProDuSe
 
 ### The Analysis Pipeline
 
+You will first need to retrieve two configuration files:
+
+#### `config.ini`
+ * command line arguments for each stage in the analysis pipeline
+ * retrieve a sample config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini)
+
+#### `sample_config.ini`
+ * paired fastq files for all samples you wish to run the analysis pipeline on
+ * retrieve a sample sample_config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini)
+
 To run the analysis pipeline you simply need to run the following command:
 
 ```bash
@@ -34,13 +44,50 @@ produse analysis_pipeline
     -o /path/to/output
 ```
 
-The command required two configuration files:
+Once the above command was executed successfully, you will want to change to the following directory:
 
-#### `config.ini`
- * command line arguments for each stage in the analysis pipeline
- * retrieve a sample config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini)
+```bash
+cd /path/to/output/produse_analysis_directory
+```
 
-#### `sample_config.ini`
- * paired fastq files for all samples you wish to run the analysis pipeline on
- * retrieve a sample sample_config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini)
+This directory includes a subdirectory for each sample listed in `sample_config.ini` as well as a Makefile. To run the analysis pipeline run:
 
+```bash
+make -j 4
+```
+
+You can tweak `-j 4` taking into consideration the number of available cores as well as the number of samples to run.
+
+### Helper Scripts
+
+The ProDuSe package includes a variety of helper scripts to aid in the analysis of duplex sequencing data.
+
+All scripts included in the current package can be found by running the following:
+
+```bash
+produse -h
+```
+
+#### produse adapter_predict
+
+If you need to confirm the expected adapter sequence of a sample you should run the following command:
+
+```bash
+produse adapter_predict -i input1.fastq input2.fastq
+```
+
+This tool will print a predicted adapter sequence based off of ACGT abundances at each position. It uses these observed abundances and finds the closest expected abundance for an IUPAC unambiguous or ambiguous base.
+
+### Python Classes
+
+Two major python classes are included with ProDuSe. 
+
+#### The Alignment Class
+
+The first is the alignment class. This linearly processes reads from a BAM file until both read pairs have been identified, at which point the first yield to the developer occurs.
+
+#### The Position Class
+
+The second if the position class. This class aims to create a duplex sequencing ready mpileup class.
+
+Full descriptions of two python classes can be retrieved here
