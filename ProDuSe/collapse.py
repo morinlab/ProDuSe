@@ -91,10 +91,11 @@ parser.add(
     )
 
 
-def main():
+def main(args=None):
 
     # Fetch command line arguments
-    args = parser.parse_args()
+    if args == None:
+        args = parser.parse_args()
 
     # Check common errors
     if not len(args.strand_position) == len(args.adapter_sequence):

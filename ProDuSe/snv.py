@@ -5,87 +5,89 @@ import pysam
 import bed
 import sys
 
-if __name__ == '__main__':
+desc = "Call SNVs on collapsed BAMs containing adapter sequence information"
+parser = configargparse.ArgParser(description=desc)
+parser.add(
+    "-c", "--config",
+    required=False,
+    is_config_file=True,
+    help="An optional configuration file for any of the input arguments."
+    )
+parser.add(
+    "-i", "--input",
+    required=True,
+    type=str,
+    help="An input bam file for reading generated from collapse.py and bwa.py"
+    )
+parser.add(
+    "-o", "--output",
+    required=True,
+    type=str,
+    help="A pair of empty fastq files for writing"
+    )
+parser.add(
+    "-as", "--adapter_sequence",
+    type=str,
+    required=True,
+    help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
+    )
+parser.add(
+    "-ap", "--adapter_position",
+    type=str,
+    required=True,
+    help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
+    )
+parser.add(
+    "-mm", "--max_mismatch",
+    type=int,
+    required=True,
+    help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
+    )
+parser.add(
+    "-r", "--reference",
+    required=True,
+    type=str,
+    help="A genome reference file"
+    )
+parser.add_argument(
+    "-tb", "--target_bed",
+    required=False,
+    help="Restrict SNV discovery to positions/regions in input bed file"
+    )
+parser.add_argument(
+    "-abct", "--alt_base_count_threshold",
+    default=5,
+    required=True,
+    type=int,
+    help="The minimum number of alternative bases to identify separately in the positive and negative read collections"
+    )
+parser.add_argument(
+    "-sbt", "--strand_bias_threshold",
+    default=0.2,
+    required=True,
+    type=float,
+    help=""
+    )
+parser.add_argument(
+    "-vaft", "--variant_allele_fraction_threshold", 
+    default=0.01,
+    required=True,
+    type=float,
+    help=""
+    )
+parser.add_argument(
+    "-mrpu", "--min_reads_per_uid",
+    default=2,
+    required=True,
+    type=int,
+    help=""
+    )
 
-    desc = "Call SNVs on collapsed BAMs containing adapter sequence information"
-    parser = configargparse.ArgParser(description=desc)
-    parser.add(
-        "-c", "--config",
-        required=False,
-        is_config_file=True,
-        help="An optional configuration file for any of the input arguments."
-        )
-    parser.add(
-        "-i", "--input",
-        required=True,
-        type=str,
-        help="An input bam file for reading generated from collapse.py and bwa.py"
-        )
-    parser.add(
-        "-o", "--output",
-        required=True,
-        type=str,
-        help="A pair of empty fastq files for writing"
-        )
-    parser.add(
-        "-as", "--adapter_sequence",
-        type=str,
-        required=True,
-        help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
-        )
-    parser.add(
-        "-ap", "--adapter_position",
-        type=str,
-        required=True,
-        help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
-        )
-    parser.add(
-        "-mm", "--max_mismatch",
-        type=int,
-        required=True,
-        help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
-        )
-    parser.add(
-        "-r", "--reference",
-        required=True,
-        type=str,
-        help="A genome reference file"
-        )
-    parser.add_argument(
-        "-tb", "--target_bed",
-        required=False,
-        help="Restrict SNV discovery to positions/regions in input bed file"
-        )
-    parser.add_argument(
-        "-abct", "--alt_base_count_threshold",
-        default=5,
-        required=True,
-        type=int,
-        help="The minimum number of alternative bases to identify separately in the positive and negative read collections"
-        )
-    parser.add_argument(
-        "-sbt", "--strand_bias_threshold",
-        default=0.2,
-        required=True,
-        type=float,
-        help=""
-        )
-    parser.add_argument(
-        "-vaft", "--variant_allele_fraction_threshold", 
-        default=0.01,
-        required=True,
-        type=float,
-        help=""
-        )
-    parser.add_argument(
-        "-mrpu", "--min_reads_per_uid",
-        default=2,
-        required=True,
-        type=int,
-        help=""
-        )
 
-    args = parser.parse_args()
+def main(args=None):
+
+    if args == None:
+        args = parser.parse_args()
 
     bamfile = pysam.AlignmentFile(args.input, 'rb');
     fastafile = pysam.FastaFile(args.reference);
@@ -166,3 +168,6 @@ if __name__ == '__main__':
     
     if not args.output == "-":
         output.close();
+
+if __name__ == '__main__':
+    main()

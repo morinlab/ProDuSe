@@ -183,37 +183,40 @@ def make_makefile(produse_directory, analysis_dir, samples):
     make.close()
     return 0
 
-if __name__ == '__main__':
+desc = "Process Duplex Sequencing Data"
+parser = argparse.ArgumentParser(description=desc)
+parser.add_argument(
+    "-f", "--fastqs",
+    nargs=2,
+    required=False,
+    help="Takes the file locations of the forward and reverse fastq files from paired end sequencing"
+    )
+parser.add_argument(
+    "-o", "--output_directory",
+    required=True,
+    help="Takes the file locations to store the trimmed forward and reverse fastq files"
+    )
+parser.add_argument(
+    "-r", "--reference",
+    required=True,
+    help="Takes the file location of the reference genome"
+    )
+parser.add_argument(
+    "-c", "--config",
+    required=True,
+    help="Optional config if other inputs not defined"
+    )
+parser.add_argument(
+    "-sc", "--sample_config",
+    required=False,
+    help="Optional for setting up directory for several samples"
+    )
 
-    desc = "Process Duplex Sequencing Data"
-    parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument(
-        "-f", "--fastqs",
-        nargs=2,
-        required=False,
-        help="Takes the file locations of the forward and reverse fastq files from paired end sequencing"
-        )
-    parser.add_argument(
-        "-o", "--output_directory",
-        required=True,
-        help="Takes the file locations to store the trimmed forward and reverse fastq files"
-        )
-    parser.add_argument(
-        "-r", "--reference",
-        required=True,
-        help="Takes the file location of the reference genome"
-        )
-    parser.add_argument(
-        "-c", "--config",
-        required=True,
-        help="Optional config if other inputs not defined"
-        )
-    parser.add_argument(
-        "-sc", "--sample_config",
-        required=False,
-        help="Optional for setting up directory for several samples"
-        )
-    args = parser.parse_args()
+
+def main(args = None):
+
+    if args == None:
+        args = parser.parse_args()
 
     output_directory = os.path.abspath('/'.join([args.output_directory, "produse_analysis_directory"]))
     produse_directory = os.path.dirname(os.path.realpath(__file__))
@@ -245,3 +248,6 @@ if __name__ == '__main__':
                 ### MAKE SAMPLE DIRECTORY
 
                 make_directory(sample_dir, val.split(","), args.config, args.reference)
+
+if __name__ == '__main__':
+    main()

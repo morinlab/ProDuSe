@@ -5,37 +5,39 @@ import subprocess
 import time
 import itertools
 
-if __name__ == '__main__':
+desc = "Align Paired Reads for the PRODUSE Pipeline"
+parser = configargparse.ArgParser(description=desc)
+parser.add(
+    "-c", "--config",
+    required=False,
+    is_config_file=True,
+    help="An optional configuration file for any of the input arguments."
+    )
+parser.add(
+    "-i", "--input",
+    required=True,
+    action="append",
+    type=str,
+    help="A pair of fastq files for reading processed by trim.py"
+    )
+parser.add(
+    "-o", "--output",
+    required=True,
+    type=str,
+    help="An output bam file for writing"
+    )
+parser.add(
+    "-r", "--reference",
+    required=True,
+    type=str,
+    help="A genome reference file with BWA indexes"
+    )
 
-    desc = "Align Paired Reads for the PRODUSE Pipeline"
-    parser = configargparse.ArgParser(description=desc)
-    parser.add(
-        "-c", "--config",
-        required=False,
-        is_config_file=True,
-        help="An optional configuration file for any of the input arguments."
-        )
-    parser.add(
-        "-i", "--input",
-        required=True,
-        action="append",
-        type=str,
-        help="A pair of fastq files for reading processed by trim.py"
-        )
-    parser.add(
-        "-o", "--output",
-        required=True,
-        type=str,
-        help="An output bam file for writing"
-        )
-    parser.add(
-        "-r", "--reference",
-        required=True,
-        type=str,
-        help="A genome reference file with BWA indexes"
-        )
 
-    args = parser.parse_args()
+def main(args=None):
+    
+    if args == None:
+        args = parser.parse_args()
 
     if not len(args.input) == 2:
         parser.error('--input must be a pair (i.e. a sized two list) of fastq files')
@@ -98,3 +100,6 @@ if __name__ == '__main__':
     ps1.stdout.close()
     ps2.stdout.close()
     ps3.wait()
+
+if __name__ == '__main__':
+    main()

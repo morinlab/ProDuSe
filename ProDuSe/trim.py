@@ -6,48 +6,48 @@ import time
 import sys
 import os
 
-if __name__ == '__main__':
+desc = "Trim paired-end fastq files that contain an adapter sequence (paste this sequence in QNAME)"
+parser = configargparse.ArgParser( description=desc )
+parser.add(
+    "-c", "--config",
+    required=False,
+    is_config_file=True,
+    help="An optional configuration file for any of the input arguments."
+    )
+parser.add(
+    "-i", "--input",
+    required=True,
+    action="append",
+    type=str,
+    help="A pair of fastq files for reading which contain flanked randomized adapter sequences"
+    )
+parser.add(
+    "-o", "--output",
+    required=True,
+    action="append",
+    type=str,
+    help="A pair of empty fastq files for writing"
+    )
+parser.add(
+    "-as", "--adapter_sequence",
+    type=str,
+    required=True,
+    help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
+    )
+parser.add(
+    "-ap", "--adapter_position",
+    type=str,
+    required=True,
+    help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
+    )
+parser.add(
+    "-mm", "--max_mismatch",
+    type=int,
+    required=True,
+    help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
+    )
 
-    desc = "Trim paired-end fastq files that contain an adapter sequence (paste this sequence in QNAME)"
-    parser = configargparse.ArgParser( description=desc )
-    parser.add(
-        "-c", "--config",
-        required=False,
-        is_config_file=True,
-        help="An optional configuration file for any of the input arguments."
-        )
-    parser.add(
-        "-i", "--input",
-        required=True,
-        action="append",
-        type=str,
-        help="A pair of fastq files for reading which contain flanked randomized adapter sequences"
-        )
-    parser.add(
-        "-o", "--output",
-        required=True,
-        action="append",
-        type=str,
-        help="A pair of empty fastq files for writing"
-        )
-    parser.add(
-        "-as", "--adapter_sequence",
-        type=str,
-        required=True,
-        help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
-        )
-    parser.add(
-        "-ap", "--adapter_position",
-        type=str,
-        required=True,
-        help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
-        )
-    parser.add(
-        "-mm", "--max_mismatch",
-        type=int,
-        required=True,
-        help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
-        )
+if __name__ == '__main__':
 
     args = parser.parse_args()
 

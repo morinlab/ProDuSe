@@ -1,38 +1,93 @@
 #!/usr/bin/env python
 
 import argparse
+from ProDuSe import adapter_predict
+from ProDuSe import configure_produse
+from ProDuSe import collapse
+from ProDuSe import trim
+from ProDuSe import snv
+from ProDuSe import bwa
+
 
 parser = argparse.ArgumentParser()
 
 subparsers = parser.add_subparsers()
 
-parser_workflow = subparsers.add_parser("analysis_pipeline")
-parser_workflow.add_argument(
-    "--produse_config", "-pc", 
-    required=True
+parser_analysis_pipeline = subparsers.add_parser(
+    "analysis_pipeline",
+    parents=[configure_produse.parser],
+    add_help=False,
+    usage=""
     )
-parser_workflow.add_argument(
-    "--sample_config", "-sc",
-    required=True
+parser_analysis_pipeline.set_defaults(
+    which="analysis_pipeline"
     )
-parser_workflow.add_argument(
-    "--reference", "-r",
-    required=True
-    )
-parser_workflow.add_argument(
-    "--output_directory", "-o",
-    required=True
-    )
- 
 
-parser_qc = subparsers.add_parser("qc")
+
+parser_trim = subparsers.add_parser(
+    "trim",
+    parents=[trim.parser],
+    add_help=False
+    )
+parser_trim.set_defaults(
+    which="trim"
+    )
+
+
+parser_align = subparsers.add_parser(
+    "align",
+    parents=[bwa.parser],
+    add_help=False
+    )
+parser_align.set_defaults(
+    which="align"
+    )
+
+
+parser_collapse = subparsers.add_parser(
+    "collapse",
+    parents=[collapse.parser],
+    add_help=False
+    )
+parser_collapse.set_defaults(
+    which="collapse"
+    )
+
+parser_variants = subparsers.add_parser(
+    "snv",
+    parents=[snv.parser],
+    add_help=False
+    )
+parser_variants.set_defaults(
+    which="snv"
+    )
 
 parser_barcode = subparsers.add_parser(
-    "predadap",
-    description
-
+    "adapter_predict", 
+    parents=[adapter_predict.parser],
+    add_help=False
+    )
+parser_barcode.set_defaults(
+    which="adapter_predict"
     )
 
 args = parser.parse_args()
 
-print args
+
+if args.which == "adapter_predict":
+    adapter_predict.main(args)
+
+if args.which == "collapse":
+    collapse.main(args)
+
+if args.which == "snv":
+    snv.main(args)
+
+if args.which == "trim":
+    trim.main(args)
+
+if args.which == "analysis_pipeline":
+    configure_produse.main(args)
+
+if args.which == "align":
+    bwa.main(args)

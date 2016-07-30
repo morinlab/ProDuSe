@@ -7,23 +7,25 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-if __name__ == '__main__':
+desc = "Quality Control on the adapter sequences in a pair of fastq files"
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-i", "--input",
+    nargs=2,
+    required=True,
+    help="Takes the file locations of the forward and reverse fastq files from paired end sequencing"
+    )
+parser.add_argument(
+    "-m", "--max_adapter_length",
+    default=30,
+    type=int
+    )
 
-    desc = "Quality Control on the adapter sequences in a pair of fastq files"
-    parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument(
-        "-i", "--input",
-        nargs=2,
-        required=True,
-        help="Takes the file locations of the forward and reverse fastq files from paired end sequencing"
-        )
-    parser.add_argument(
-        "-m", "--max_adapter_length",
-        default=30,
-        type=int
-        )
-    args = parser.parse_args()
+def main(args=None):
 
+    if args == None:
+        args = parser.parse_args()
+    
     # Check If Input is Gzip and call appropariate FastqOpen
     read = 'r'
     is_input_one_gzipped = not not re.search('.*\.gz', args.input[0])
@@ -61,3 +63,7 @@ if __name__ == '__main__':
         predicted_seq += min_base 
 
     print predicted_seq + "\n"
+
+
+if __name__ == "__main__":
+    main()
