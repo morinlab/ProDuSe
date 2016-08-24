@@ -4,7 +4,6 @@ import collections
 import fastq
 import sys
 import itertools
-import statistics
 
 NUC_TO_INDEX = {
     'A': 0,
@@ -151,7 +150,6 @@ duplex_ids = {"+": {}, "-": {}}
 duplex_stats = collections.OrderedDict()
 duplex_uid = 0
 prev_id = None
-stats = statistics.StatsCollection()
 
 def index_max(values):
     return max(xrange(len(values)), key=values.__getitem__)
