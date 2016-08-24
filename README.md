@@ -12,7 +12,7 @@ You will need to install the following tools before installing the ProDuSe packa
 
 * `python==2.7`
 * `bwa==0.7.12`
-* `samtools==0.1.19`
+* `samtools==1.3.1`
 
 To install the ProDuSe package run the following command:
 
