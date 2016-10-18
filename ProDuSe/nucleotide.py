@@ -313,4 +313,7 @@ def make_variant( ref ):
     return random.sample(VARIANT[ref], 1)[0]
 
 def makeCapital ( base ):
-    return CAPITAL[base];
+    if base in CAPITAL:
+        return CAPITAL[base];
+    else:
+        return "N"

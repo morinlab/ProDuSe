@@ -83,7 +83,6 @@ parser.add_argument(
     help=""
     )
 
-
 def main(args=None):
 
     if args == None:
@@ -94,8 +93,8 @@ def main(args=None):
     targetbed = None
     if not args.target_bed == None:
         targetbed = bed.BedOpen(args.target_bed, 'r');
-    else:
-        sys.exit("You need to specify a targetbed")
+    #else:
+    #    sys.exit("You need to specify a targetbed")
 
     posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads = True, target_bed = targetbed, min_reads_per_uid = args.min_reads_per_uid);
 
@@ -113,7 +112,7 @@ def main(args=None):
     #                 strand_bias_threshold = args.strand_bias_threshold, \
     #                 variant_allele_fraction_threshold = args.variant_allele_fraction_threshold );
 
-    #             if args.output == "-":
+    ##             if args.output == "-":
     #                 print(str(pos));
     #             else:
     #                 output.write(str(pos));
@@ -126,16 +125,27 @@ def main(args=None):
     ref_indexes = [ i for i in range(len(ref_indexes)) if ref_indexes[i] == "1" ]
 
     counts = {}
-
+    
+    m=1
+    first=True
     for pos in posCollection:
 
-        if pos.coords2() in targetbed:
 
-            pos.calc_base_stats( \
-                min_reads_per_uid = args.min_reads_per_uid
-                )
-
-            print str(pos)
+       pos.calc_base_stats( \
+           min_reads_per_uid = 3
+           )
+       #print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
+       
+       m+=1
+       if pos.is_variant(0.02, 400):
+           if first:
+               pos.write_header(output)
+               first=False
+           pos.write_variant(output)
+           #output.write(pos.coords() + "\n")
+           #output.write(pos.ref + " > " + ''.join(pos.alt) + "\n")
+           #output.write(str(pos))
+           
 
         # if pos.coords2() in targetbed:
 

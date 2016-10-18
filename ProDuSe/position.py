@@ -7,6 +7,7 @@ import itertools
 from collections import Counter
 import bed
 
+import numpy
 
 class ID:
 
@@ -138,18 +139,29 @@ class PosCollection:
 
 
     def __init__(self, list_of_pos, order, chrom, start, ref):
+        
+        self.base_array = {"DPN":{}, "DPn":{}, "DpN":{}, "Dpn":{}, "SP":{}, "Sp":{}, "SN":{} ,"Sn":{}}
+        for categ in self.base_array.keys():
+            self.base_array[categ] = {"A":0, "C":0, "T":0,"G":0,"N":0}
+        #self.base_array = pandas.DataFrame(
+        #    numpy.zeros((5, 8)),
+        #    index = ["A", "C", "G", "T", "N"],
+        #    columns = ["DPN", "DPn", "DpN", "Dpn", "SP", "Sp", "SN", "Sn"]
+        #    )
         self.list_of_pos = list_of_pos
         self.order = order
         self.chrom = chrom
         self.start = start
         self.ref = nucleotide.makeCapital(ref)
-        self.alt = None
-        self.molecule_bases = []
-        self.pos_coords = {}
-        self.neg_coords = {}
-        self.pos_bases = []
-        self.neg_bases = []
-        self.true_bases = []
+        self.alt = []
+        self.alt_reason = []
+        # self.molecule_bases = []
+        # self.pos_coords = {}
+        # self.neg_coords = {}
+        # self.pos_bases = []
+        # self.neg_bases = []
+        # self.true_bases = []
+        self.variant_status = None
         self.bases = {}
         self.duplex_bases = []
         self.good_singleton_bases = [] 
@@ -158,6 +170,8 @@ class PosCollection:
         self.bad_duplex_bases = []
         self.good_conflicting_bases = []
         self.bad_conflicting_bases = []
+        self.good_conflicting_duplex_bases = []
+        self.bad_conflicting_duplex_bases = []
 
     def calc_base_stats(self, min_reads_per_uid):
 
@@ -168,33 +182,105 @@ class PosCollection:
 
         for duplex_id in self.bases:
 
+            column = ""
+
             if len(self.bases[duplex_id]) == 1:
 
-                if self.bases[duplex_id][0].qname.support >= min_reads_per_uid:
-                    self.good_singleton_bases.append(self.bases[duplex_id][0].base)
+                passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
+                is_positive = self.bases[duplex_id][0].qname.strand == "+"
+
+                if passes_filter and is_positive:
+                    column = "SP"
+
+                elif passes_filter and not is_positive:
+                    column = "SN"
+
+                elif not passes_filter and is_positive:
+                    column = "Sp"
 
                 else:
-                    self.bad_singleton_bases.append(self.bases[duplex_id][0].base)
+                    column = "Sn"
+
+                self.base_array[column][self.bases[duplex_id][0].base] += 1
 
             elif len(self.bases[duplex_id]) == 2:
+
                 if self.bases[duplex_id][0].base == self.bases[duplex_id][1].base:
+
+                    column = ""
+
+                    pos_passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
+                    neg_passes_filter = self.bases[duplex_id][1].qname.support >= min_reads_per_uid
+
+                    if self.bases[duplex_id][0].qname.strand == "-":
+                        pos_passes_filter = self.bases[duplex_id][1].qname.support >= min_reads_per_uid
+                        neg_passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
                     
-                    if self.bases[duplex_id][0].qname.support >= min_reads_per_uid and \
-                       self.bases[duplex_id][1].qname.support >= min_reads_per_uid:
-                        self.good_duplex_bases.append(self.bases[duplex_id][0].base)
+                    if pos_passes_filter and neg_passes_filter:
+                        column = "DPN"
+
+                    elif pos_passes_filter and not neg_passes_filter:
+                        column = "DPn"
+
+                    elif not pos_passes_filter and neg_passes_filter:
+                        column = "DpN"
                     
                     else:
-                        self.bad_duplex_bases.append(self.bases[duplex_id][0].base)
+                        column = "Dpn"
+
+                    self.base_array[column][self.bases[duplex_id][0].base] += 1
 
                 else:
 
-                    if self.bases[duplex_id][0].qname.support >= min_reads_per_uid and \
-                       self.bases[duplex_id][1].qname.support >= min_reads_per_uid:
+                    if self.bases[duplex_id][0].qname.support >= min_reads_per_uid and self.bases[duplex_id][1].qname.support >= min_reads_per_uid:
                         self.good_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
 
                     else:
                         self.bad_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
 
+    def is_variant(self, min_alt_vaf, min_molecule_count):
+	    
+        
+        base_sum = {"A":0,"T":0,"C":0,"G":0,"N":0}
+        alt_bases = []
+	for categ in self.base_array.keys():
+            for base in self.base_array[categ].keys():
+                if not base == self.ref:
+                    alt_bases.append(base)
+                base_sum[base] += self.base_array[categ][base]
+
+        alt_bases = numpy.unique(alt_bases) 
+        #print self.base_array
+        
+        for alt_base in alt_bases:
+            if self.base_array["DPN"][alt_base] >= 1:
+		self.alt.append(alt_base)
+                self.alt_reason.append("DPN")
+            
+            if (self.base_array["DPn"][alt_base] + self.base_array["DpN"][alt_base]) >= 2:
+                self.alt.append(alt_base)
+                self.alt_reason.append("DPn/DpN")
+
+            if self.base_array["Dpn"][alt_base] >= 2:
+                self.alt.append(alt_base)
+                self.alt_reason.append("Dpn")
+            
+            if sum(base_sum.values()) >= min_molecule_count and (float(base_sum[alt_base]) / float(sum(base_sum.values()))) >= min_alt_vaf:
+                self.alt.append(alt_base)
+                self.alt_reason.append("VAF")
+
+        if len(self.alt) == 0:
+            return False
+
+        else:
+            return True
+                
+
+
+
+        # def is_variant(self, alt_base_count_threshold, strand_bias_threshold, variant_allele_fraction_threshold):
+
+        # self.base_array["DPN"]
 
         # self.pos_bases = [ pos.base for pos in self.list_of_pos if pos.is_positive() ];
         # self.neg_bases = [ pos.base for pos in self.list_of_pos if not pos.is_positive() ];
@@ -256,15 +342,48 @@ class PosCollection:
         # return (self.is_variant, self.wrong_bases)
 
 
-    def __str__(self):
 
-        return '\t'.join([
+    def write_header(self, file_handler):
+        file_handler.write('##fileformat=VCFv4.2\n')
+        file_handler.write('##INFO=<ID=DPN,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Strong Negative Consensus">\n')
+        file_handler.write('##INFO=<ID=DPn,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Weak Negative Consensus">\n')
+        file_handler.write('##INFO=<ID=DpN,Number=R,Type=Integer,Description="Duplex Support with Weak Positive and Strong Negative Consensus">\n')
+        file_handler.write('##INFO=<ID=Dpn,Number=R,Type=Integer,Description="Duplex Support with Weak Positive and Weak Negative Consensus">\n')
+        file_handler.write('##INFO=<ID=SP,Number=R,Type=Integer,Description="Singleton Support with Strong Positive Consensus">\n')
+        file_handler.write('##INFO=<ID=Sp,Number=R,Type=Integer,Description="Singleton Support with Weak Positive Consensus">\n')
+        file_handler.write('##INFO=<ID=SN,Number=R,Type=Integer,Description="Singleton Support with Strong Negative Consensus">\n')
+        file_handler.write('##INFO=<ID=Sn,Number=R,Type=Integer,Description="Singleton Support with Weak Negative Consensus">\n')
+        file_handler.write('##INFO=<ID=MC,Number=R,Type=Integer,Description="Molecule Counts">\n')
+        file_handler.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
+
+    def write_variant(self, file_handler):
+
+	categs = ["DPN","DPn","DpN","Dpn","SP","Sp","SN","Sn"]
+        bases = ["A", "C", "G", "T"]
+	info_column = ';'.join(['='.join([categ, ','.join([ str(self.base_array[categ][base]) for base in bases])]) for categ in categs])
+        
+        molecule_counts = {"A":0, "C":0,"G":0,"T":0}	
+        for base in bases:
+            for categ in categs:
+                molecule_counts[base] += self.base_array[categ][base]
+
+        info_column = ';'.join([ info_column, '='.join(["MC", ','.join([ str(molecule_counts[base]) for base in bases])])])
+
+	reason = "."
+	if len(self.alt_reason) >= 0:
+		reason = ','.join(self.alt_reason) 
+
+        file_handler.write('\t'.join([
             str(self.chrom),
             str(self.start + 1),
-            str(Tally(self.good_duplex_bases)),
-            str(Tally(self.good_singleton_bases)),
-            ':'.join(self.good_conflicting_bases),
-            ]);
+            ".",
+            self.ref,
+            ','.join(numpy.unique(self.alt)),
+            ".",
+            ".",
+            info_column
+            ]))
+        file_handler.write("\n")
 
     def coords(self):
 
@@ -286,9 +405,9 @@ class PosCollectionCreate:
         self.base_buffer = 5000
         self.order = []
         self.read_processed = False
-        self.qnames = {};
-        self.first = True;
-        self.target_bed = target_bed;
+        self.qnames = {}
+        self.first = True
+        self.target_bed = target_bed
         self.pysam_alignment_generator = None
 
         ### READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later).
@@ -322,7 +441,7 @@ class PosCollectionCreate:
         return item;
 
     def next(self):
-
+        reads_visited = 0
         counts = 0
         while True:
 
@@ -347,16 +466,30 @@ class PosCollectionCreate:
             if qname.support < self.min_reads_per_uid:
                   continue
 
-            # For each base in the alignment, add to the collection structure
-            for pairs in read.get_aligned_pairs():
+            #For each base in the alignment, add to the collection structure
+            #cigarstuff = list(itertools.chain.from_iterable(numpy.repeat(val[0],val[1]) for val in read.cigartuples))
+            
+            for pairs in read.get_aligned_pairs(matches_only=True):
 
                 if pairs[0] == None or pairs[1] == None:
                     continue
 
+                #IGNORE SOFT CLIPPED BASES
+                #print cigarstuff[pairs[0]]
+                #print pairs
+		#if cigarstuff[pairs[0]]:
+                #    continue
+		
+                reads_visited+=1
                 order = Order(read.reference_id, pairs[1])
 
                 base = read.seq[pairs[0]]
                 qual = read.qual[pairs[0]]
+
+
+		if pairs[1] == 148508727:
+		    if base == "C":
+                        print read.qname
 
                 current_pos = Pos(base, qual, qname, order)
 
@@ -391,7 +524,7 @@ class PosCollectionCreate:
             while not len(self.order) == 0 and self.order[0].lessthen(read_order, self.base_buffer):
 
                 yield self.return_pos();
-
+            #print "visited %s reads" % reads_visited
         while not len(self.order) == 0:
             yield self.return_pos();
 

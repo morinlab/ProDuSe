@@ -48,12 +48,16 @@ class Fastq:
             pass
         return tmp
 
-    def glue(self, fastq):
+    def append(self, fastq):
 
         # Probably can do more high level stuff using the strand
-        self.seq = ''.join(self.seq, fastq.seq)
-        self.qual = ''.join(self.qual, fastq.qual)
+        self.seq = ''.join([self.seq, fastq.seq])
+        self.qual = ''.join([self.qual, fastq.qual])
 
+    def prepend(self, fastq):
+        
+        self.seq = ''.join([fastq.seq, self.seq])
+        self.qual = ''.join([self.qual, fastq.qual])
 
 class FastqRead:
 

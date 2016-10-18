@@ -60,8 +60,11 @@ class Read:
         self.qual = pysam_read.qual
         self.qual_int = pysam_read.query_qualities
         self.ref_id = pysam_read.reference_id
-        self.ref_name = pysam_read.reference_name
-        self.ref_len = pysam_read.reference_length
+        self.ref_name = None
+        self.ref_len = 0
+        if not self.ref_id == -1:
+        	self.ref_name = pysam_read.reference_name
+        	self.ref_len = pysam_read.reference_length
         self.misformed = False
         self.start = 0
         self.end = 0
@@ -104,6 +107,13 @@ class Alignment:
                      self.r2.ref_id, max(self.r1.end, self.r2.end),
                      self.r1.ref_name, self.r2.ref_name)
 
+        if (self.r1.is_reverse and self.r1.start < self.r2.start) or (self.r2.is_reverse and self.r2.start < self.r1.start):
+
+            self.r1.seq = self.r1.seq[( self.start() - self.r1.start ):( len(self.r1.seq) - (self.r1.end - self.end())) ]
+            self.r1.qual = self.r1.qual[( self.start() - self.r1.start ):( len(self.r1.qual) - (self.r1.end - self.end()))]
+            self.r2.seq = self.r2.seq[( self.start() - self.r2.start ):( len(self.r2.seq) - (self.r2.end - self.end()))]
+            self.r2.qual = self.r2.qual[( self.start() - self.r2.start ):( len(self.r2.qual) - (self.r2.end - self.end()))]
+
     def __str__(self):
         return "{0}\t{1}".format(
             self.r1.qname,
@@ -112,11 +122,11 @@ class Alignment:
     # Return the start of read one
 
     def start(self):
-        return min(self.r1.start, self.r2.start)
+        return max(self.r1.start, self.r2.start)
 
     # Return the end of read two
     def end(self):
-        return max(self.r1.end, self.r2.end)
+        return min(self.r1.end, self.r2.end)
 
     def qname(self):
         return self.r1.qname
@@ -128,6 +138,10 @@ class Alignment:
     # Check if reads have different references
     def is_multi_ref(self):
         return not self.r1.ref_id == self.r2.ref_id
+    
+    # Check if reads do not align
+    def is_unaligned(self):
+        return self.r1.ref_id == -1 or self.r2.ref_id == -1
 
     # Check if the first read seen is read one, i.e. positive
     def is_positive(self):
@@ -637,6 +651,7 @@ class AlignmentCollectionCreate:
         self.misformed = {}
         self.split = {}
         self.multi_ref = {}
+        self.unaligned = {}
         self.tmp_collections = {}
         self.next_id = []
         self.id = None
@@ -727,6 +742,10 @@ class AlignmentCollectionCreate:
             # Ignore Alignments that map to different chromosomes
             if align.is_multi_ref():
                 self.multi_ref[id] = align
+                continue
+            
+            if align.is_unaligned():
+                self.unaligned[id] = align
                 continue
 
             # If this ID is new, push it to process

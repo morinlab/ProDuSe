@@ -46,7 +46,16 @@ parser.add(
     required=True,
     help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
     )
-
+parser.add(
+    "-v",
+    action="store_true",
+    help="Instead, output entries that are distant from the adapter sequence"
+    )
+parser.add(
+    "-t",
+    action="store_true",
+    help="Instead, output entries without trimming the adapter sequence"
+    )
 if __name__ == '__main__':
 
     args = parser.parse_args()
@@ -130,21 +139,36 @@ if __name__ == '__main__':
         sequenced_adapter = ''.join([forward_adapter.seq, reverse_adapter.seq]);
         
         # Determine the distance between the actual and expected adapter sequence
-        if nucleotide.distance(sequenced_adapter, ref_adapter, ref_indexes) > args.max_mismatch:
+        if args.v and nucleotide.distance(sequenced_adapter, ref_adapter, ref_indexes) <= args.max_mismatch:
             
             # Do not include in output fastq files if distance is greater then max_mismatch
             discard += 1
             continue
 
-        # Update read names to include adapter sequence prefixes
-        forward_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', forward_read.id[1:]])
-        reverse_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', reverse_read.id[1:]])
-        
+        elif not args.v and nucleotide.distance(sequenced_adapter,ref_adapter, ref_indexes) > args.max_mismatch:
+
+            discard += 1
+            continue
+
+        if args.t:
+
+            # Glue back the trimmed sequences and quality scores            
+            forward_read.prepend(forward_adapter)
+            reverse_read.prepend(reverse_adapter)
+         
+        else:
+
+            # Update read names to include adapter sequence prefixes
+            forward_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', forward_read.id[1:]])
+            reverse_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', reverse_read.id[1:]])
+
         # Write entries to fastq outputs
         forward_output.next(forward_read)
         reverse_output.next(reverse_read)
 
-    sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%    Count:" + str(count) + "\n")
+    if count % 100000 != 0:
+
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%    Count:" + str(count) + "\n")
     
     # Close Fastq Files
     forward_input.close()

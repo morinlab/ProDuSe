@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import argparse
+import configargparse
 from ProDuSe import adapter_predict
 from ProDuSe import configure_produse
 from ProDuSe import collapse
@@ -9,7 +9,7 @@ from ProDuSe import snv
 from ProDuSe import bwa
 
 
-parser = argparse.ArgumentParser()
+parser = configargparse.ArgParser()
 
 subparsers = parser.add_subparsers()
 
