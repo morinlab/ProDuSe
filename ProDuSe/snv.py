@@ -76,11 +76,25 @@ parser.add_argument(
     help=""
     )
 parser.add_argument(
+    "-mo", "--min_molecules",
+    default=400,
+    required=True,
+    type=int,
+    help="Supply a reasonable limit on the number of molecules. Reduce this if you are running only on positions you expect to be mutated."
+    )
+parser.add_argument(
     "-mrpu", "--min_reads_per_uid",
     default=2,
     required=True,
     type=int,
-    help=""
+    help="Bases with support between MRPU and SSBT will be classified as a weak supported base"
+    )
+parser.add_argument(
+    "-ssbt", "--strong_supported_base_threshold",
+    default=3,
+    required=True,
+    type=int,
+    help="Bases with support equal to or greater then SSBT, will be classified as a strong supported base."
     )
 
 def main(args=None):
@@ -132,12 +146,12 @@ def main(args=None):
 
 
        pos.calc_base_stats( \
-           min_reads_per_uid = 3
+           min_reads_per_uid = args.strong_supported_base_threshold
            )
        #print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
        
        m+=1
-       if pos.is_variant(0.02, 400):
+       if pos.is_variant(args.variant_allele_fraction_threshold, args.min_molecules):
            if first:
                pos.write_header(output)
                first=False
