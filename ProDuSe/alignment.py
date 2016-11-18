@@ -94,6 +94,9 @@ class Read:
         self.is_read1 = pysam_read.is_read1
         self.is_read2 = pysam_read.is_read2
         self.is_reverse = pysam_read.is_reverse
+        self.mismatches = 0
+        if pysam_read.has_tag("NM"):
+            self.mismatches = pysam_read.get_tag("NM")
 
 
 class Alignment:
@@ -159,6 +162,9 @@ class Alignment:
     # Check if the Alignment is misformed
     def is_misformed(self):
         return self.r1.misformed or self.r2.misformed
+
+    def too_many_mismatches(self, threshold):
+        return self.r1.mismatches > threshold or self.r2.mismatches > threshold
 
 duplex_ids = {"+": {}, "-": {}}
 duplex_stats = collections.OrderedDict()
@@ -644,7 +650,7 @@ class AlignmentCollection:
 
 class AlignmentCollectionCreate:
 
-    def __init__(self, pysam_alignment_file, sense_matters=True, verbose=None):
+    def __init__(self, pysam_alignment_file, sense_matters=True, verbose=None, max_alignment_mismatch_threshold=5):
         self.pysam_alignment_file = pysam_alignment_file
         self.sense_matters = sense_matters
         self.qname_to_read = {}
@@ -656,6 +662,8 @@ class AlignmentCollectionCreate:
         self.next_id = []
         self.id = None
         self.base_buffer = 5000
+        self.max_alignment_mismatch_threshold = max_alignment_mismatch_threshold
+        self.too_many_mismatches = {}
 
     def __iter__(self):
         return self.next()
@@ -746,6 +754,11 @@ class AlignmentCollectionCreate:
             
             if align.is_unaligned():
                 self.unaligned[id] = align
+                continue
+
+            # Mismatch on Reference and Sequence
+            if align.too_many_mismatches( self.max_alignment_mismatch_threshold ):
+                self.too_many_mismatches[id] = align
                 continue
 
             # If this ID is new, push it to process
