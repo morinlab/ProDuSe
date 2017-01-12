@@ -1,3 +1,4 @@
+from fisher import pvalue
 import pysam
 import bisect
 import nucleotide
@@ -55,8 +56,12 @@ class Qname:
         self.pos_end = int(split[4])
         self.support = int(split[5])
         self.strand = split[6]
-        self.duplex_id = int(split[7]) 
-
+        self.duplex_id = int(split[7])
+        self.is_paired = pysam_read.is_paired
+        if pysam_read.is_reverse:
+            self.mapstrand = "-"
+        else:
+            self.mapstrand = "+"
     def __eq__(self, other):
         return self.qname == other.qname
 
@@ -140,7 +145,7 @@ class PosCollection:
 
     def __init__(self, list_of_pos, order, chrom, start, ref):
         
-        self.base_array = {"DPN":{}, "DPn":{}, "DpN":{}, "Dpn":{}, "SP":{}, "Sp":{}, "SN":{} ,"Sn":{}}
+        self.base_array = {"DPN":{}, "DPn":{}, "DpN":{}, "Dpn":{}, "SP":{}, "Sp":{}, "SN":{} ,"Sn":{},"StP":{},"Stp":{},"StN":{},"Stn":{},"StrBiasP":{}}
         for categ in self.base_array.keys():
             self.base_array[categ] = {"A":0, "C":0, "T":0,"G":0,"N":0}
         #self.base_array = pandas.DataFrame(
@@ -174,9 +179,11 @@ class PosCollection:
         self.bad_conflicting_duplex_bases = []
         self.pos_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         self.neg_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
-
+        self.pos_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
+        self.neg_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
+        
     def calc_base_stats(self, min_reads_per_uid):
-
+        #to be compatible with FLASH outputs, read strand information should only be considered from un-merged reads (i.e. mapped as pairs)
         for pos in self.list_of_pos:
             if not pos.qname.duplex_id in self.bases:
                 self.bases[pos.qname.duplex_id] = []
@@ -185,12 +192,14 @@ class PosCollection:
         for duplex_id in self.bases:
 
             column = ""
-
+            colnew = ""
             if len(self.bases[duplex_id]) == 1:
-
+                
                 passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
                 is_positive = self.bases[duplex_id][0].qname.strand == "+"
-
+                is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
+                is_paired = self.bases[duplex_id][0].qname.is_paired
+                #print "pairing for %s is %s" % (self.bases[duplex_id][0].qname,is_paired)
                 if passes_filter and is_positive:
                     column = "SP"
 
@@ -202,9 +211,27 @@ class PosCollection:
 
                 else:
                     column = "Sn"
-
+                    
                 self.base_array[column][self.bases[duplex_id][0].base] += 1
+                if passes_filter and is_positive_strand:
+                    colnew = "StP"
+                elif passes_filter and not is_positive_strand:
+                    
+                    colnew = "StN"
 
+                elif not passes_filter and is_positive_strand:
+                    colnew = "Stp"
+
+                else:
+                    colnew = "Stn"
+                if is_paired:
+                    #only count strand of reads for those that did not get merged by FLASH because otherwise this information is lost (i.e. ignore unpaired reads )
+                    self.base_array[colnew][self.bases[duplex_id][0].base] += 1
+                if is_positive_strand:
+                    self.pos_strand_counts[self.bases[duplex_id][0].base] += 1
+                else:
+                    self.neg_strand_counts[self.bases[duplex_id][0].base] += 1
+                #the above few lines were added by Ryan to compensate for an issue that led to variants being called with almost exclusively collapsed reads mapped only to one strand
                 if is_positive:
                     self.pos_counts[self.bases[duplex_id][0].base] += 1
                 else:
@@ -256,7 +283,7 @@ class PosCollection:
                     else:
                         self.bad_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
 
-    def is_variant(self, min_alt_vaf, min_molecule_count):
+    def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
 	    
         
         base_sum = {"A":0,"T":0,"C":0,"G":0,"N":0}
@@ -282,10 +309,28 @@ class PosCollection:
             if self.base_array["Dpn"][alt_base] >= 2:
                 self.alt.append(alt_base)
                 self.alt_reason.append("Dpn")
-            
+            pval = None
             if sum(base_sum.values()) >= min_molecule_count and (float(base_sum[alt_base]) / float(sum(base_sum.values()))) >= min_alt_vaf:
-                self.alt.append(alt_base)
-                self.alt_reason.append("VAF")
+                pass_min = False
+                pass_dual = True
+                if enforce_dual_strand:
+                    pass_dual = False
+                    if self.pos_strand_counts[alt_base] >0 and self.neg_strand_counts[alt_base]>0:
+                        pass_dual = True
+                        #determine the p value for the bias of reads mapped to + vs - strand
+                        pval = pvalue(self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
+                        
+                        self.base_array["StrBiasP"][alt_base] = pval.two_tail
+                        
+                    else:
+                        pass_dual = False
+                if self.pos_counts[alt_base] + self.neg_counts[alt_base] >= mutant_molecules:
+                    pass_min = True
+                else:
+                    print "Skipping this because not enough mutant molecules %s and %s" % (self.pos_counts[alt_base],self.neg_counts[alt_base])
+                if pass_min and pass_dual:
+                    self.alt.append(alt_base)
+                    self.alt_reason.append("VAF")
 
         if len(self.alt) == 0:
             return False
@@ -378,15 +423,17 @@ class PosCollection:
 
     def write_variant(self, file_handler):
 
-	categs = ["DPN","DPn","DpN","Dpn","SP","Sp","SN","Sn"]
+	categs = ["DPN","DPn","DpN","Dpn","SP","Sp","SN","Sn","StP","Stp","StN","Stn","StrBiasP"]
         bases = ["A", "C", "G", "T"]
 	info_column = ';'.join(['='.join([categ, ','.join([ str(self.base_array[categ][base]) for base in bases])]) for categ in categs])
         
         molecule_counts = {"A":0, "C":0,"G":0,"T":0}	
         for base in bases:
             for categ in categs:
+                if categ in ("StP","Stp","StN","Stn","StrBiasP"):
+                    continue
                 molecule_counts[base] += self.base_array[categ][base]
-
+        
         info_column = ';'.join([ info_column, '='.join(["MC", ','.join([ str(molecule_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["PC", ','.join([ str(self.pos_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["NC", ','.join([ str(self.neg_counts[base]) for base in bases])])])
@@ -490,7 +537,7 @@ class PosCollectionCreate:
 
             #For each base in the alignment, add to the collection structure
             #cigarstuff = list(itertools.chain.from_iterable(numpy.repeat(val[0],val[1]) for val in read.cigartuples))
-            
+            #print "support for %s is %s, >= %s" % (qname,qname.support,self.min_reads_per_uid)
             for pairs in read.get_aligned_pairs(matches_only=True):
 
                 if pairs[0] == None or pairs[1] == None:
@@ -507,11 +554,11 @@ class PosCollectionCreate:
 
                 base = read.seq[pairs[0]]
                 qual = read.qual[pairs[0]]
+                
 
-
-		if pairs[1] == 148508727:
-		    if base == "C":
-                        print read.qname
+		#if pairs[1] == 148508727:
+		#    if base == "C":
+                #        print read.qname
 
                 current_pos = Pos(base, qual, qname, order)
 
