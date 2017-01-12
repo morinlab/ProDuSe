@@ -15,17 +15,23 @@ parser.add(
     help="An optional configuration file for any of the input arguments."
     )
 parser.add(
+        "-t", "--threads",
+        required=False,
+        default=1,
+        help="how many threads to allow bwa to use"
+        )
+parser.add(
     "-i", "--input",
     required=True,
     action="append",
     type=str,
-    help="A pair of fastq files for reading processed by trim.py"
+    help="A set of fastq files for reading processed by trim.py. The first two should be un-merged R1 and R2 (in that order) that did not get merged by FLASH and the third file should be the FLASH-merged reads"
     )
 parser.add(
     "-o", "--output",
     required=True,
     type=str,
-    help="An output bam file for writing"
+    help="A prefix for your bam files for writing initial alignments and merged bam"
     )
 parser.add(
     "-r", "--reference",
@@ -40,31 +46,20 @@ def main(args=None):
     if args == None:
         args = parser.parse_args()
 
-    if not len(args.input) == 2:
-        parser.error('--input must be a pair (i.e. a sized two list) of fastq files')
+    if not len(args.input) == 3:
+        parser.error('--input must be trio of fastq files from FLASH')
 
     print_prefix = "PRODUSE-BWA        " ;
     sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Starting...\n")    
 
-    if not os.path.isfile(args.input[0]):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: input fastq files does not exist - " + args.input[0] + "\n")
+    if not os.path.isfile(args.input[0]) or not os.path.isfile(args.input[1]) or not os.path.isfile(args.input[2]):
+        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: one or more of input fastq files does not exist - " + args.input[0] + args.input[1] + args.input[2]+ "\n")
         sys.exit(1)
 
-    if not os.path.isfile(args.input[1]):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: input fastq files does not exist - " + args.input[1] + "\n")
-        sys.exit(1)       
 
-    output_format = ""
+    output_format = "BAM"
+    #this should not be optional
     
-    if args.output[-4:] == ".bam":
-        output_format = "BAM"
-    
-    elif args.output[-4:] == ".sam":
-        output_format = "SAM"
-    
-    else:
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: only bam or sam output format is accepted - " + args.output + "\n")
-        sys.exit(1)
 
     if os.path.isfile(args.output) :
         sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: output file already exists - " + args.output + "\n")
@@ -83,12 +78,12 @@ def main(args=None):
                 sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: samtools version must be 1.3.1 or higher - " + line.split(" ")[1] + "\n")
                 sys.exit(1)
             break
-
+    #run BWA for merged reads
+    threads = "-t " + str(args.threads)
     command1 = [
-        'bwa', 'mem',
+        'bwa', 'mem', threads,
         args.reference,
-        args.input[0],
-        args.input[1]
+        args.input[2]
         ]
 
     command2 = [
@@ -96,11 +91,16 @@ def main(args=None):
         '--output-fmt', output_format,
         '-'
         ]
-
-    output_fh = open(args.output, 'w')
-
+    out1 = args.output + ".flash_reads.bam"
+    out2 = args.output + ".unmerged_reads.bam"
+    out_merge = args.output + ".merge.bam"
+    out1_fh = open(out1,"w")
+    out2_fh = open(out2,"w")
+    #output_fh = open(args.output, 'w')
+    print "running"
+    print command1
     ps1 = subprocess.Popen(command1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    ps2 = subprocess.Popen(command2, stdout=output_fh, stdin=ps1.stdout, stderr=subprocess.PIPE)
+    ps2 = subprocess.Popen(command2, stdout=out1_fh, stdin=ps1.stdout, stderr=subprocess.PIPE)
 
     ps1_iterator = iter(ps1.stderr.readline, b"")
     ps2_iterator = iter(ps2.stderr.readline, b"")
@@ -113,6 +113,35 @@ def main(args=None):
 
     ps1.stdout.close()
     ps2.wait()
+    command3 = [
+        'bwa','mem',threads,
+        args.reference,
+        args.input[0],
+        args.input[1]
+        ]
+    ps1 = subprocess.Popen(command3, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ps2 = subprocess.Popen(command2, stdout=out2_fh, stdin=ps1.stdout, stderr=subprocess.PIPE)
+    ps1_iterator = iter(ps1.stderr.readline, b"")
+    ps2_iterator = iter(ps2.stderr.readline, b"")
 
+    counter = 0
+    for line in itertools.chain(ps1_iterator, ps2_iterator):
+        if line.startswith("[M::mem_process_seqs]"):
+            counter += int(line.split(" ")[2])
+            sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Reads Processed:" + str(counter) + "\n")
+
+    ps1.stdout.close()
+    ps2.wait()
+    out1_fh.close()
+    out2_fh.close()
+    
+    merge_command = [
+        'samtools', 'merge', out_merge, 
+        out1, out2]
+    ps1 = subprocess.Popen(merge_command)
+    ps1.wait()
+    index_command = ['samtools', 'index', out_merge]
+    ps2 = subprocess.Popen(index_command)
+    ps2.wait()
 if __name__ == '__main__':
     main()

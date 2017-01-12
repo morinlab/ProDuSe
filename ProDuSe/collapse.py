@@ -74,6 +74,14 @@ parser.add(
     )
 
 parser.add(
+    "-mamt", "--max_alignment_mismatch_threshold",
+    type=int,
+    required=False,
+    default=20,
+    help="The maximum number of mismatches allowed in an alignment"
+    )
+
+parser.add(
     "-oo", "--original_output",
     type=str,
     required=False,
@@ -163,7 +171,7 @@ def main(args=None):
     if not args.stats_file == None:
         stats_file = open(args.stats_file, 'w')
 
-    collection_creator = alignment.AlignmentCollectionCreate(bamfile)
+    collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=args.max_alignment_mismatch_threshold)
     counter = 0
     for collection in collection_creator:
         counter += 1

@@ -172,6 +172,8 @@ class PosCollection:
         self.bad_conflicting_bases = []
         self.good_conflicting_duplex_bases = []
         self.bad_conflicting_duplex_bases = []
+        self.pos_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
+        self.neg_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
 
     def calc_base_stats(self, min_reads_per_uid):
 
@@ -203,6 +205,12 @@ class PosCollection:
 
                 self.base_array[column][self.bases[duplex_id][0].base] += 1
 
+                if is_positive:
+                    self.pos_counts[self.bases[duplex_id][0].base] += 1
+                else:
+                    self.neg_counts[self.bases[duplex_id][0].base] += 1
+
+
             elif len(self.bases[duplex_id]) == 2:
 
                 if self.bases[duplex_id][0].base == self.bases[duplex_id][1].base:
@@ -229,8 +237,18 @@ class PosCollection:
                         column = "Dpn"
 
                     self.base_array[column][self.bases[duplex_id][0].base] += 1
+                    self.pos_counts[self.bases[duplex_id][0].base] += 1
+                    self.neg_counts[self.bases[duplex_id][0].base] += 1
 
                 else:
+                    
+                    is_positive = self.bases[duplex_id][0].qname.strand == "+"
+                    if is_positive:
+                        self.pos_counts[self.bases[duplex_id][0].base] += 1
+                        self.neg_counts[self.bases[duplex_id][1].base] += 1
+                    else:
+                        self.neg_counts[self.bases[duplex_id][0].base] += 1
+                        self.pos_counts[self.bases[duplex_id][1].base] += 1
 
                     if self.bases[duplex_id][0].qname.support >= min_reads_per_uid and self.bases[duplex_id][1].qname.support >= min_reads_per_uid:
                         self.good_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
@@ -354,6 +372,8 @@ class PosCollection:
         file_handler.write('##INFO=<ID=SN,Number=R,Type=Integer,Description="Singleton Support with Strong Negative Consensus">\n')
         file_handler.write('##INFO=<ID=Sn,Number=R,Type=Integer,Description="Singleton Support with Weak Negative Consensus">\n')
         file_handler.write('##INFO=<ID=MC,Number=R,Type=Integer,Description="Molecule Counts">\n')
+        file_handler.write('##INFO=<ID=PC,Number=R,Type=Integer,Description="Molecule Count in Positive Strand Including Bases of Disagreeance\n')
+        file_handler.write('##INFO=<ID=NC,Number=R,Type=Integer,Description="Molecule Count in Negative Strand Including Bases of Disagreeance\n')
         file_handler.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
 
     def write_variant(self, file_handler):
@@ -368,6 +388,8 @@ class PosCollection:
                 molecule_counts[base] += self.base_array[categ][base]
 
         info_column = ';'.join([ info_column, '='.join(["MC", ','.join([ str(molecule_counts[base]) for base in bases])])])
+        info_column = ';'.join([ info_column, '='.join(["PC", ','.join([ str(self.pos_counts[base]) for base in bases])])])
+        info_column = ';'.join([ info_column, '='.join(["NC", ','.join([ str(self.neg_counts[base]) for base in bases])])])
 
 	reason = "."
 	if len(self.alt_reason) >= 0:

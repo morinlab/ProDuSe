@@ -83,6 +83,15 @@ parser.add_argument(
     help="Supply a reasonable limit on the number of molecules. Reduce this if you are running only on positions you expect to be mutated."
     )
 parser.add_argument(
+
+        "-mum", "--mutant_molecules",
+        default=3,
+        required=False,
+        type=int,
+        help="Lower limit for the number of molecules supporting a variant (set to 0 if you are forcing variant calling at known sites)"
+        )
+parser.add_argument(
+
     "-mrpu", "--min_reads_per_uid",
     default=2,
     required=True,
@@ -95,6 +104,14 @@ parser.add_argument(
     required=True,
     type=int,
     help="Bases with support equal to or greater then SSBT, will be classified as a strong supported base."
+
+    )
+
+parser.add_argument(
+    "-eds","--enforce_dual_strand",
+    action='store_true',
+    help = "require at least one molecule to be read in each of the two directions"
+
     )
 
 def main(args=None):
@@ -151,7 +168,9 @@ def main(args=None):
        #print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
        
        m+=1
-       if pos.is_variant(args.variant_allele_fraction_threshold, args.min_molecules):
+
+       if pos.is_variant(args.variant_allele_fraction_threshold, args.min_molecules,args.enforce_dual_strand,args.mutant_molecules):
+
            if first:
                pos.write_header(output)
                first=False
