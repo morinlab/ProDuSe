@@ -105,8 +105,8 @@ class Alignment:
     def __init__(self, pysam_read_one, pysam_read_two):
         self.r1 = Read(pysam_read_one)
         self.r2 = Read(pysam_read_two)
-        print pysam_read_one
-        print pysam_read_two
+        #print pysam_read_one
+        #print pysam_read_two
         self.adapter = self.r1.qname.split(":")[0]
         self.qname = ':'.join(self.r1.qname.split(":")[1:])
         self.id = ID(self.r1.ref_id, min(self.r1.start, self.r2.start),
