@@ -48,6 +48,9 @@ class Qname:
 
     def __init__(self, pysam_read):
         self.qname = pysam_read.qname
+        self.mismatches = 0
+        if pysam_read.has_tag("NM"):
+            self.mismatches = pysam_read.get_tag("NM")
         split = self.qname.split(":")
         self.adapter_sequence = split[0]
         self.ref_start = split[1]
@@ -177,18 +180,19 @@ class PosCollection:
         self.bad_conflicting_bases = []
         self.good_conflicting_duplex_bases = []
         self.bad_conflicting_duplex_bases = []
+        self.skipped_reads = 0 #number of consensus reads discarded at summary stage (calc_base_stats)
         self.pos_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         self.neg_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         self.pos_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         self.neg_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         
-    def calc_base_stats(self, min_reads_per_uid):
+    def calc_base_stats(self, min_reads_per_uid,max_mismatch_per_aligned_read=5):
         #to be compatible with FLASH outputs, read strand information should only be considered from un-merged reads (i.e. mapped as pairs)
         for pos in self.list_of_pos:
             if not pos.qname.duplex_id in self.bases:
                 self.bases[pos.qname.duplex_id] = []
             self.bases[pos.qname.duplex_id].append(pos)
-
+        skipped = 0
         for duplex_id in self.bases:
 
             column = ""
@@ -196,9 +200,14 @@ class PosCollection:
             if len(self.bases[duplex_id]) == 1:
                 
                 passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
+                too_many_mismatches = self.bases[duplex_id][0].qname.mismatches > max_mismatch_per_aligned_read
                 is_positive = self.bases[duplex_id][0].qname.strand == "+"
                 is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
                 is_paired = self.bases[duplex_id][0].qname.is_paired
+                if too_many_mismatches:
+                    #print "SS skipping %s because %i mismatchess" % (self.bases[duplex_id][0].qname.qname,self.bases[duplex_id][0].qname.mismatches)
+                    skipped +=1
+                    continue
                 #print "pairing for %s is %s" % (self.bases[duplex_id][0].qname,is_paired)
                 if passes_filter and is_positive:
                     column = "SP"
@@ -239,7 +248,16 @@ class PosCollection:
 
 
             elif len(self.bases[duplex_id]) == 2:
-
+                too_many_mismatches1 = self.bases[duplex_id][0].qname.mismatches> max_mismatch_per_aligned_read
+                too_many_mismatches2 = self.bases[duplex_id][1].qname.mismatches> max_mismatch_per_aligned_read
+                if too_many_mismatches1:
+                    #print "skipping DS %s because %i mismatchess" % (self.bases[duplex_id][0].qname.qname,self.bases[duplex_id][0].qname.mismatches)
+                    skipped +=1
+                    continue
+                if too_many_mismatches2:
+                    #print "skipping DS %s because %i mismatchess" % (self.bases[duplex_id][1].qname.qname,self.bases[duplex_id][1].qname.mismatches)
+                    skipped +=1
+                    continue
                 if self.bases[duplex_id][0].base == self.bases[duplex_id][1].base:
 
                     column = ""
@@ -282,6 +300,7 @@ class PosCollection:
 
                     else:
                         self.bad_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
+        self.skipped_reads = skipped
 
     def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
 	    
@@ -318,16 +337,15 @@ class PosCollection:
                     if self.pos_strand_counts[alt_base] >0 and self.neg_strand_counts[alt_base]>0:
                         pass_dual = True
                         #determine the p value for the bias of reads mapped to + vs - strand
-                        pval = pvalue(self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
-                        
+                        #pval = pvalue(self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]) #doesn't work with FLASH
+                        pval = pvalue(self.pos_counts[alt_base],self.neg_counts[alt_base],self.pos_counts[self.ref],self.neg_counts[self.ref])
                         self.base_array["StrBiasP"][alt_base] = pval.two_tail
                         
                     else:
                         pass_dual = False
                 if self.pos_counts[alt_base] + self.neg_counts[alt_base] >= mutant_molecules:
                     pass_min = True
-                else:
-                    print "Skipping this because not enough mutant molecules %s and %s" % (self.pos_counts[alt_base],self.neg_counts[alt_base])
+
                 if pass_min and pass_dual:
                     self.alt.append(alt_base)
                     self.alt_reason.append("VAF")
@@ -437,7 +455,9 @@ class PosCollection:
         info_column = ';'.join([ info_column, '='.join(["MC", ','.join([ str(molecule_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["PC", ','.join([ str(self.pos_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["NC", ','.join([ str(self.neg_counts[base]) for base in bases])])])
-
+        sr_detail = "SR=" + str(self.skipped_reads)
+        info_column = ';'.join([ info_column, sr_detail])
+        
 	reason = "."
 	if len(self.alt_reason) >= 0:
 		reason = ','.join(self.alt_reason) 
