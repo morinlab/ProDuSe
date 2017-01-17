@@ -61,10 +61,15 @@ class Qname:
         self.strand = split[6]
         self.duplex_id = int(split[7])
         self.is_paired = pysam_read.is_paired
+        
+        
         if pysam_read.is_reverse:
             self.mapstrand = "-"
         else:
             self.mapstrand = "+"
+        #override strand using map information for FLASH pairs (for this to work, the negative FLASH reads need to be rev-complemented before aligning
+        if not self.is_paired:
+            self.strand = self.mapstrand
     def __eq__(self, other):
         return self.qname == other.qname
 
@@ -109,8 +114,11 @@ class Pos:
         self.qname = qname
 
     def is_positive(self):
-        return self.qname.strand == "+"
-
+        #return self.qname.strand == "+"
+        if self.is_paired:
+            return self.qname.strand == "+"
+        else:
+            return self.qname.mapstrand == "+" #added by Ryan. Now that Flash is being used, the strand is consistent with the mapped strand for collapsed reads
     def __eq__(self, other):
         return self.qname.duplex_id == qname.other.duplex_id
 
@@ -202,6 +210,7 @@ class PosCollection:
                 passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
                 too_many_mismatches = self.bases[duplex_id][0].qname.mismatches > max_mismatch_per_aligned_read
                 is_positive = self.bases[duplex_id][0].qname.strand == "+"
+                
                 is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
                 is_paired = self.bases[duplex_id][0].qname.is_paired
                 if too_many_mismatches:
@@ -233,9 +242,8 @@ class PosCollection:
 
                 else:
                     colnew = "Stn"
-                if is_paired:
-                    #only count strand of reads for those that did not get merged by FLASH because otherwise this information is lost (i.e. ignore unpaired reads )
-                    self.base_array[colnew][self.bases[duplex_id][0].base] += 1
+                
+                self.base_array[colnew][self.bases[duplex_id][0].base] += 1
                 if is_positive_strand:
                     self.pos_strand_counts[self.bases[duplex_id][0].base] += 1
                 else:
@@ -288,6 +296,7 @@ class PosCollection:
                 else:
                     
                     is_positive = self.bases[duplex_id][0].qname.strand == "+"
+                    
                     if is_positive:
                         self.pos_counts[self.bases[duplex_id][0].base] += 1
                         self.neg_counts[self.bases[duplex_id][1].base] += 1
@@ -338,6 +347,7 @@ class PosCollection:
                         pass_dual = True
                         #determine the p value for the bias of reads mapped to + vs - strand
                         #pval = pvalue(self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]) #doesn't work with FLASH
+
                         pval = pvalue(self.pos_counts[alt_base],self.neg_counts[alt_base],self.pos_counts[self.ref],self.neg_counts[self.ref])
                         self.base_array["StrBiasP"][alt_base] = pval.two_tail
                         
