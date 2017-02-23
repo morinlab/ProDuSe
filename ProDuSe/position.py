@@ -1,14 +1,10 @@
 from fisher import pvalue
-import pysam
 import bisect
 import nucleotide
-import collections
 import sys
 import itertools
-from collections import Counter
-import bed
-
 import numpy
+
 
 class ID:
 
@@ -109,7 +105,13 @@ class Pos:
 
     def __init__(self, base, qual, qname, order):
         self.order = order
-        self.base = base
+        #convert extremely low quality bases to N
+        if ord(qual)-33 < 3:
+            #print "low qual"
+            #print ord(qual)-33
+            self.base = "N"
+        else:
+            self.base = base
         self.qual = qual
         self.qname = qname
 
@@ -258,6 +260,7 @@ class PosCollection:
             elif len(self.bases[duplex_id]) == 2:
                 too_many_mismatches1 = self.bases[duplex_id][0].qname.mismatches> max_mismatch_per_aligned_read
                 too_many_mismatches2 = self.bases[duplex_id][1].qname.mismatches> max_mismatch_per_aligned_read
+                is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
                 if too_many_mismatches1:
                     #print "skipping DS %s because %i mismatchess" % (self.bases[duplex_id][0].qname.qname,self.bases[duplex_id][0].qname.mismatches)
                     skipped +=1
@@ -276,17 +279,40 @@ class PosCollection:
                     if self.bases[duplex_id][0].qname.strand == "-":
                         pos_passes_filter = self.bases[duplex_id][1].qname.support >= min_reads_per_uid
                         neg_passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
+                    if is_positive_strand:
+                        colnew = "StP"
+                        self.pos_strand_counts[self.bases[duplex_id][0].base] += 1
+                    else:
+                        self.neg_strand_counts[self.bases[duplex_id][0].base] += 1
+                        colnew = "StN"  #count all duplex by the mapstrand (consider them all high-conf)
                     
+                    self.base_array[colnew][self.bases[duplex_id][0].base] += 1
                     if pos_passes_filter and neg_passes_filter:
+                        #if self.bases[duplex_id][0].base == "C":
+                            #print "DPN" 
+                            #print self.bases[duplex_id][0].qname.qname
+                            #print self.bases[duplex_id][1].qname.qname
                         column = "DPN"
 
                     elif pos_passes_filter and not neg_passes_filter:
+                        #if self.bases[duplex_id][0].base == "C":
+                         #   print "DPn"
+                          #  print self.bases[duplex_id][0].qname.qname
+                           # print self.bases[duplex_id][1].qname.qname
                         column = "DPn"
 
                     elif not pos_passes_filter and neg_passes_filter:
+                        #if self.bases[duplex_id][0].base == "C":
+                         #   print "DpN"
+                          #  print self.bases[duplex_id][0].qname.qname
+                           # print self.bases[duplex_id][1].qname.qname
                         column = "DpN"
                     
                     else:
+                        #if self.bases[duplex_id][0].base == "C":
+                         #   print "Dpn"
+                          #  print self.bases[duplex_id][0].qname.qname
+                           # print self.bases[duplex_id][1].qname.qname
                         column = "Dpn"
 
                     self.base_array[column][self.bases[duplex_id][0].base] += 1
@@ -312,24 +338,25 @@ class PosCollection:
         self.skipped_reads = skipped
 
     def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
-	    
-        
-        base_sum = {"A":0,"T":0,"C":0,"G":0,"N":0}
+
+        base_sum = {"A": 0, "T": 0, "C": 0, "G": 0, "N": 0}
         alt_bases = []
-	for categ in self.base_array.keys():
+        for categ in self.base_array.keys():
             for base in self.base_array[categ].keys():
                 if not base == self.ref:
                     alt_bases.append(base)
                 base_sum[base] += self.base_array[categ][base]
 
-        alt_bases = numpy.unique(alt_bases) 
-        #print self.base_array
-        
+        alt_bases = numpy.unique(alt_bases)
+        # print self.base_array
+
         for alt_base in alt_bases:
+            if alt_base == "N":
+                continue
             if self.base_array["DPN"][alt_base] >= 1:
-		self.alt.append(alt_base)
+                self.alt.append(alt_base)
                 self.alt_reason.append("DPN")
-            
+
             if (self.base_array["DPn"][alt_base] + self.base_array["DpN"][alt_base]) >= 2:
                 self.alt.append(alt_base)
                 self.alt_reason.append("DPn/DpN")
@@ -343,16 +370,24 @@ class PosCollection:
                 pass_dual = True
                 if enforce_dual_strand:
                     pass_dual = False
-                    if self.pos_strand_counts[alt_base] >0 and self.neg_strand_counts[alt_base]>0:
+
+                    if self.pos_strand_counts[alt_base] > 0 and self.neg_strand_counts[alt_base] > 0:
                         pass_dual = True
                         #determine the p value for the bias of reads mapped to + vs - strand
-                        #pval = pvalue(self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]) #doesn't work with FLASH
-
-                        pval = pvalue(self.pos_counts[alt_base],self.neg_counts[alt_base],self.pos_counts[self.ref],self.neg_counts[self.ref])
+                        pval = pvalue(self.pos_strand_counts[alt_base], self.neg_strand_counts[alt_base], self.pos_strand_counts[self.ref], self.neg_strand_counts[self.ref])  # doesn't work with FLASH
+                        #print "pvalue %s %s %s %s" % (self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
+                        #print pval.two_tail
+                        #pval = pvalue(self.pos_counts[alt_base],self.neg_counts[alt_base],self.pos_counts[self.ref],self.neg_counts[self.ref])
                         self.base_array["StrBiasP"][alt_base] = pval.two_tail
                         
                     else:
                         pass_dual = False
+                else:
+                    pval = pvalue(self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]) #doesn't work with FLASH
+                    #print "pvalue %s %s %s %s" % (self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
+                    #print pval.two_tail
+                    
+                    self.base_array["StrBiasP"][alt_base] = pval.two_tail
                 if self.pos_counts[alt_base] + self.neg_counts[alt_base] >= mutant_molecules:
                     pass_min = True
 
@@ -365,73 +400,6 @@ class PosCollection:
 
         else:
             return True
-                
-
-
-
-        # def is_variant(self, alt_base_count_threshold, strand_bias_threshold, variant_allele_fraction_threshold):
-
-        # self.base_array["DPN"]
-
-        # self.pos_bases = [ pos.base for pos in self.list_of_pos if pos.is_positive() ];
-        # self.neg_bases = [ pos.base for pos in self.list_of_pos if not pos.is_positive() ];
-        # print self.list_of_pos[0].order 
-        # print self.pos_bases
-        # print self.neg_bases
-        # return (False, [])
-        # self.neg_tally = Tally(self.neg_bases);
-        # self.pos_tally = Tally(self.pos_bases);
-        # self.all_bases = [ pos.base for pos in self.list_of_pos ];
-        # self.norm_pos_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if pos.is_positive else [] for pos in self.list_of_pos ] )))
-        # self.norm_neg_tally = Tally(list(itertools.chain.from_iterable( [ [pos.base] * pos.count if not pos.is_positive else [] for pos in self.list_of_pos ] )))
-        # self.stuff = self.find_true_bases(adapter_indexes, max_mismatch);
-        # self.true_bases = self.stuff[0]
-        # self.wrong_bases = self.stuff[1]
-        # self.is_variant = True;
-        # self.reason = 'VAR';
-        # self.alt = '.';
-
-        # if not len(self.true_bases) == 0: 
-        #     if not all(self.ref == x for x in self.true_bases):
-        #         tmp = Counter(self.true_bases);
-        #         most = tmp.most_common(2);
-
-        #         if most[0][0] == self.ref:
-        #             self.alt = most[1][0];
-        #         else:
-        #             self.alt = most[0][0];
-
-        #         self.alt_count = sum([ True if x == self.alt else False for x in self.true_bases]);
-        #         self.ref_count = sum([ True if x == self.ref else False for x in self.true_bases]);
-
-        #         if not self.neg_tally.get_count(self.alt) >= alt_base_count_threshold:
-        #             self.is_variant = False;
-        #             self.reason = 'ABC';
-    
-        #         elif not self.pos_tally.get_count(self.alt) >= alt_base_count_threshold:
-        #             self.is_variant = False;
-        #             self.reason = 'ABC';
-
-        #         elif not (float( min( self.neg_tally.sum(), self.pos_tally.sum() ) ) / float( self.neg_tally.sum() + self.pos_tally.sum() ) ) >= strand_bias_threshold:
-        #             self.is_variant = False;
-        #             self.reason = 'SB';
-
-        #         elif not (float(self.alt_count) / float(self.ref_count + self.alt_count)) >= variant_allele_fraction_threshold:
-        #             self.is_variant = False;
-        #             self.reason = 'VAF';
-
-        #         return (self.is_variant, self.wrong_bases);
-
-        #     else:
-        #         self.is_variant = False;
-        #         self.reason = 'ABC';
-
-        # else:
-        #     self.is_variant = False;
-        #     self.reason = 'COV';
-
-        # return (self.is_variant, self.wrong_bases)
-
 
 
     def write_header(self, file_handler):
@@ -451,38 +419,38 @@ class PosCollection:
 
     def write_variant(self, file_handler):
 
-	categs = ["DPN","DPn","DpN","Dpn","SP","Sp","SN","Sn","StP","Stp","StN","Stn","StrBiasP"]
+        categs = ["DPN","DPn","DpN","Dpn","SP","Sp","SN","Sn","StP","Stp","StN","Stn","StrBiasP"]
         bases = ["A", "C", "G", "T"]
-	info_column = ';'.join(['='.join([categ, ','.join([ str(self.base_array[categ][base]) for base in bases])]) for categ in categs])
-        
+        info_column = ';'.join(['='.join([categ, ','.join([ str(self.base_array[categ][base]) for base in bases])]) for categ in categs])
+
         molecule_counts = {"A":0, "C":0,"G":0,"T":0}	
         for base in bases:
             for categ in categs:
                 if categ in ("StP","Stp","StN","Stn","StrBiasP"):
                     continue
                 molecule_counts[base] += self.base_array[categ][base]
-        
+            
         info_column = ';'.join([ info_column, '='.join(["MC", ','.join([ str(molecule_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["PC", ','.join([ str(self.pos_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["NC", ','.join([ str(self.neg_counts[base]) for base in bases])])])
         sr_detail = "SR=" + str(self.skipped_reads)
         info_column = ';'.join([ info_column, sr_detail])
-        
-	reason = "."
-	if len(self.alt_reason) >= 0:
-		reason = ','.join(self.alt_reason) 
+            
+        reason = "."
+        if len(self.alt_reason) >= 0:
+            reason = ','.join(self.alt_reason) 
 
-        file_handler.write('\t'.join([
-            str(self.chrom),
-            str(self.start + 1),
-            ".",
-            self.ref,
-            ','.join(numpy.unique(self.alt)),
-            ".",
-            ".",
-            info_column
-            ]))
-        file_handler.write("\n")
+            file_handler.write('\t'.join([
+                str(self.chrom),
+                str(self.start + 1),
+                ".",
+                self.ref,
+                ','.join(numpy.unique(self.alt)),
+                ".",
+                ".",
+                info_column
+                ]))
+            file_handler.write("\n")
 
     def coords(self):
 
@@ -492,9 +460,10 @@ class PosCollection:
 
         return ''.join([ str(self.chrom), ':', str(self.start+1), '-', str(self.start+1) ]);
 
+
 class PosCollectionCreate:
 
-    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads = True, target_bed = None, min_reads_per_uid = 2):
+    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads=True, target_bed=None, min_reads_per_uid=2):
         self.pysam_alignment_file = pysam_alignment_file
         self.min_reads_per_uid = min_reads_per_uid
         self.pysam_fasta_file = pysam_fasta_file
@@ -509,14 +478,14 @@ class PosCollectionCreate:
         self.target_bed = target_bed
         self.pysam_alignment_generator = None
 
-        ### READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later).
-        if not self.target_bed == None:
+        # READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later). ## CRAP, WHY ME????? (Chris)
+        if self.target_bed is not None:
             for region in self.target_bed.regions:
-                if self.pysam_alignment_generator == None:
-                    self.pysam_alignment_generator = self.pysam_alignment_file.fetch(region=region);
+                if self.pysam_alignment_generator is None:
+                    self.pysam_alignment_generator = self.pysam_alignment_file.fetch(region=region)
                 else:
-                    self.pysam_alignment_generator = itertools.chain(self.pysam_alignment_generator, self.pysam_alignment_file.fetch(region=region));
-        
+                    self.pysam_alignment_generator = itertools.chain(self.pysam_alignment_generator, self.pysam_alignment_file.fetch(region=region))
+
     def __iter__(self):
         return self.next()
 
@@ -524,7 +493,7 @@ class PosCollectionCreate:
         return self.next()
 
     def return_pos(self):
-        chrom = self.pysam_alignment_file.getrname( self.order[0].chrom );
+        chrom = self.pysam_alignment_file.getrname(self.order[0].chrom)
         start = int(self.order[0].start)
         item = PosCollection(
             self.pos_collections[self.order[0]], 
@@ -537,7 +506,7 @@ class PosCollectionCreate:
         del self.pos_collections[self.order[0]]
         del self.qname_collections[self.order[0]]
         del self.order[0]
-        return item;
+        return item
 
     def next(self):
         reads_visited = 0
@@ -545,29 +514,29 @@ class PosCollectionCreate:
         while True:
 
             # Get the next Sequence from the pysam object
-            read = None;
+            read = None
 
             try:
-                if self.target_bed == None:
-                    read = self.pysam_alignment_file.next()
-                    
+                if self.target_bed is None:
+                    read = next(self.pysam_alignment_file)
+
                 else:
-                    read = self.pysam_alignment_generator.next()
+                    read = next(self.pysam_alignment_generator)
 
             except StopIteration:
 
-                break;
+                break
 
             read_order = Order(read.reference_id, read.reference_start)
 
             qname = Qname(read)
 
             if qname.support < self.min_reads_per_uid:
-                  continue
+                continue
 
-            #For each base in the alignment, add to the collection structure
-            #cigarstuff = list(itertools.chain.from_iterable(numpy.repeat(val[0],val[1]) for val in read.cigartuples))
-            #print "support for %s is %s, >= %s" % (qname,qname.support,self.min_reads_per_uid)
+            # For each base in the alignment, add to the collection structure
+            # cigarstuff = list(itertools.chain.from_iterable(numpy.repeat(val[0],val[1]) for val in read.cigartuples))
+            # print "support for %s is %s, >= %s" % (qname,qname.support,self.min_reads_per_uid)
             for pairs in read.get_aligned_pairs(matches_only=True):
 
                 if pairs[0] == None or pairs[1] == None:

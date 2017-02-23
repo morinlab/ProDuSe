@@ -2,8 +2,9 @@ import operator
 import nucleotide
 import collections
 import fastq
-import sys
-import itertools
+
+# THERE IS SOME AUTOMAGICAL STUFF GOING ON HERE
+
 
 NUC_TO_INDEX = {
     'A': 0,
@@ -175,7 +176,7 @@ duplex_uid = 0
 prev_id = None
 
 def index_max(values):
-    return max(xrange(len(values)), key=values.__getitem__)
+    return max(range(len(values)), key=values.__getitem__)
 
 
 def consensus(list_of_reads, strand):
@@ -200,13 +201,13 @@ def consensus(list_of_reads, strand):
         qual[i] = min(quals[index_max(counts)] + max(counts) + 32, 72)
 
     if strand == 'first':
-        return [''.join(seq), ''.join([str(unichr(x)) for x in qual])]
+        return [''.join(seq), ''.join([str(chr(x)) for x in qual])]
     else:
-        return [''.join(seq)[::-1], ''.join([str(unichr(x))
+        return [''.join(seq)[::-1], ''.join([str(chr(x))
                         for x in qual])[::-1]]
 
 def adapter_flip(adapter):
-    return adapter[(len(adapter) / 2):] + adapter[:(len(adapter) / 2)]
+    return adapter[int(len(adapter) / 2):] + adapter[:int(len(adapter) / 2)]
 
 
 class AlignmentCollection:
@@ -231,20 +232,20 @@ class AlignmentCollection:
         # adapter class
         adapter_to_adapter_class = {}
 
-        # A dictionary which directs each adapter class to 
+        # A dictionary which directs each adapter class to
         # the list of alignments belonging to that class
         adapter_class_to_alignments = collections.OrderedDict()
 
         # Create a generator of all the adapters present at this
         # position
         adapters = [alignment.adapter for alignment in self.data]
-        
+
         # Tally these adapters using collections
         adapters_counter = collections.Counter(adapters)
 
         # And process them using the most common first
-        for key,value in adapters_counter.most_common():
-            
+        for key, value in adapters_counter.most_common():
+
             # If adapter_to_adapter_class dictionary is empty, no adapter
             # families have been defined. Since most_common is returning
             # keys in order of abundance, the first key will be the most
@@ -255,30 +256,30 @@ class AlignmentCollection:
                 adapter_class_to_alignments[key] = []
 
             # If the current key is not in the adapter_to_adapter class
-            # dictionary, we need to add it. 
-            elif not key in adapter_to_adapter_class:
+            # dictionary, we need to add it.
+            elif key not in adapter_to_adapter_class:
 
                 # First, we calculate the distance between the current key and
-                # every known adapter class. 
-                distance_to_adapter_class = [ 
+                # every known adapter class.
+                distance_to_adapter_class = [
                     nucleotide.distance(adapter_class, key, strand_indexes)
-                    for adapter_class in adapter_class_to_alignments ]
+                    for adapter_class in adapter_class_to_alignments]
 
-                # Second, we will find the earliest index in 
+                # Second, we will find the earliest index in
                 # distance_to_adapter_class which minimizes the distance
                 # between the current key (adapter).
                 # The earliest is selected because this represents
-                # the class which existed in the highest frequency 
+                # the class which existed in the highest frequency
                 min_index, min_distance = min(
-                    enumerate(distance_to_adapter_class), 
-                    key=operator.itemgetter(1) )
+                    enumerate(distance_to_adapter_class),
+                    key=operator.itemgetter(1))
 
-                # If the distance between the closely related adapter class 
+                # If the distance between the closely related adapter class
                 # and the current key is within the strand mismatch threshold,
-                # we will group the current key with the closely related 
+                # we will group the current key with the closely related
                 # adapter class
                 if min_distance <= strand_mismatch:
-                    item = adapter_class_to_alignments.keys()[min_index]
+                    item = list(adapter_class_to_alignments.keys())[min_index]
                     adapter_to_adapter_class[key] = adapter_to_adapter_class[item]
 
                 # Otherwise, this key is too distant from any current adapter
@@ -315,7 +316,6 @@ class AlignmentCollection:
             # These will be the same for every iteration of this for loop
             # per function call
             value = adapter_class_to_alignments[key]
-
 
             id = value[0].id
 
@@ -388,7 +388,7 @@ class AlignmentCollection:
                 if min_distance <= duplex_mismatch:
 
                     # Fetch the adapter at min_index
-                    positive_key = duplex_ids["+"][id].keys()[min_index]
+                    positive_key = list(duplex_ids["+"][id].keys())[min_index]
 
                     # Group these strands by uid
                     duplex_ids["-"][id][adapter] = \
@@ -530,15 +530,12 @@ class AlignmentCollection:
     #     self, adapter_class_to_alignments, forward_fastq, reverse_fastq):
 
 
-
-
-
     def _write_out_consensus(
         self, adapter_class_to_alignments, forward_fastq, reverse_fastq,
         original_forward_fastq=None, original_reverse_fastq=None):
             
-        write_original = original_forward_fastq != None \
-                         and original_reverse_fastq != None
+        write_original = original_forward_fastq is not None \
+                         and original_reverse_fastq is not None
         # Here we are creating the consensus of each adapter class grouping
         for key in adapter_class_to_alignments:
 
@@ -579,21 +576,21 @@ class AlignmentCollection:
 
                 forward_fastq.next(forward_next)
                 reverse_fastq.next(reverse_next)
-                
+
                 if write_original:
-                    
+
                     for v in value:
                         
                         original_id = ':'.join([id, v.adapter, v.qname])
-                        
+
                         original_forward_next = fastq.Fastq(
                             original_id, v.r1.seq, '+', v.r1.qual )
-                        
+
                         original_reverse_next = fastq.Fastq(
                             original_id, 
                             nucleotide.reverseComplement(v.r2.seq),
                             '+', v.r2.qual[::-1] )
-                        
+
                         original_forward_fastq.next(original_forward_next)
                         original_reverse_fastq.next(original_reverse_next)
 
@@ -632,9 +629,9 @@ class AlignmentCollection:
 
     def adapter_table_average_consensus(
         self, forward_fastq, reverse_fastq, adapter=None, strand_mismatch=3,
-        strand_indexes=None, duplex_mismatch=3, duplex_indexes=None, 
-        original_forward_fastq=None, original_reverse_fastq=None, 
-        stats_file= None):
+        strand_indexes=None, duplex_mismatch=3, duplex_indexes=None,
+        original_forward_fastq=None, original_reverse_fastq=None,
+        stats_file=None):
 
 
         adapter_class_to_alignments = self._pair_strand_alignments(
@@ -647,8 +644,6 @@ class AlignmentCollection:
         self._write_out_consensus(
             adapter_class_to_alignments, forward_fastq, reverse_fastq,
             original_forward_fastq, original_reverse_fastq)
-
-
 
 
 class AlignmentCollectionCreate:
@@ -679,7 +674,7 @@ class AlignmentCollectionCreate:
         while True:
 
             try:
-                read = self.pysam_alignment_file.next()
+                read = next(self.pysam_alignment_file)
 
             except StopIteration:
 
@@ -717,7 +712,6 @@ class AlignmentCollectionCreate:
                     if not list_of_negative_alignments == []:
                         yield AlignmentCollection(list_of_negative_alignments, collection_type='-', collection_id=collection_id)
 
-
                     if len(self.next_id) == 0:
                         raise StopIteration
 
@@ -725,7 +719,7 @@ class AlignmentCollectionCreate:
                         self.id = self.next_id.pop(0)
 
             # Have we seen this read before?
-            if not read.qname in self.qname_to_read:
+            if read.qname not in self.qname_to_read:
 
                 # If we haven't we should add this to the "qname to read" hash
                 self.qname_to_read[read.qname] = read
@@ -754,7 +748,7 @@ class AlignmentCollectionCreate:
             if align.is_multi_ref():
                 self.multi_ref[id] = align
                 continue
-            
+
             if align.is_unaligned():
                 self.unaligned[id] = align
                 continue

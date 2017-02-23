@@ -2,6 +2,9 @@ import itertools
 import random
 import math
 
+#
+# TODO: Document this
+#
 
 IUPAC = {
     'A':['A'],
@@ -22,20 +25,20 @@ IUPAC = {
     }
 
 CAPUI = {
-    'A':'A', 
-    'C':'C', 
-    'G':'G', 
-    'T':'T', 
-    'AC':'M', 
+    'A':'A',
+    'C':'C',
+    'G':'G',
+    'T':'T',
+    'AC':'M',
     'AG':'R',
     'AT':'W',
     'CG':'S',
     'CT':'Y',
-    'GT':'K', 
+    'GT':'K',
     'ACG':'V',
     'ACT':'H',
     'AGT':'D',
-    'CGT':'B', 
+    'CGT':'B',
     'ACGT':'N'
     }
 
@@ -94,7 +97,7 @@ BASE_TO_INDEX = {
     'N':4
     }
 
-### Check if characters in seq are IUPAC nucleotide symbols
+# Check if characters in seq are IUPAC nucleotide symbols
 def is_iupac( seq ):
     is_seq_iupac = True
     for base in seq:
@@ -102,7 +105,7 @@ def is_iupac( seq ):
     return is_seq_iupac
 
 
-### Determines if seq is ambiguous (all symbols map to a single nucleotide)
+# Determines if seq is ambiguous (all symbols map to a single nucleotide)
 def is_unambiguous( seq ):
     is_seq_unambiguous = True
     for base in seq:
@@ -110,7 +113,7 @@ def is_unambiguous( seq ):
     return is_seq_unambiguous
 
 
-### Determines if seq is ambiguous (at least one symbol maps to two nucleotides)
+# Determines if seq is ambiguous (at least one symbol maps to two nucleotides)
 def is_ambiguous( seq ):
     is_seq_ambiguous = False
     for base in seq:
@@ -118,7 +121,7 @@ def is_ambiguous( seq ):
     return is_seq_ambiguous
 
 
-### Determines /home/malbuque/projects/produse/produse2/ProDuSeical AND of seq being a subset of ref across all pos
+# Determines /home/malbuque/projects/produse/produse2/ProDuSeical AND of seq being a subset of ref across all pos
 def is_match( seq, ref ):
     is_seq_match = True
     for i in range(0, len(seq)):
@@ -126,14 +129,14 @@ def is_match( seq, ref ):
     return is_seq_match
 
 
-### Produces all possible strings in order to make seq into ref. 
+# Produces all possible strings in order to make seq into ref.
 def make_reference( seq, ref ):
     # If seq[i] is a subset of ref[i], then seq is either more specific
     # or exactly the same as ref, so at position i an unambiguous
-    # nucleotide should be from seq[i] 
+    # nucleotide should be from seq[i]
     # Otherwise seq[i] is not a subset of ref[i], meaning that there
     # exists some mismatches between the unambiguous characters in seq
-    # when compared to those in ref, so at position i an unambiguous 
+    # when compared to those in ref, so at position i an unambiguous
     # nucleotide should be from ref[i]
     nucleotides_lists = []
     for i in range(0, len(seq)):
@@ -141,19 +144,19 @@ def make_reference( seq, ref ):
             nucleotides_lists.append(IUPAC[seq[i]])
         else:
             nucleotides_lists.append(IUPAC[ref[i]])
-    
+
     # Converts nucleotide lists into all possible char combinations
     char_lists = itertools.product(*nucleotides_lists)
-    
+
     # Joins the character combinations into their appropriate strigs
     unambiguous_nucleotides =[]
     for chars in char_lists:
         unambiguous_nucleotides.append(''.join(chars))
-    
+
     return unambiguous_nucleotides
 
 
-### Produces all possible unambiguous nucleotide sequences from seq
+# Produces all possible unambiguous nucleotide sequences from seq
 def make_unambiguous( seq ):
     # Store all the unambiguous nucleotides in a list for each
     # particular base
@@ -170,6 +173,7 @@ def make_unambiguous( seq ):
         unambiguous_nucleotides.append(''.join(chars))
 
     return unambiguous_nucleotides
+
 
 def make_ambiguous(list_of_seq):
 
@@ -191,6 +195,7 @@ def make_ambiguous(list_of_seq):
 
     return ambiguous_seq
 
+
 def which_ambiguous( seq ):
     indexes = []
     for i in range(len(seq)):
@@ -199,7 +204,9 @@ def which_ambiguous( seq ):
 
     return indexes
 
+
 def distance( seq, ref, indexes = [] ):
+
     distance = 0
     if indexes == []:
         indexes = range(len(seq))
@@ -208,6 +215,7 @@ def distance( seq, ref, indexes = [] ):
             if not set(IUPAC[seq[i]]).issubset(IUPAC[ref[i]]):
                 distance = distance + 1
     return distance
+
 
 def base_mismatch( seq, ref, previous = [] ):
     output = previous;
@@ -219,11 +227,13 @@ def base_mismatch( seq, ref, previous = [] ):
                 output[i] += 1
     return output
 
+
 def dist(first, second):
     tmp_dist = float(0)
     for i in range(len(first)):
         tmp_dist += (float(first[i]) - float(second[i])) ** 2
     return math.sqrt(tmp_dist)
+
 
 class Counter:
 
@@ -253,6 +263,7 @@ class Counter:
     def get_ref(self):
         return INDEX_TO_BASE[self.ref]
 
+
 def random_unambiguous(seq, n=1):
     all_output = [None] * n
     for j in range(n):
@@ -262,12 +273,14 @@ def random_unambiguous(seq, n=1):
         all_output[j] = ''.join(output)
     return all_output
 
+
 def random_mismatch(seq, prob):
     output = list(seq)
     for i in range(len(seq)):
         if random.uniform(0,1) <= prob:
             output[i] = random.choice(IUPAC["N"])
     return ''.join(output)
+
 
 def dist_list(list_of_seq, indexes = []):
     n = len(list_of_seq)
@@ -279,6 +292,7 @@ def dist_list(list_of_seq, indexes = []):
             n_index += 1
     return distances
 
+
 def dist_pairwise(indexes=[], *lists_of_seqs):
     n = len(lists_of_seqs)
     distances = []
@@ -288,6 +302,7 @@ def dist_pairwise(indexes=[], *lists_of_seqs):
                 for l in range(len(lists_of_seqs[j])):
                     distances.append(distance(lists_of_seqs[i][k], lists_of_seqs[j][l], indexes))
     return distances
+
 
 def complement( seq ):
     complementSeq = list(seq)

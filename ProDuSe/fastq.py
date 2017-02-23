@@ -1,9 +1,10 @@
 import itertools
-import printer
 import gzip
 
+# TODO: Comment this
+
 class Fastq:
-    
+
     def __init__(self, id, seq, strand, qual):
         self.id = id
         self.seq = seq
@@ -19,30 +20,30 @@ class Fastq:
             ])
 
     def trim(self, length):
-        
+
         tmp = Fastq('','','','')
         tmp.id = self.id
         tmp.strand = self.strand
 
         if length > 0:
-            
-            # 
+
+            #
             tmp.seq = (self.seq[:length])
             tmp.qual = (self.qual[:length])
-            
+
             #
             self.seq = self.seq[length:]
             self.qual = self.qual[length:]
 
         elif length < 0:
-            
+
             #
             tmp.seq = self.seq[length:]
             tmp.append = self.qual[length:]
 
             #
             self.seq = self.seq[:length]
-            self.qual = self.qual[:length]      
+            self.qual = self.qual[:length]
 
         else:
             pass
@@ -55,7 +56,7 @@ class Fastq:
         self.qual = ''.join([self.qual, fastq.qual])
 
     def prepend(self, fastq):
-        
+
         self.seq = ''.join([fastq.seq, self.seq])
         self.qual = ''.join([self.qual, fastq.qual])
 
@@ -64,7 +65,7 @@ class FastqRead:
     def __init__(self, file, gzip_files=False):
         self.fh = None
         if gzip_files:
-            self.fh = gzip.open(file, 'r')
+            self.fh = gzip.open(file, 'rt')
         else:
             self.fh = open(file, 'r')
         self.data = list(itertools.islice(self.fh, 20000))
@@ -73,6 +74,9 @@ class FastqRead:
 
     def __iter__(self):
         return self
+
+    def __next__(self):
+        return self.next()
 
     def next(self):
 
@@ -87,9 +91,9 @@ class FastqRead:
 
         else:
             return Fastq(
-                self.data.pop(0)[:-1], 
-                self.data.pop(0)[:-1], 
-                self.data.pop(0)[:-1], 
+                self.data.pop(0)[:-1],
+                self.data.pop(0)[:-1],
+                self.data.pop(0)[:-1],
                 self.data.pop(0)[:-1]
                 )
 
@@ -116,9 +120,10 @@ class FastqWrite:
         tmp = None
         if self.gzip:
             tmp = gzip.open(self.file, 'ab', 9)
+            tmp.write(''.join(self.data).encode("utf-8"))
         else:
             tmp = open(self.file, 'a')
-        tmp.write(''.join(self.data))
+            tmp.write(''.join(self.data))
         self.data = []
         tmp.close()
 
@@ -151,6 +156,7 @@ class FastqWrite:
 
 
 def FastqOpen(file, mode):
+
     if mode == 'r':
         return FastqRead(file)
 

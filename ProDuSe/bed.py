@@ -1,6 +1,7 @@
 import itertools
+import sys
 
-class BedRead(file):
+class BedRead:
 
     def __init__(self, file):
         self.fh = open(file, 'r');

@@ -15,6 +15,7 @@ You will need to install the following tools before installing the ProDuSe packa
 * `samtools==1.3.1`
 
 To install the ProDuSe package run the following command:
+## WORK IN PROGRESS ###
 
 ```bash
 pip install ProDuSe
@@ -36,27 +37,19 @@ You will first need to retrieve two configuration files:
 
 To run the analysis pipeline you simply need to run the following command:
 
-```bash
-produse analysis_pipeline 
+```python /path/to/ProDuSe/ProDuSe/ProdusePipeline.py
     -c config.ini
     -sc sample_config.ini
     -r /path/to/ref.fa
-    -o /path/to/output
+    -o /path/to/output/directory
 ```
 
-Once the above command was executed successfully, you will want to change to the following directory:
+This will run the entire ProDuSe pipeline on all samples specified in the sample_config.ini file
+Results will be located in the following directory:
 
 ```bash
 cd /path/to/output/produse_analysis_directory
 ```
-
-This directory includes a subdirectory for each sample listed in `sample_config.ini` as well as a Makefile. To run the analysis pipeline run:
-
-```bash
-make -j 4
-```
-
-You can tweak `-j 4` taking into consideration the number of available cores as well as the number of samples to run.
 
 ### Helper Scripts
 
