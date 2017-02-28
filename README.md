@@ -15,10 +15,11 @@ You will need to install the following tools before installing the ProDuSe packa
 * `samtools==1.3.1`
 
 To install the ProDuSe package run the following command:
-## WORK IN PROGRESS ###
+### Currently being updated
 
 ```bash
-pip install ProDuSe
+cd path/to/github/clone/ProDuSe
+python setup.py install
 ```
 
 ## Running ProDuSe
@@ -27,7 +28,7 @@ pip install ProDuSe
 
 You will first need to retrieve two configuration files:
 
-#### `config.ini`
+#### `produse_config.ini`
  * command line arguments for each stage in the analysis pipeline
  * retrieve a sample config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini)
 
@@ -37,7 +38,7 @@ You will first need to retrieve two configuration files:
 
 To run the analysis pipeline you simply need to run the following command:
 
-```python /path/to/ProDuSe/ProDuSe/ProdusePipeline.py
+```produse run_produse
     -c config.ini
     -sc sample_config.ini
     -r /path/to/ref.fa
