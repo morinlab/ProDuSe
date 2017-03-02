@@ -15,7 +15,7 @@ class Qsub:
 		self.job_name=job_name
 		self.virtual_memory=virtual_memory
 		self.wait_on_previous_job=wait_on_previous_job
-                self.source_directory=source_directory
+		self.source_directory=source_directory
 
 
 	def change(self, job_name='', virtual_memory='', wait_on_previous_job=''):
@@ -46,8 +46,8 @@ class Qsub:
 
 		# Write the commands to this new tmp file
 		tmp_handler = open(tmp_file, 'w')
-                if not self.source_directory == "":
-                    tmp_handler.write(' '.join(["source", self.source_directory, ";"]))
+		if not self.source_directory == "":
+			tmp_handler.write(' '.join(["source", self.source_directory, ";"]))
 		tmp_handler.write(' '.join(commands))
 		tmp_handler.close()
 
@@ -57,7 +57,7 @@ class Qsub:
 		# Create tmp command
 		tmp_command = '/'.join(['.', tmp_file])
 
-                subprocess.call(['chmod', '777', tmp_command])
+		subprocess.call(['chmod', '777', tmp_command])
 
 		hold_jid = ""
 		if self.wait_on_previous_job:
@@ -67,10 +67,10 @@ class Qsub:
 			'qsub',			'-cwd',
 			'-b',			'y',
 			'-N',			self.job_name
-                        ]
-                if not hold_jid == "":
-                        qsub_command = qsub_command + ['-hold_jid', hold_jid]
-                qsub_command = qsub_command + [
+			]
+		if not hold_jid == "":
+			qsub_command = qsub_command + ['-hold_jid', hold_jid]
+		qsub_command = qsub_command + [
 			'-l',			''.join(['h_vmem=',self.virtual_memory]),
 			tmp_command
 			]
@@ -78,7 +78,7 @@ class Qsub:
 
 		# Call the Qsub while storing the stdout
 		qsub_output = subprocess.Popen(qsub_command, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-                err, std = qsub_output.communicate()
+		err, std = qsub_output.communicate()
 
 
 		# Grab the id from the stdout
