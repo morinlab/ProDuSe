@@ -1,39 +1,56 @@
+#! /usr/bin/env python
+
+# USAGE:
+#   See adapter_predict.py for details
+#
+# DESCRIPTION:
+#   Estimates the adapter/barcode sequence used in paired-end sequencing by building a consensus sequence of the first few nucleotides of each read
+#
+# AUTHOR:
+#   Marco Albuquerque (Creator)
+#   Christopher Rushton (ckrushto@sfu.ca)
+
+
 import argparse
-import printer
 import fastq
 import nucleotide
 import re
 import sys
-import numpy as np
-import matplotlib.pyplot as plt
 
-desc = "Quality Control on the adapter sequences in a pair of fastq files"
+
+"""
+Processes command line arguments
+"""
+desc = "Estimates the adapter sequences used in paired (i.e. foward and reverse) fastq files"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-i", "--input",
+    metavar="FASTQ",
     nargs=2,
     required=True,
-    help="Takes the file locations of the forward and reverse fastq files from paired end sequencing"
+    help="Paired FASTQ files, coresponding to the forward and reverse reads"
     )
 parser.add_argument(
     "-m", "--max_adapter_length",
     default=30,
-    type=int
+    type=int,
+    help="Maximum adapter length [Default: %(default)s]"
     )
+
 
 def main(args=None):
 
-    if args == None:
+    if args is None:
         args = parser.parse_args()
-    
+
     # Check If Input is Gzip and call appropariate FastqOpen
     read = 'r'
     is_input_one_gzipped = not not re.search('.*\.gz', args.input[0])
     is_input_two_gzipped = not not re.search('.*\.gz', args.input[1])
     if is_input_one_gzipped and is_input_two_gzipped:
-        read = ''.join([read, 'g']);
+        read = ''.join([read, 'g'])
     elif is_input_one_gzipped or is_input_two_gzipped:
-        print 'Input files must both be gzipped or both uncompressed\n'
+        print('Input files must both be gzipped or both uncompressed\n')
         sys.exit()
 
     # Open Fastq files for reading
@@ -42,6 +59,7 @@ def main(args=None):
 
     counts = [[0 for i in range(5)] for j in range(args.max_adapter_length)]
 
+    # Counts the number of nucleotides at each locus in the adapter sequence
     for forward_read in forward_input:
         reverse_read = reverse_input.next()
         for i in range(args.max_adapter_length):
@@ -50,19 +68,20 @@ def main(args=None):
 
     predicted_seq = ""
 
+    # Obtain a consensus for the adapter sequence
     for i in range(args.max_adapter_length):
         total = float(sum(counts[i][0:4]))
-        props = [float(val) / total for val in counts[i][0:4] ]
+        props = [float(val) / total for val in counts[i][0:4]]
         min_dist = 1
         min_base = ''
-        for real_base, real_props in nucleotide.DIST.iteritems():
+        for real_base, real_props in nucleotide.DIST.items():
             new_dist = nucleotide.dist(real_props, props)
             if new_dist < min_dist:
                 min_dist = new_dist
                 min_base = real_base
-        predicted_seq += min_base 
+        predicted_seq += min_base
 
-    print predicted_seq + "\n"
+    print(predicted_seq + "\n")
 
 
 if __name__ == "__main__":
