@@ -14,7 +14,6 @@
 import argparse
 import fastq
 import nucleotide
-import re
 import sys
 
 
@@ -45,13 +44,13 @@ def main(args=None):
 
     # Check If Input is Gzip and call appropariate FastqOpen
     read = 'r'
-    is_input_one_gzipped = not not re.search('.*\.gz', args.input[0])
-    is_input_two_gzipped = not not re.search('.*\.gz', args.input[1])
+    is_input_one_gzipped = args.input[0].endswith(".gz")
+    is_input_two_gzipped = args.input[1].endswith(".gz")
     if is_input_one_gzipped and is_input_two_gzipped:
         read = ''.join([read, 'g'])
     elif is_input_one_gzipped or is_input_two_gzipped:
-        print('Input files must both be gzipped or both uncompressed\n')
-        sys.exit()
+        sys.stderr.write('ERROR: FASTQ files must either be both be gzipped or both uncompressed\n')
+        sys.exit(1)
 
     # Open Fastq files for reading
     forward_input = fastq.FastqOpen(args.input[0], read)
