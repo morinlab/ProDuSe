@@ -1,5 +1,5 @@
 import argparse
-import ConfigParser
+import configparser
 import random
 import numpy
 import nucleotide
@@ -88,13 +88,13 @@ if __name__ == '__main__':
     if is_output_one_gzipped and is_output_two_gzipped:
         write = ''.join([write, 'g']);
     elif is_output_one_gzipped or is_output_two_gzipped:
-        print 'Output files must both be gzipped or both uncompressed\n'
+        print('Output files must both be gzipped or both uncompressed\n')
         sys.exit()
 
     forward_output = fastq.FastqOpen(args.output[0], write)
     reverse_output = fastq.FastqOpen(args.output[1], write)
 
-    print "Extracting DNA from Cells..."
+    print("Extracting DNA from Cells...")
 
     fastafile = pysam.FastaFile(args.reference)
     seq = fastafile.fetch("chr1", 2490000, 2492000);
@@ -107,7 +107,7 @@ if __name__ == '__main__':
     vaf2 = 0.1
     ref2 = nucleotide.CAPITAL[seq[snv2]]
     alt2 = nucleotide.make_variant(ref2)
-    print ref2 + " " + alt2
+    print(ref2 + " " + alt2)
     indexes_start = list(numpy.random.choice( range(len(seq))[ 0 : len(seq) - lib_template_length_avg ] , lib_molecule_count, replace=True))
     template_lengths = [ int(a) for a in list(numpy.random.normal(lib_template_length_avg, lib_template_length_sd, lib_molecule_count))]
     indexes_end = [None] * len(indexes_start)
@@ -117,7 +117,7 @@ if __name__ == '__main__':
         if indexes_end[i] >= len(seq):
             indexes_end[i] = len(seq) - 1
 
-    print "Ligating Randomized Duplex Tags..."
+    print("Ligating Randomized Duplex Tags...")
 
     list_of_dna = [None] * lib_molecule_count
     for i in range(len(indexes_start)):
@@ -130,14 +130,14 @@ if __name__ == '__main__':
         #         print "REF1"
         #         print ref1 + " " + alt1
         if indexes_start[i] <= snv2 and indexes_end[i] >= snv2:
-            print indexes_start[i]
-            print len(cur_seq)
+            print(indexes_start[i])
+            print(len(cur_seq))
             if numpy.random.uniform() <= vaf2:
                 cur_seq = list(cur_seq)
                 cur_seq[snv2 - indexes_start[i]-1] = alt2
                 cur_seq = ''.join(cur_seq)
-                print "REF2"
-                print ref2 + " " + alt2
+                print("REF2")
+                print(ref2 + " " + alt2)
         cur_seq_complement = nucleotide.complement(cur_seq)
         alpha = nucleotide.random_unambiguous(args.adapter_sequence)
         alpha_complement = nucleotide.complement(alpha)
@@ -145,14 +145,14 @@ if __name__ == '__main__':
         beta_reverse_complement = nucleotide.complement(beta_reverse)
         list_of_dna[i] = dsMolecule(alpha + cur_seq + beta_reverse_complement, alpha_complement + cur_seq_complement + beta_reverse)
 
-    print "Running Polymerase Chain Reaction..."
+    print("Running Polymerase Chain Reaction...")
 
     for i in range(pcr_cycle_count):
-        print len(list_of_dna)
+        print(len(list_of_dna))
         list_of_rna = [ item for dna in list_of_dna for item in dna.denature() ]
         list_of_dna = [ rna.polymerase(pcr_cycle_error_rate) for rna in list_of_rna ] 
 
-    print "Sequencing..."
+    print("Sequencing...")
 
     list_of_dna = numpy.random.choice(list_of_dna, seq_molecule_count, replace=False)
 

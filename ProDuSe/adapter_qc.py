@@ -99,8 +99,8 @@ if __name__ == '__main__':
     for i in items:
         for j in negative[i]:
             if negative[i][j] >= 3:
-                print negative[i][j]
-                print negative_set[i][j]
+                print(negative[i][j])
+                print(negative_set[i][j])
                 distribution[i][negative[i][j]][min(nucleotide.dist_pairwise(ref_indexes, *negative_set[i][j]))] += 1
                 family_distribution[i][negative[i][j]][min(nucleotide.dist_list(negative_adapter[i][j], ref_indexes))] += 1
 

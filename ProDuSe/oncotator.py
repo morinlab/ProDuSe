@@ -13,7 +13,7 @@ def main():
     try:
         mafFile = open(args.input, 'r')
     except IOError:
-        print 'Error: maf input does not exist.'    
+        print('Error: maf input does not exist.')
     annoFile = open(args.output, 'w')
 
     # headers
@@ -36,7 +36,7 @@ def main():
             if float(AF) > 0.01:
                 fields[108] = "common_variant"
         except ValueError:
-            print "what's up with %s" % AF
+            print("what's up with %s" % AF)
         fields[107] = AF
         out_s = '\t'.join([str(x) for x in fields])
         annoFile.write(out_s)
