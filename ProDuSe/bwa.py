@@ -47,7 +47,7 @@ parser.add(
     "-i", "--input",
     required=True,
     action="append",
-    # type=lambda x: is_valid_file(x, parser),
+    type=lambda x: is_valid_file(x, parser),
     help="Fastq files, coresponding to the forward and reverse reads"
     )
 parser.add(
@@ -99,6 +99,14 @@ def main(args=None):
     Args:
         args: A namespace object listing BWA paramters. See get_args() for supported paramters
     """
+    # Ensures bwa is installed on the system
+    DEVNULL = open(os.devnull, "w")
+    checkBWA = subprocess.Popen("bwa", stderr=DEVNULL, stdout=DEVNULL)
+    checkBWA.wait()
+    if checkBWA.returncode == 127:
+        sys.stderr.write("ERROR: Burrows-Wheeler Aligner (bwa) cannot be found\n")
+        sys.stderr.write("Please install BWA and try again\n")
+        sys.exit(1)
 
     if args is None:
         args = parser.parse_args()
@@ -160,9 +168,18 @@ def main(args=None):
             if line.startswith("[M::mem_process_seqs]"):
                 counter += int(line.split(" ")[2])
                 sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Reads Processed:" + str(counter) + "\n")
+            elif line.startswith("[E::"):
+                sys.stderr.write(line + "\n")
 
     runBwa.stdout.close()
+    runBwa.wait()
     runSamtools.wait()
+    bwaReturnCode = runBwa.returncode
+
+    # Ensure that BWA completed sucessfully
+    if bwaReturnCode != 0:
+        sys.stdout.write(str(runBwa.returncode) + "\n")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
