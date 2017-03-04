@@ -15,7 +15,7 @@ import argparse
 import configparser
 import os
 import sys
-import platform
+import subprocess
 
 
 def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
@@ -228,6 +228,96 @@ def make_makefile(produse_directory, analysis_dir, samples):
         make.close()
 
 
+def check_command(command):
+    """
+    Ensures the command is installed on the system
+
+    UNIX-based systems use an exit code 127 if a command is called that does not exist. Try running the command,
+    and see what exit code is returned
+
+    Args:
+        command: Literal name of the command
+    """
+
+    # Hide the output of running samtools. This is only for internal validation
+    DEVNULL = open(os.devnull, "w")
+    run_check = subprocess.Popen(command, stdout=DEVNULL, stderr=DEVNULL)
+    run_check.wait()
+
+    # Prints out an error if samtools is not installed
+    if run_check.returncode == 127:
+        sys.stderr.write("ERROR: Unable to find %s\n" % (command))
+        sys.stderr.write("Please ensure it is installed, and try again\n")
+        sys.exit(1)
+
+
+def check_ref(ref_file, produse_path):
+    """
+    Checks if BWA and normal index for the reference exist, and if they do not, generate them locally
+
+    Searches the directory containing the reference FASTA for a .fai, .amb, .ann, .bwt, .pac, and .sa
+    files. If any of these do not exist, the reference genome is symlinked locally, and the indexes are
+    generated there
+
+    Args:
+        referenceFile: Reference genome file
+    """
+
+    # Searches for index files
+    fai_file = ref_file + ".fai"
+    amb_file = ref_file + ".amb"
+    ann_file = ref_file + ".ann"
+    bwt_file = ref_file + ".bwt"
+    pac_file = ref_file + ".pac"
+    sa_file = ref_file + ".sa"
+    index_files = [fai_file, amb_file, ann_file, bwt_file, pac_file, sa_file]
+
+    all_indexes_present = True
+    for index in index_files:
+        if not os.path.exists(index):
+            all_indexes_present = False
+
+    # Time to make some indexes. However, if some of the indexes already exist, don't waste time regenerating them
+    # Lets just symlink them over as well
+    # That said, bwa generates everything if you run index, so if any of those are missing, there is no point symlinking them
+    if not all_indexes_present:
+        sys.stdout.write("WARNING: One or more index files are missing. Generating....\n")
+        ref_dir = produse_path + os.sep + "Reference_Genome" + os.sep
+        out_ref = ref_dir + os.path.basename(ref_file)
+        os.mkdir(ref_dir)
+        os.symlink(ref_file, out_ref)
+
+        # Generates a normal index using samtools faidx
+        if not os.path.exists(fai_file):
+            # Sanity check: Lets make sure samtools is actually installed
+            check_command("samtools")
+
+            samtoolsArgs = ["samtools", "faidx", out_ref]
+            subprocess.check_call(samtoolsArgs)
+        else:
+            os.symlink(fai_file, out_ref + ".fai")
+
+        # Generates a BWA index using, well, `bwa index`
+        if not os.path.exists(amb_file) or not os.path.exists(ann_file) or not os.path.exists(bwt_file) or not os.path.exists(pac_file) or not os.path.exists(sa_file):
+            # Sanity check: Lets make sure bwa is installed on the system
+            check_command("bwa")
+            bwaArgs = ["bwa", "index", out_ref]
+            subprocess.check_call(bwaArgs)
+        else:
+            os.symlink(amb_file, out_ref + ".amb")
+            os.symlink(ann_file, ref_dir + ".ann")
+            os.symlink(amb_file, ref_dir + ".amb")
+            os.symlink(bwt_file, ref_dir + ".bwt")
+            os.symlink(pac_file, ref_dir + ".pac")
+            os.symlink(sa_file, ref_dir + ".sa")
+
+        sys.stdout.write("Indexing complete. Using reference and indexes located in %s\n" % (ref_dir))
+        return out_ref
+    else:
+        # If all the necessary indexes exist already, just return the original path to the reference
+        return ref_file
+
+
 """
 Processes command line arguments
 
@@ -267,6 +357,7 @@ parser.add_argument(
     required=False,
     help="Config file listing sample names and FASTQ locations, used to analyze multiple samples"
     )
+
 
 def is_valid_file(file, parser):
     """
@@ -322,6 +413,9 @@ def main(args=None):
     # Creates a MakeFile
     make_makefile(produse_directory, output_directory, sample_config.sections())
 
+    # Checks for the necessary index files, and generates them if they do not exist
+    ref_file = check_ref(args.reference, output_directory)
+
     # Create a sample direectory and config files for each sample listed i the sample config file
     for sample in sample_config.sections():
 
@@ -336,7 +430,7 @@ def main(args=None):
             fastqs = sampleDict["fastqs"].split(",")
             if len(fastqs) != 2:
                 sys.stderr.write("ERROR: Exactly two fastq files must be list in the sample config file, comma seperated\n")
-                sys.stderr.write("Example: fastqs=path/foward.fq.gz,path/reverse.fq.gz")
+                sys.stderr.write("Example: fastqs=path/foward.fq.gz,path/reverse.fq.gz\n")
                 exit(1)
 
         elif not args.fastqs:
@@ -347,7 +441,7 @@ def main(args=None):
             fastqs = args.fastqs
 
         # Setup sample directory
-        make_directory(sample_dir, fastqs, sampleDict, args.config, args.reference)
+        make_directory(sample_dir, fastqs, sampleDict, args.config, ref_file)
 
     print("Configuration complete")
 

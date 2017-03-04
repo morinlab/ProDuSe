@@ -69,6 +69,13 @@ def getSampleList(outDir):
 		exit(1)
 
 	sampleList = next(os.walk(outDir + os.sep + "produse_analysis_directory" + os.sep))[1]
+
+	# If configure_produse.py created a reference folder, ignore that directory
+	try:
+		sampleList.remove("Reference_Genome")
+	except ValueError:
+		pass
+
 	return sampleList
 
 
@@ -227,7 +234,7 @@ def main(args=None):
 
 	for sample in sampleList:
 
-		sys.stderr.write("Processing sample %s\n" % (sample))
+		sys.stderr.write("\nProcessing sample %s\n" % (sample))
 		sampleDir = args.outdir + os.sep + "produse_analysis_directory" + os.sep + sample
 		processSample(sample, sampleDir, args.scriptdir, args.threads, args.stitcherpath, args.vaf)
 
