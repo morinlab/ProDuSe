@@ -81,9 +81,6 @@ parser_barcode.set_defaults(
 
 args = parser.parse_args()
 
-if args.which == "run_produse":
-    ProdusePipeline.main(args)
-
 if args.which == "adapter_predict":
     adapter_predict.main(args)
 
@@ -101,3 +98,6 @@ if args.which == "configure_produse":
 
 if args.which == "align":
     bwa.main(args)
+
+if args.which == "run_produse":
+    ProdusePipeline.main(args)

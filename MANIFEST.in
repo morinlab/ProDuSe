@@ -1,24 +1,24 @@
-LICENSE.txt
-README.md
-setup.cfg
-setup.py
-ProDuSe/__init__.py
-ProDuSe/adapter_predict.py
-ProDuSe/adapter_qc.py
-ProDuSe/alignment.py
-ProDuSe/bed.py
-ProDuSe/bwa.py
-ProDuSe/collapse.py
-ProDuSe/configure_produse.py
-ProDuSe/create_test_data.py
-ProDuSe/fastq.py
-ProDuSe/nucleotide.py
-ProDuSe/position.py
-ProDuSe/printer.py
-ProDuSe/produse.py
-ProDuSe/qsub.py
-ProDuSe/snv.py
-ProDuSe/trim.py
-bin/produse
+include LICENSE.txt
+include README.md
+include setup.cfg
+include setup.py
+include ProDuSe/__init__.py
+include ProDuSe/adapter_predict.py
+include ProDuSe/adapter_qc.py
+include ProDuSe/alignment.py
+include ProDuSe/bed.py
+include ProDuSe/bwa.py
+include ProDuSe/collapse.py
+include ProDuSe/configure_produse.py
+include ProDuSe/create_test_data.py
+include ProDuSe/fastq.py
+include ProDuSe/nucleotide.py
+include ProDuSe/position.py
+include ProDuSe/printer.py
+include ProDuSe/produse.py
+include ProDuSe/qsub.py
+include ProDuSe/snv.py
+include ProDuSe/trim.py
+include bin/produse
 include ProDuSe/splitmerge.pl
 include ProDuSe/filter_produse.pl

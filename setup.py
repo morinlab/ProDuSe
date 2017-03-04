@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
-from distutils.command.install import INSTALL_SCHEMES
-
-for scheme in INSTALL_SCHEMES.values():
-    scheme['data'] = scheme['purelib']
+from setuptools import setup, find_packages
 
 setup(
     name='ProDuSe',
@@ -14,11 +10,21 @@ setup(
     author_email='malbuque@sfu.ca',
     maintainer='Christopher Rushton',
     maintainer_email='ckrushto@sfu.ca',
+    include_package_data=True,
+    # install_requires=["samtools >= 1.0"],
     packages=["ProDuSe"],
     url='https://github.com/morinlab/ProDuSe',
     classifiers=[
        "Programming Language :: Python :: 2.7"
        ],
+    setup_requires=["numpy"],
+    install_requires=[
+        "configparser",
+        "numpy",
+        "configargparse",
+        "pysam",
+        "fisher"
+        ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuse-0.1.7",
     license="GNU GPLv3",
     scripts=["bin/produse"],
