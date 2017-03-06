@@ -232,20 +232,20 @@ def check_command(command):
     """
     Ensures the command is installed on the system
 
-    UNIX-based systems use an exit code 127 if a command is called that does not exist. Try running the command,
-    and see what exit code is returned
+    If a command is not found, python will throw an OS error. Catch this, and inform the user
 
     Args:
         command: Literal name of the command
     """
 
-    # Hide the output of running samtools. This is only for internal validation
-    DEVNULL = open(os.devnull, "w")
-    run_check = subprocess.Popen(command, stdout=DEVNULL, stderr=DEVNULL)
-    run_check.wait()
+    # Hide the output of running the command. This is only for internal validation
+    try:
+        DEVNULL = open(os.devnull, "w")
+        run_check = subprocess.Popen(command, stdout=DEVNULL, stderr=DEVNULL)
+        run_check.wait()
 
-    # Prints out an error if samtools is not installed
-    if run_check.returncode == 127:
+    # Prints out an error if the command is not installed
+    except OSError:
         sys.stderr.write("ERROR: Unable to find %s\n" % (command))
         sys.stderr.write("Please ensure it is installed, and try again\n")
         sys.exit(1)
@@ -394,6 +394,10 @@ def main(args=None):
     # If neither -f nor -sc was specified, throw an error
     if not args.sample_config and not args.fastqs:
         raise parser.error("Either --fastqs or --sample_config must be provided")
+
+    # First things first, lets make sure that the programs required to run ProDuSe are installed
+    check_command("bwa")
+    check_command("samtools")
 
     # Sets up ProDuSe output directory
     output_directory = os.path.abspath(os.sep.join([args.output_directory, "produse_analysis_directory"]))

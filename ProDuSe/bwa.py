@@ -100,10 +100,11 @@ def main(args=None):
         args: A namespace object listing BWA paramters. See get_args() for supported paramters
     """
     # Ensures bwa is installed on the system
-    DEVNULL = open(os.devnull, "w")
-    checkBWA = subprocess.Popen("bwa", stderr=DEVNULL, stdout=DEVNULL)
-    checkBWA.wait()
-    if checkBWA.returncode == 127:
+    try:
+        DEVNULL = open(os.devnull, "w")
+        checkBWA = subprocess.Popen("bwa", stderr=DEVNULL, stdout=DEVNULL)
+        checkBWA.wait()
+    except OSError:
         sys.stderr.write("ERROR: Burrows-Wheeler Aligner (bwa) cannot be found\n")
         sys.stderr.write("Please install BWA and try again\n")
         sys.exit(1)

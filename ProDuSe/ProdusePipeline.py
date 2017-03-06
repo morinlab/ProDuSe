@@ -226,6 +226,9 @@ def main(args=None):
 	if not os.path.isfile(args.stitcherpath):
 
 		sys.stderr.write("ERROR: Unable to locate Stitcher.exe in %s\n" % os.path.dirname(args.stitcherpath))
+		sys.stderr.write("Please provide a full path to Stitcher.exe\n")
+		sys.stderr.write("Stitcher can be downloaded as part of Illumina's Pisces distribution\n")
+		sys.stderr.write("https://github.com/Illumina/Pisces\n")
 		exit(1)
 
 	createLogFile(args, os.path.abspath(args.outdir) + os.sep + "ProDuSe_Task.log")
