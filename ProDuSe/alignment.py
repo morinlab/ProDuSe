@@ -1,7 +1,13 @@
+# If not installed, or installed and running in python2, this works fine
+try:
+    import nucleotide
+    import fastq
+except ImportError:
+    # If installed and running in python3
+    from ProDuSe import nucleotide, fastq
+
 import operator
-import nucleotide
 import collections
-import fastq
 
 # THERE IS SOME AUTOMAGICAL STUFF GOING ON HERE
 

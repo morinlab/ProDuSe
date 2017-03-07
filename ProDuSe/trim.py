@@ -13,9 +13,16 @@
 #   Marco Albuquerque (Creator)
 #   Christopher Rushton (ckrushto@sfu.ca)
 
+
+# If not installed, or running in python2 this works fine
+try:
+    import fastq
+    import nucleotide
+except ImportError:
+    # If installed and running in python3
+    from ProDuSe import nucleotide, fastq
+
 import configargparse
-import fastq
-import nucleotide
 import time
 import sys
 import os

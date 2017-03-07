@@ -1,6 +1,13 @@
-from fisher import pvalue
+from scipy.stats import fisher_exact
+
+# If not installed, or running in python2, this works fine
+try:
+    import nucleotide
+except ImportError:
+    # If installed and running in Python3
+    from ProDuSe import nucleotide
+
 import bisect
-import nucleotide
 import sys
 import itertools
 import numpy
@@ -57,8 +64,7 @@ class Qname:
         self.strand = split[6]
         self.duplex_id = int(split[7])
         self.is_paired = pysam_read.is_paired
-        
-        
+
         if pysam_read.is_reverse:
             self.mapstrand = "-"
         else:
@@ -374,20 +380,20 @@ class PosCollection:
                     if self.pos_strand_counts[alt_base] > 0 and self.neg_strand_counts[alt_base] > 0:
                         pass_dual = True
                         #determine the p value for the bias of reads mapped to + vs - strand
-                        pval = pvalue(self.pos_strand_counts[alt_base], self.neg_strand_counts[alt_base], self.pos_strand_counts[self.ref], self.neg_strand_counts[self.ref])  # doesn't work with FLASH
+                        pval = fisher_exact([[self.pos_strand_counts[alt_base], self.neg_strand_counts[alt_base]], [self.pos_strand_counts[self.ref], self.neg_strand_counts[self.ref]]])  # doesn't work with FLASH
                         #print "pvalue %s %s %s %s" % (self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
                         #print pval.two_tail
                         #pval = pvalue(self.pos_counts[alt_base],self.neg_counts[alt_base],self.pos_counts[self.ref],self.neg_counts[self.ref])
-                        self.base_array["StrBiasP"][alt_base] = pval.two_tail
+                        self.base_array["StrBiasP"][alt_base] = pval
                         
                     else:
                         pass_dual = False
                 else:
-                    pval = pvalue(self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]) #doesn't work with FLASH
+                    pval = fisher_exact([[self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base]],[self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]]]) #doesn't work with FLASH
                     #print "pvalue %s %s %s %s" % (self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
                     #print pval.two_tail
                     
-                    self.base_array["StrBiasP"][alt_base] = pval.two_tail
+                    self.base_array["StrBiasP"][alt_base] = pval
                 if self.pos_counts[alt_base] + self.neg_counts[alt_base] >= mutant_molecules:
                     pass_min = True
 

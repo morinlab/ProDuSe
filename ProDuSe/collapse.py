@@ -13,13 +13,19 @@
 #   Creator: Marco Albuquerque
 #   Christopher Rushton (ckrushto@sfu.ca)
 
+# If ProDuSe is not installed or running in python2, this works fine
+try:
+    import fastq
+    import alignment
+except ImportError:
+    # If installed and running in python3
+    from ProDuSe import fastq
+    from ProDuSe import alignment
 
 import configargparse
-import fastq
 import sys
 import os
 import pysam
-import alignment
 import time
 
 """

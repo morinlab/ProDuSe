@@ -398,6 +398,7 @@ def main(args=None):
     # First things first, lets make sure that the programs required to run ProDuSe are installed
     check_command("bwa")
     check_command("samtools")
+    check_command("mono")
 
     # Sets up ProDuSe output directory
     output_directory = os.path.abspath(os.sep.join([args.output_directory, "produse_analysis_directory"]))

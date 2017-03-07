@@ -1,9 +1,16 @@
 #! /usr/bin/env python
 
+# If not installed, or running in python2, this works fine
+try:
+    import position
+    import bed
+except ImportError:
+    # If installed and running in python3
+    from ProDuSe import position
+    from ProDuSe import bed
+
 import configargparse
-import position
 import pysam
-import bed
 import os
 
 """

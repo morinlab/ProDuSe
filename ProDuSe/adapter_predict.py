@@ -10,10 +10,15 @@
 #   Marco Albuquerque (Creator)
 #   Christopher Rushton (ckrushto@sfu.ca)
 
+# If not installed or running with python2, this works fine
+try:
+    import nucleotide
+    import fastq
+except ImportError:
+    # If installed and running in python3
+    from ProDuSe import fastq, nucleotide
 
 import argparse
-import fastq
-import nucleotide
 import sys
 
 
