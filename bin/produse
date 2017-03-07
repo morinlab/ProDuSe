@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import configargparse
+import sys
 from ProDuSe import adapter_predict
 from ProDuSe import configure_produse
 from ProDuSe import collapse
@@ -79,6 +80,9 @@ parser_barcode.set_defaults(
     which="adapter_predict"
     )
 
+if len(sys.argv[1:]) == 0:
+    parser.print_help()
+    parser.exit()
 args = parser.parse_args()
 
 if args.which == "adapter_predict":
