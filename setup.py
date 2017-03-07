@@ -19,11 +19,11 @@ setup(
        ],
     setup_requires=["numpy"],
     install_requires=[
+        "scipy",
         "configparser",
-        "numpy",
         "configargparse",
         "pysam",
-        "fisher"
+        "numpy"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuse-0.1.7",
     license="GNU GPLv3",
