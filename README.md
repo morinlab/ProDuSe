@@ -10,17 +10,20 @@ An analysis pipeline, helper scripts and Python classes to **Pro**cess **Du**ple
 
 You will need to install the following tools before installing the ProDuSe package:
 
-* `python==2.7`
+* `python>=2.7`
 * `bwa==0.7.12`
 * `samtools==1.3.1`
+* `Stitcher>=5.1.3` (Can be obtained from https://github.com/Illumina/Pisces.git)
+
+ProDuSe will check to ensure that required tools are installed prior to running the pipeline
 
 To install the ProDuSe package run the following command:
-### Currently being updated
 
 ```bash
 cd path/to/github/clone/ProDuSe
 python setup.py install
 ```
+All required python dependencies will be installed during this step
 
 ## Running ProDuSe
 
@@ -33,7 +36,7 @@ You will first need to retrieve two configuration files:
  * retrieve a sample config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini)
 
 #### `sample_config.ini`
- * paired fastq files for all samples you wish to run the analysis pipeline on
+ * Path to paired fastq files for all samples you wish to run the analysis pipeline on
  * retrieve a sample sample_config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini)
 
 To run the analysis pipeline you simply need to run the following command:
@@ -42,7 +45,7 @@ To run the analysis pipeline you simply need to run the following command:
     -c config.ini
     -sc sample_config.ini
     -r /path/to/ref.fa
-    -o /path/to/output/directory
+    -x /path/to/stitcher.exe
 ```
 
 This will run the entire ProDuSe pipeline on all samples specified in the sample_config.ini file
