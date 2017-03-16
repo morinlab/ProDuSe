@@ -109,10 +109,10 @@ class Order:
 
 class Pos:
 
-    def __init__(self, base, qual, qname, order):
+    def __init__(self, base, qual, qname, order, minQual=3):
         self.order = order
         #convert extremely low quality bases to N
-        if ord(qual)-33 < 3:
+        if ord(qual)-33 < minQual:
             #print "low qual"
             #print ord(qual)-33
             self.base = "N"
@@ -163,7 +163,7 @@ class PosCollection:
 
 
     def __init__(self, list_of_pos, order, chrom, start, ref):
-        
+
         self.base_array = {"DPN":{}, "DPn":{}, "DpN":{}, "Dpn":{}, "SP":{}, "Sp":{}, "SN":{} ,"Sn":{},"StP":{},"Stp":{},"StN":{},"Stn":{},"StrBiasP":{}}
         for categ in self.base_array.keys():
             self.base_array[categ] = {"A":0, "C":0, "T":0,"G":0,"N":0}
@@ -188,7 +188,7 @@ class PosCollection:
         self.variant_status = None
         self.bases = {}
         self.duplex_bases = []
-        self.good_singleton_bases = [] 
+        self.good_singleton_bases = []
         self.bad_singleton_bases = []
         self.good_duplex_bases = []
         self.bad_duplex_bases = []
@@ -201,7 +201,7 @@ class PosCollection:
         self.neg_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         self.pos_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         self.neg_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
-        
+
     def calc_base_stats(self, min_reads_per_uid,max_mismatch_per_aligned_read=5):
         #to be compatible with FLASH outputs, read strand information should only be considered from un-merged reads (i.e. mapped as pairs)
         for pos in self.list_of_pos:
@@ -214,11 +214,11 @@ class PosCollection:
             column = ""
             colnew = ""
             if len(self.bases[duplex_id]) == 1:
-                
+
                 passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
                 too_many_mismatches = self.bases[duplex_id][0].qname.mismatches > max_mismatch_per_aligned_read
                 is_positive = self.bases[duplex_id][0].qname.strand == "+"
-                
+
                 is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
                 is_paired = self.bases[duplex_id][0].qname.is_paired
                 if too_many_mismatches:
@@ -237,12 +237,12 @@ class PosCollection:
 
                 else:
                     column = "Sn"
-                    
+
                 self.base_array[column][self.bases[duplex_id][0].base] += 1
                 if passes_filter and is_positive_strand:
                     colnew = "StP"
                 elif passes_filter and not is_positive_strand:
-                    
+
                     colnew = "StN"
 
                 elif not passes_filter and is_positive_strand:
@@ -250,7 +250,7 @@ class PosCollection:
 
                 else:
                     colnew = "Stn"
-                
+
                 self.base_array[colnew][self.bases[duplex_id][0].base] += 1
                 if is_positive_strand:
                     self.pos_strand_counts[self.bases[duplex_id][0].base] += 1
@@ -291,11 +291,11 @@ class PosCollection:
                     else:
                         self.neg_strand_counts[self.bases[duplex_id][0].base] += 1
                         colnew = "StN"  #count all duplex by the mapstrand (consider them all high-conf)
-                    
+
                     self.base_array[colnew][self.bases[duplex_id][0].base] += 1
                     if pos_passes_filter and neg_passes_filter:
                         #if self.bases[duplex_id][0].base == "C":
-                            #print "DPN" 
+                            #print "DPN"
                             #print self.bases[duplex_id][0].qname.qname
                             #print self.bases[duplex_id][1].qname.qname
                         column = "DPN"
@@ -313,7 +313,7 @@ class PosCollection:
                           #  print self.bases[duplex_id][0].qname.qname
                            # print self.bases[duplex_id][1].qname.qname
                         column = "DpN"
-                    
+
                     else:
                         #if self.bases[duplex_id][0].base == "C":
                          #   print "Dpn"
@@ -326,9 +326,9 @@ class PosCollection:
                     self.neg_counts[self.bases[duplex_id][0].base] += 1
 
                 else:
-                    
+
                     is_positive = self.bases[duplex_id][0].qname.strand == "+"
-                    
+
                     if is_positive:
                         self.pos_counts[self.bases[duplex_id][0].base] += 1
                         self.neg_counts[self.bases[duplex_id][1].base] += 1
@@ -385,14 +385,14 @@ class PosCollection:
                         #print pval.two_tail
                         #pval = pvalue(self.pos_counts[alt_base],self.neg_counts[alt_base],self.pos_counts[self.ref],self.neg_counts[self.ref])
                         self.base_array["StrBiasP"][alt_base] = pval
-                        
+
                     else:
                         pass_dual = False
                 else:
                     pval = fisher_exact([[self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base]],[self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]]]) #doesn't work with FLASH
                     #print "pvalue %s %s %s %s" % (self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
                     #print pval.two_tail
-                    
+
                     self.base_array["StrBiasP"][alt_base] = pval
                 if self.pos_counts[alt_base] + self.neg_counts[alt_base] >= mutant_molecules:
                     pass_min = True
@@ -429,22 +429,22 @@ class PosCollection:
         bases = ["A", "C", "G", "T"]
         info_column = ';'.join(['='.join([categ, ','.join([ str(self.base_array[categ][base]) for base in bases])]) for categ in categs])
 
-        molecule_counts = {"A":0, "C":0,"G":0,"T":0}	
+        molecule_counts = {"A":0, "C":0,"G":0,"T":0}
         for base in bases:
             for categ in categs:
                 if categ in ("StP","Stp","StN","Stn","StrBiasP"):
                     continue
                 molecule_counts[base] += self.base_array[categ][base]
-            
+
         info_column = ';'.join([ info_column, '='.join(["MC", ','.join([ str(molecule_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["PC", ','.join([ str(self.pos_counts[base]) for base in bases])])])
         info_column = ';'.join([ info_column, '='.join(["NC", ','.join([ str(self.neg_counts[base]) for base in bases])])])
         sr_detail = "SR=" + str(self.skipped_reads)
         info_column = ';'.join([ info_column, sr_detail])
-            
+
         reason = "."
         if len(self.alt_reason) >= 0:
-            reason = ','.join(self.alt_reason) 
+            reason = ','.join(self.alt_reason)
 
             file_handler.write('\t'.join([
                 str(self.chrom),
@@ -469,7 +469,7 @@ class PosCollection:
 
 class PosCollectionCreate:
 
-    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads=True, target_bed=None, min_reads_per_uid=2):
+    def __init__(self, pysam_alignment_file, pysam_fasta_file, filter_overlapping_reads=True, target_bed=None, min_reads_per_uid=2, min_base_qual=3):
         self.pysam_alignment_file = pysam_alignment_file
         self.min_reads_per_uid = min_reads_per_uid
         self.pysam_fasta_file = pysam_fasta_file
@@ -483,8 +483,9 @@ class PosCollectionCreate:
         self.first = True
         self.target_bed = target_bed
         self.pysam_alignment_generator = None
+        self.min_base_qual = min_base_qual
 
-        # READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later). ## CRAP, WHY ME????? (Chris)
+        # READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later).
         if self.target_bed is not None:
             for region in self.target_bed.regions:
                 if self.pysam_alignment_generator is None:
@@ -502,8 +503,8 @@ class PosCollectionCreate:
         chrom = self.pysam_alignment_file.getrname(self.order[0].chrom)
         start = int(self.order[0].start)
         item = PosCollection(
-            self.pos_collections[self.order[0]], 
-            self.order[0], 
+            self.pos_collections[self.order[0]],
+            self.order[0],
             chrom,
             start,
             self.pysam_fasta_file.fetch(chrom, start, start+1)
@@ -516,7 +517,6 @@ class PosCollectionCreate:
 
     def next(self):
         reads_visited = 0
-        counts = 0
         while True:
 
             # Get the next Sequence from the pysam object
@@ -553,25 +553,25 @@ class PosCollectionCreate:
                 #print pairs
 		#if cigarstuff[pairs[0]]:
                 #    continue
-		
+
                 reads_visited+=1
                 order = Order(read.reference_id, pairs[1])
 
                 base = read.seq[pairs[0]]
                 qual = read.qual[pairs[0]]
-                
+
 
 		#if pairs[1] == 148508727:
 		#    if base == "C":
                 #        print read.qname
 
-                current_pos = Pos(base, qual, qname, order)
+                current_pos = Pos(base, qual, qname, order, self.min_base_qual)
 
                 if not order in self.pos_collections:
                     self.pos_collections[order] = []
                     self.qname_collections[order] = {}
                     bisect.insort(self.order, order)
-                
+
                 if not self.filter_overlapping_reads:
                     bisect.insort(self.pos_collections[order], current_pos)
 
@@ -586,14 +586,14 @@ class PosCollectionCreate:
                     index = None
                     for i in range(left, right):
                         if self.pos_collections[order][i].qname == current_pos.qname:
-                            index = i;
+                            index = i
 
                     if self.first:
-                        self.first = False;
+                        self.first = False
 
                     elif not self.first:
-                        self.first = True;
-                        self.pos_collections[order][index] = current_pos;
+                        self.first = True
+                        self.pos_collections[order][index] = current_pos
 
             while not len(self.order) == 0 and self.order[0].lessthen(read_order, self.base_buffer):
 

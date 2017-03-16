@@ -89,7 +89,12 @@ parser.add_argument(
     action='store_true',
     help="require at least one molecule to be read in each of the two directions"
     )
-# For backwards compatability. These arguments do nothing
+parser.add_argument(
+    "-mq", "--min_qual",
+    default=3,
+    type=int,
+    help="Minimum base quality threshold, below which a base will be treated as \'N\'")
+# For backwards compatability only. These arguments do nothing
 parser.add_argument(
     "-abct", "--alt_base_count_threshold",
     default=5,
@@ -146,7 +151,7 @@ def main(args=None):
     #else:
     #    sys.exit("You need to specify a targetbed")
 
-    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads = True, target_bed = targetbed, min_reads_per_uid = args.min_reads_per_uid);
+    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=args.min_reads_per_uid, min_base_qual=args.min_qual);
 
     output = None;
     if not args.output == "-":
