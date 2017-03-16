@@ -9,9 +9,6 @@ except ImportError:
 import operator
 import collections
 
-# THERE IS SOME AUTOMAGICAL STUFF GOING ON HERE
-
-
 NUC_TO_INDEX = {
     'A': 0,
     'C': 1,
@@ -151,7 +148,7 @@ class Alignment:
     # Check if reads have different references
     def is_multi_ref(self):
         return not self.r1.ref_id == self.r2.ref_id
-    
+
     # Check if reads do not align
     def is_unaligned(self):
         return self.r1.ref_id == -1 or self.r2.ref_id == -1
@@ -176,6 +173,7 @@ class Alignment:
     def too_many_mismatches(self, threshold):
         return self.r1.mismatches > threshold or self.r2.mismatches > threshold
 
+
 duplex_ids = {"+": {}, "-": {}}
 duplex_stats = collections.OrderedDict()
 duplex_uid = 0
@@ -187,6 +185,8 @@ def index_max(values):
 
 def consensus(list_of_reads, strand):
 
+    global total_collapsed_reads
+    total_collapsed_reads += len(list_of_reads) - 1
     length = min([len(x.seq) for x in list_of_reads])
     seq = [None] * length
     qual = [None] * length
@@ -302,7 +302,6 @@ class AlignmentCollection:
 
         return adapter_class_to_alignments
 
-
     def _pair_duplex_alignments(
         self, adapter_class_to_alignments, duplex_mismatch, duplex_indexes):
 
@@ -332,10 +331,10 @@ class AlignmentCollection:
 
                 if prev_id in duplex_ids["-"]:
                     del duplex_ids["-"][prev_id]
-                
+
                 if prev_id in duplex_ids["+"]:
                     del duplex_ids["+"][prev_id]
-                
+
                 prev_id = id
 
             # Create the ordered Dictionary for the id if it does not exist
@@ -361,7 +360,7 @@ class AlignmentCollection:
             # class.
             # If there was a matching id in the positive collection but the
             # length of this list is empty, we can assume that a more fitting
-            # duplex pairing has already occured, and thus deleted from the 
+            # duplex pairing has already occured, and thus deleted from the
             # positive collection.
             elif not id in duplex_ids["+"] or len(duplex_ids["+"][id]) == 0:
                 duplex_ids[self.collection_type][id][adapter] = duplex_uid
@@ -377,14 +376,14 @@ class AlignmentCollection:
                 # Calculate the distance between the current negative adapter
                 # and all the positive adapters for the current position.
                 distance_to_adapter = [
-                    nucleotide.distance(x, adapter, duplex_indexes) 
+                    nucleotide.distance(x, adapter, duplex_indexes)
                     for x in duplex_ids["+"][id] ]
 
                 # Fetch the earliest index which contains the minimal distance
                 # as this position had the highest support for the adapter
                 # class
                 min_index, min_distance = min(
-                    enumerate(distance_to_adapter), 
+                    enumerate(distance_to_adapter),
                     key=operator.itemgetter(1) )
 
                 # If the minimum distance is within our mismatch threshold,
@@ -403,7 +402,7 @@ class AlignmentCollection:
                     # If a stats container was passed, update the annealing
                     # artefacts statistics
                     # Delete the positive uid, firstly it has already
-                    # been processed, and secondly, we do not want to 
+                    # been processed, and secondly, we do not want to
                     # mistakenly pair this with another negative
                     # strand
 
@@ -483,7 +482,7 @@ class AlignmentCollection:
 
     #         for duplex_id in duplex_stats:
 
-    #             output = "\t".join([ 
+    #             output = "\t".join([
     #                 duplex_stats[duplex_id]["pos_id"], \
     #                 duplex_id, \
     #                 duplex_stats[duplex_id]["pos_adapter"], \
@@ -494,13 +493,13 @@ class AlignmentCollection:
     #             stats_file.write(output + "\n")
 
     #             del duplex_stats[duplex_id]
-                    
+
 
     # def _write_out_original(
     #     self, adapter_class_to_alignments, forward_fastq, reverse_fastq):
 
     #     for data in _fetch_write_data(adapter_class_to_alignments):
-            
+
     #         alignments = data[0]
     #         id = data[1]
     #         adapter = data[2]
@@ -520,10 +519,10 @@ class AlignmentCollection:
     #                 rev_qual = a.r1.qual
 
     #             original_id = ':'.join([id, a.adapter, a.qname])
-                
+
     #             forward_next = fastq.Fastq( original_id, for_seq, '+', for_qual )
     #             reverse_next = fastq.Fastq( original_id, rev_seq, '+', rev_qual )
-                
+
     #             forward_fastq.next(forward_next)
     #             reverse_fastq.next(reverse_next)
 
@@ -539,7 +538,7 @@ class AlignmentCollection:
     def _write_out_consensus(
         self, adapter_class_to_alignments, forward_fastq, reverse_fastq,
         original_forward_fastq=None, original_reverse_fastq=None):
-            
+
         write_original = original_forward_fastq is not None \
                          and original_reverse_fastq is not None
         # Here we are creating the consensus of each adapter class grouping
@@ -571,13 +570,13 @@ class AlignmentCollection:
 
             #
             if self.collection_type == "+":
-                
+
                 forward_next = fastq.Fastq(
-                    id , forward_consensus[0], 
+                    id , forward_consensus[0],
                     '+', forward_consensus[1] )
 
                 reverse_next = fastq.Fastq(
-                    id , nucleotide.reverseComplement(reverse_consensus[0]), 
+                    id , nucleotide.reverseComplement(reverse_consensus[0]),
                     '+', reverse_consensus[1][::-1] )
 
                 forward_fastq.next(forward_next)
@@ -586,14 +585,14 @@ class AlignmentCollection:
                 if write_original:
 
                     for v in value:
-                        
+
                         original_id = ':'.join([id, v.adapter, v.qname])
 
                         original_forward_next = fastq.Fastq(
                             original_id, v.r1.seq, '+', v.r1.qual )
 
                         original_reverse_next = fastq.Fastq(
-                            original_id, 
+                            original_id,
                             nucleotide.reverseComplement(v.r2.seq),
                             '+', v.r2.qual[::-1] )
 
@@ -602,13 +601,13 @@ class AlignmentCollection:
 
             #
             elif self.collection_type == "-":
-                
+
                 forward_next = fastq.Fastq(
-                    id , nucleotide.reverseComplement(reverse_consensus[0]), 
+                    id , nucleotide.reverseComplement(reverse_consensus[0]),
                     '+', reverse_consensus[1][::-1] )
 
                 reverse_next = fastq.Fastq(
-                    id , forward_consensus[0], 
+                    id , forward_consensus[0],
                     '+', forward_consensus[1] )
 
                 forward_fastq.next(forward_next)
@@ -617,18 +616,18 @@ class AlignmentCollection:
                 if write_original:
 
                     for v in value:
-                        
+
                         original_id = ':'.join([id, adapter_flip(v.adapter), v.qname])
-                        
+
                         original_forward_next = fastq.Fastq(
-                            original_id, 
-                            nucleotide.reverseComplement(v.r2.seq), 
+                            original_id,
+                            nucleotide.reverseComplement(v.r2.seq),
                             '+', v.r2.qual[::-1] )
-                        
+
                         original_reverse_next = fastq.Fastq(
                             original_id, v.r1.seq,
                             '+', v.r1.qual )
-                        
+
                         original_forward_fastq.next(original_forward_next)
                         original_reverse_fastq.next(original_reverse_next)
 
@@ -639,18 +638,21 @@ class AlignmentCollection:
         original_forward_fastq=None, original_reverse_fastq=None,
         stats_file=None):
 
+        global total_collapsed_reads
+        total_collapsed_reads = 0
 
         adapter_class_to_alignments = self._pair_strand_alignments(
             strand_mismatch, strand_indexes)
 
         self._pair_duplex_alignments(
-            adapter_class_to_alignments, 
+            adapter_class_to_alignments,
             duplex_mismatch, duplex_indexes)
 
         self._write_out_consensus(
             adapter_class_to_alignments, forward_fastq, reverse_fastq,
             original_forward_fastq, original_reverse_fastq)
 
+        return total_collapsed_reads
 
 class AlignmentCollectionCreate:
 

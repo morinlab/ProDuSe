@@ -34,7 +34,7 @@ Processes command line arguments using configargparse
 Returns:
     args: A namespace object containing parameters passed from the command line
 Raises:
-    parser.error: If a supplied command line argument is incorrect or invalid  
+    parser.error: If a supplied command line argument is incorrect or invalid
 
 """
 desc = "Creates a strand specific consensus sequence using reads provided in the BAM file."
@@ -156,7 +156,7 @@ def main(args=None):
     Creates consensus sequences using BAM file reads
 
     Using the mapped reads in the supplied BAM file, a consensus sequence,
-    with support from the foward and reverse reads, is created, and these 
+    with support from the foward and reverse reads, is created, and these
     consensus forward and reverse reads are placed into paired fastq files.
     The original fastq files can also be modified to list read pairing
     information
@@ -215,7 +215,7 @@ def main(args=None):
             origOutOneType = ''.join([origOutOneType, 'g'])
         if output_two_gzipped:
             origOutTwoType = ''.join([origOutTwoType, 'g'])
-    # If specified, opens standard output fastq files
+    # If specified, opens original output fastq files
     original_forward_fastq = None
     original_reverse_fastq = None
     if args.original_output is not None:
@@ -242,11 +242,12 @@ def main(args=None):
     # Loads up reads from the BAM file
     collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=args.sequence_max_mismatch)
     counter = 0
+    collapsed_reads = 0
     for collection in collection_creator:
         counter += 1
 
         # All the magic occurs in here.
-        collection.adapter_table_average_consensus(
+        collapsed_reads += collection.adapter_table_average_consensus(
             forward_fastq=forward_fastq,
             reverse_fastq=reverse_fastq,
             strand_mismatch=args.adapter_max_mismatch,
@@ -261,7 +262,7 @@ def main(args=None):
         if counter % 100000 == 0:
             sys.stderr.write(print_prefix + time.strftime('%X') + "    " + "Positions Processed:" + str(counter) + "\n")
     sys.stderr.write(print_prefix + time.strftime('%X') + "    " + "Positions Processed:" + str(counter) + "\n")
-
+    sys.stderr.write(print_prefix + time.strftime('%X') + "    " + "Total Reads Collapsed:" + str(collapsed_reads) + "\n")
 
 if __name__ == "__main__":
 
