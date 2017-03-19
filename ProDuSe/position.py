@@ -380,7 +380,7 @@ class PosCollection:
                     if self.pos_strand_counts[alt_base] > 0 and self.neg_strand_counts[alt_base] > 0:
                         pass_dual = True
                         #determine the p value for the bias of reads mapped to + vs - strand
-                        pval = fisher_exact([[self.pos_strand_counts[alt_base], self.neg_strand_counts[alt_base]], [self.pos_strand_counts[self.ref], self.neg_strand_counts[self.ref]]])  # doesn't work with FLASH
+                        pval = fisher_exact([[self.pos_strand_counts[alt_base], self.neg_strand_counts[alt_base]], [self.pos_strand_counts[self.ref], self.neg_strand_counts[self.ref]]])[1]  # doesn't work with FLASH
                         #print "pvalue %s %s %s %s" % (self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
                         #print pval.two_tail
                         #pval = pvalue(self.pos_counts[alt_base],self.neg_counts[alt_base],self.pos_counts[self.ref],self.neg_counts[self.ref])
@@ -389,10 +389,9 @@ class PosCollection:
                     else:
                         pass_dual = False
                 else:
-                    pval = fisher_exact([[self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base]],[self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]]]) #doesn't work with FLASH
+                    pval = fisher_exact([[self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base]],[self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref]]])[1] #doesn't work with FLASH
                     #print "pvalue %s %s %s %s" % (self.pos_strand_counts[alt_base],self.neg_strand_counts[alt_base],self.pos_strand_counts[self.ref],self.neg_strand_counts[self.ref])
                     #print pval.two_tail
-
                     self.base_array["StrBiasP"][alt_base] = pval
                 if self.pos_counts[alt_base] + self.neg_counts[alt_base] >= mutant_molecules:
                     pass_min = True
