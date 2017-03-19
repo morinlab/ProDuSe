@@ -22,3 +22,4 @@ include ProDuSe/trim.py
 include bin/produse
 include ProDuSe/splitmerge.pl
 include ProDuSe/filter_produse.pl
+include ProDuSe/ProdusePipeline.py
