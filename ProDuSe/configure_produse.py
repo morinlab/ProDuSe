@@ -16,6 +16,7 @@ import configparser
 import os
 import sys
 import subprocess
+import time
 
 
 def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
@@ -228,27 +229,16 @@ def make_makefile(produse_directory, analysis_dir, samples):
         make.close()
 
 
-def check_command(command):
+def what_args():
     """
-    Ensures the command is installed on the system
-
-    If a command is not found, python will throw an OS error. Catch this, and inform the user
-
-    Args:
-        command: Literal name of the command
+    Returns a list of command line arguments required by this script
     """
-
-    # Hide the output of running the command. This is only for internal validation
-    try:
-        DEVNULL = open(os.devnull, "w")
-        run_check = subprocess.Popen(command, stdout=DEVNULL, stderr=DEVNULL)
-        run_check.wait()
-
-    # Prints out an error if the command is not installed
-    except OSError:
-        sys.stderr.write("ERROR: Unable to find %s\n" % (command))
-        sys.stderr.write("Please ensure it is installed, and try again\n")
-        sys.exit(1)
+    return ["--fastqs",
+        "--output_directory",
+        "--reference",
+        "--config",
+        "--sample_config"
+            ]
 
 
 def check_ref(ref_file, produse_path):
@@ -262,6 +252,8 @@ def check_ref(ref_file, produse_path):
     Args:
         referenceFile: Reference genome file
     """
+
+    printPrefix = "PRODUSE-CONFIG    "
 
     # Searches for index files
     fai_file = ref_file + ".fai"
@@ -281,7 +273,7 @@ def check_ref(ref_file, produse_path):
     # Lets just symlink them over as well
     # That said, bwa generates everything if you run index, so if any of those are missing, there is no point symlinking them
     if not all_indexes_present:
-        sys.stdout.write("WARNING: One or more index files are missing. Generating....\n")
+        sys.stdout.write(printPrefix + time.strftime('%X') + "    Generating Indexes\n")
         ref_dir = produse_path + os.sep + "Reference_Genome" + os.sep
         out_ref = ref_dir + os.path.basename(ref_file)
         os.mkdir(ref_dir)
@@ -332,30 +324,36 @@ desc = "Process Duplex Sequencing Data"
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument(
     "-f", "--fastqs",
-    nargs=2,
+    metavar="FASTA",
     type=lambda x: is_valid_file(x, parser),
-    help="Forward and reverse fastq files from paired end sequencing"
+    help="Forward and reverse fastq files from paired end sequencing. Overwritten by --sample_config"
     )
 parser.add_argument(
-    "-o", "--output_directory",
+    "-d", "--output_directory",
+    metavar="DIR",
     default="." + os.sep,
-        help="All ProDuSe results and subdirectories will be placed in this directory [Default: %(default)s]"
+    help="Output directory for ProDuSe analysis [Default: %(default)s]"
     )
 parser.add_argument(
     "-r", "--reference",
+    metavar="FASTA",
     required=True,
     type=lambda x: is_valid_file(x, parser),
-    help="Reference genome, in FASTA format"
+    help="Reference genome, in FASTA format. A BWA Index should be located in the same directory"
     )
 parser.add_argument(
     "-c", "--config",
+    metavar="INI",
     required=True,
-    help="ProDuSe config file, listing adapter sequences, positions, and other paramters to be passed to pipeline scripts"
+    type=lambda x: is_valid_file(x, parser),
+    help="ProDuSe config file, listing adapter sequences, positions, and other parameters to be passed to pipeline scripts. See (See \'etc/produse_config.ini\' for an example)"
     )
 parser.add_argument(
     "-sc", "--sample_config",
+    metavar="INI",
     required=False,
-    help="Config file listing sample names and FASTQ locations, used to analyze multiple samples"
+    type=lambda x: is_valid_file(x, parser),
+    help="Config file listing sample names and FASTQ locations (See \'etc/sample_config.ini\' for an example)"
     )
 
 
@@ -373,10 +371,54 @@ def is_valid_file(file, parser):
     Raises:
         parser.error(): An ArgumentParser.error() object, thrown if the file does not exist
     """
+    # If the files are comma-deliniated, check them both
+    if "," in file:
+        files = file.split(",")
+        if "=" in files[0]:
+            files[0] = files[0].split("=")[1]
+        if os.path.isfile(files[0]) and os.path.isfile(files[1]):
+            return file
+        else:
+            parser.error("The file %s or %s does not exist" % (files[0], files[1]))
     if os.path.isfile(file):
         return file
     else:
         parser.error("The file %s does not exist" % (file))
+
+
+def check_command(command, versionStr=None):
+    """
+    Ensures the command is installed on the system, and returns the version if it does exist
+
+    If a command is not found, python will throw an OS error. Catch this, and inform the user.
+    Otherwise, save and return the version number
+
+    Args:
+        command: Literal name of the command
+        versionStr: The argument paseed to the command to print out the version
+    Returns:
+        version: An array listing the output of running '--version' or 'version'
+    """
+
+    # Hide the output of running the command. This is only for internal validation
+    try:
+        DEVNULL = open(os.devnull, "w")
+        runCom = [command]
+        if versionStr:
+            runCom.append(versionStr)
+        runCheck = subprocess.Popen(runCom, stdout=subprocess.PIPE, stderr=DEVNULL)
+        runCheck.wait()
+        version = []
+        for line in runCheck.stdout:
+            version.append(line.decode("utf-8"))
+
+        return version
+
+    # Prints out an error if the command is not installed
+    except OSError:
+        sys.stderr.write("ERROR: Unable to run %s\n" % (command))
+        sys.stderr.write("Please ensure it is installed, and try again\n")
+        sys.exit(1)
 
 
 def main(args=None):
@@ -385,20 +427,16 @@ def main(args=None):
     Performs setup of ProDuSe config files and subdirectories
 
     Args:
-        args: A namespace object listing ProDuSe parameters. See get_args() for a list of supported options
+        args: A namespace object or string listing ProDuSe parameters. See get_args() or what_args() for a list of supported options
 
     """
 
     if args is None:
         args = parser.parse_args()
+
     # If neither -f nor -sc was specified, throw an error
     if not args.sample_config and not args.fastqs:
         raise parser.error("Either --fastqs or --sample_config must be provided")
-
-    # First things first, lets make sure that the programs required to run ProDuSe are installed
-    check_command("bwa")
-    check_command("samtools")
-    check_command("mono")
 
     # Sets up ProDuSe output directory
     output_directory = os.path.abspath(os.sep.join([args.output_directory, "produse_analysis_directory"]))
@@ -447,8 +485,6 @@ def main(args=None):
 
         # Setup sample directory
         make_directory(sample_dir, fastqs, sampleDict, args.config, ref_file)
-
-    print("Configuration complete")
 
 
 if __name__ == '__main__':
