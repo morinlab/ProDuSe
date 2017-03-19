@@ -23,6 +23,7 @@ except ImportError:
     from ProDuSe import alignment
 
 import configargparse
+import configparser
 import sys
 import os
 import pysam
@@ -71,7 +72,6 @@ parser.add(
     type=str,
     required=True,
     help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes."
-            "Must be the same length as the adapter sequence"
     )
 
 parser.add(
@@ -79,7 +79,7 @@ parser.add(
     metavar="STR",
     type=str,
     required=True,
-    help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
+    help="The positions in the adapter sequence to include in distance calculations between forward and reverse reads, 0 for no, 1 for yes"
     )
 
 # Used to maintain backwards compatibility with the poorly-named strand mis-match
@@ -87,13 +87,12 @@ adapterMismatch = parser.add_mutually_exclusive_group(required=True)
 adapterMismatch.add(
     "-amm", "--adapter_max_mismatch",
     type=int,
-    help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
+    help="The maximum number of mismatches allowed between the expected and actual adapter sequences [Default: %(default)s]",
     )
-
 adapterMismatch.add(
-"--strand_max_mismatch",
-type=int,
-help=configargparse.SUPPRESS,
+    "--strand_max_mismatch",
+    type=int,
+    help=configargparse.SUPPRESS,
 )
 
 parser.add(
@@ -168,6 +167,19 @@ def main(args=None):
 
     if args is None:
         args = parser.parse_args()
+    elif args.config:
+        # Parse command line arguments from the config file
+        config = configparser.ConfigParser()
+        config.read(args.config)
+        cmdArgs = vars(args)
+        for arg, param in config["config"].items():
+
+           # Convert arguments that are lists into an actual list
+            if param[0] == "[" and param[-1] == "]":
+                paramString = param[1:-1]
+                param = paramString.split(",")
+
+            cmdArgs[arg] = param
 
     if not args.adapter_max_mismatch:
         args.adapter_max_mismatch = args.strand_max_mismatch
@@ -222,8 +234,8 @@ def main(args=None):
         original_forward_fastq = fastq.FastqOpen(args.original_output[0], origOutOneType)
         original_reverse_fastq = fastq.FastqOpen(args.original_output[1], origOutTwoType)
 
-    print_prefix = "PRODUSE-COLLAPSE   "
-    sys.stderr.write(print_prefix + time.strftime('%X') + "    " + "Starting...\n")
+    print_prefix = "PRODUSE-COLLAPSE"
+    sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
 
     # Load up BAM file
     bamfile = pysam.AlignmentFile(args.input, 'rb')
@@ -240,7 +252,7 @@ def main(args=None):
         stats_file = open(args.stats_file, 'w')
 
     # Loads up reads from the BAM file
-    collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=args.sequence_max_mismatch)
+    collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=int(args.sequence_max_mismatch))
     counter = 0
     collapsed_reads = 0
     for collection in collection_creator:
@@ -250,9 +262,9 @@ def main(args=None):
         collapsed_reads += collection.adapter_table_average_consensus(
             forward_fastq=forward_fastq,
             reverse_fastq=reverse_fastq,
-            strand_mismatch=args.adapter_max_mismatch,
+            strand_mismatch=int(args.adapter_max_mismatch),
             strand_indexes=strand_indexes,
-            duplex_mismatch=args.duplex_max_mismatch,
+            duplex_mismatch=int(args.duplex_max_mismatch),
             duplex_indexes=duplex_indexes,
             original_forward_fastq=original_forward_fastq,
             original_reverse_fastq=original_reverse_fastq,
@@ -260,9 +272,9 @@ def main(args=None):
 
         # Prints a status update to the command line
         if counter % 100000 == 0:
-            sys.stderr.write(print_prefix + time.strftime('%X') + "    " + "Positions Processed:" + str(counter) + "\n")
-    sys.stderr.write(print_prefix + time.strftime('%X') + "    " + "Positions Processed:" + str(counter) + "\n")
-    sys.stderr.write(print_prefix + time.strftime('%X') + "    " + "Total Reads Collapsed:" + str(collapsed_reads) + "\n")
+            sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Positions Processed:" + str(counter) + "\n"]))
+    sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Positions Processed:" + str(counter) + "\n"]))
+    sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Total Reads Collapsed:" + str(collapsed_reads) + "\n"]))
 
 if __name__ == "__main__":
 

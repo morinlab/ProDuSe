@@ -23,6 +23,7 @@ except ImportError:
     from ProDuSe import nucleotide, fastq
 
 import configargparse
+import configparser
 import time
 import sys
 import os
@@ -61,19 +62,19 @@ parser.add(
     help="Output file names"
     )
 parser.add(
-    "-as", "--adapter_sequence",
+    "--adapter_sequence",
     type=str,
     required=True,
     help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
     )
 parser.add(
-    "-ap", "--adapter_position",
+    "--adapter_position",
     type=str,
     required=True,
     help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
     )
 parser.add(
-    "-mm", "--max_mismatch",
+    "--max_mismatch",
     type=int,
     required=True,
     help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
@@ -126,6 +127,26 @@ def main(args=None):
     """
     if args is None:
         args = parser.parse_args()
+    elif args.config:
+
+        # Parse command line arguments from the config file
+        config = configparser.ConfigParser()
+        config.read(args.config)
+
+        cmdArgs = vars(args)
+        for arg, param in config["config"].items():
+
+            # Convert arguments that are lists into an actual list
+            if param[0] == "[" and param[-1] == "]":
+                paramString = param[1:-1]
+                param = paramString.split(",")
+            # Overwrite existing arguments with those from the config file
+            cmdArgs[arg] = param
+
+        # This is gross, but set the flags to false
+        args.v = False
+        args.t = False
+
     # If input and output files were specified from the command line, ensures that a pair of files were provided
     if not len(args.input) == 2:
         parser.error('--input must be specified exactly twice (i.e. -i file1.fastq -i file2.fastq)')
@@ -133,27 +154,27 @@ def main(args=None):
     if not len(args.output) == 2:
         parser.error('--output must be specified exactly twice (i.e. -o file1.fastq -o file2.fastq)')
 
-    print_prefix = "PRODUSE-TRIM       " 
-    sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Starting...\n")
+    print_prefix = "PRODUSE-TRIM\t"
+    sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
 
     # Checks input and output files
     if not len(args.adapter_position) == len(args.adapter_sequence):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "ERROR: adapter_position and adapter_sequence must have same length\n")
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "ERROR: adapter_position and adapter_sequence must have same length\n"]))
         sys.exit(1)
 
     if not os.path.isfile(args.input[0]):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "ERROR: Input fastq files does not exist - " + args.input[0] + "\n")
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "ERROR: Input fastq files does not exist - " + args.input[0] + "\n"]))
         sys.exit(1)
 
     if not os.path.isfile(args.input[1]):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "ERROR: Input fastq files does not exist - " + args.input[1] + "\n")
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "ERROR: Input fastq files does not exist - " + args.input[1] + "\n"]))
         sys.exit(1)
 
     if os.path.isfile(args.output[0]):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "WARNING: Output file %s already exist, overwriting\n" % args.output[0])
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exist, overwriting\n" % args.output[0]]))
         os.remove(args.output[0])
     if os.path.isfile(args.output[1]):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "WARNING: Output file %s already exist, overwriting\n" % args.output[1])
+        sys.stdout.write("\t",join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exist, overwriting\n" % args.output[1]]))
         os.remove(args.output[1])
 
     # Determine Possible Adapters
@@ -198,7 +219,7 @@ def main(args=None):
         count += 1
 
         if count % 100000 == 0:
-            sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%    Count:" + str(count) + "\n")
+            sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%", "Count:" + str(count) + "\n"]))
 
         # Fetch associated reverse read
         reverse_read = reverse_input.next()
@@ -215,14 +236,14 @@ def main(args=None):
         actual_mismatch = nucleotide.distance(sequenced_adapter, ref_adapter, ref_indexes)
 
         # Throws out reads with less than the desired mismatch (if that option is specified)
-        if args.v and actual_mismatch <= args.max_mismatch:
+        if args.v and actual_mismatch <= int(args.max_mismatch):
 
             # Do not include in output fastq files if distance is greater then max_mismatch
             discard += 1
             continue
 
         # Throws out reads with greater with the desired number of mismatches
-        elif not args.v and actual_mismatch > args.max_mismatch:
+        elif not args.v and actual_mismatch > int(args.max_mismatch):
 
             discard += 1
             continue
@@ -245,7 +266,7 @@ def main(args=None):
 
     if count % 100000 != 0:
 
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%    Count:" + str(count) + "\n")
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "% ", "Count:" + str(count) + "\n"]))
 
     # Close Fastq Files
     forward_input.close()

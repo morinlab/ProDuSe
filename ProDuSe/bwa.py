@@ -13,6 +13,7 @@
 #   Christopher Rushton (ckrushto@sfu.ca)
 
 import configargparse
+import configparser
 import sys
 import os
 import subprocess
@@ -99,33 +100,48 @@ def main(args=None):
     Args:
         args: A namespace object listing BWA paramters. See get_args() for supported paramters
     """
-    # Ensures bwa is installed on the system
-    try:
-        DEVNULL = open(os.devnull, "w")
-        checkBWA = subprocess.Popen("bwa", stderr=DEVNULL, stdout=DEVNULL)
-        checkBWA.wait()
-    except OSError:
-        sys.stderr.write("ERROR: Burrows-Wheeler Aligner (bwa) cannot be found\n")
-        sys.stderr.write("Please install BWA and try again\n")
-        sys.exit(1)
 
     if args is None:
         args = parser.parse_args()
+
+            # Ensures bwa is installed on the system
+        try:
+            DEVNULL = open(os.devnull, "w")
+            checkBWA = subprocess.Popen("bwa", stderr=DEVNULL, stdout=DEVNULL)
+            checkBWA.wait()
+        except OSError:
+            sys.stderr.write("ERROR: Burrows-Wheeler Aligner (bwa) cannot be found\n")
+            sys.stderr.write("Please install BWA and try again\n")
+            sys.exit(1)
+
+    elif args.config:
+        # Parse command line arguments from the config file
+        config = configparser.ConfigParser()
+        config.read(args.config)
+        cmdArgs = vars(args)
+        for arg, param in config["config"].items():
+
+            # Convert arguments that are lists into an actual list
+            if param[0] == "[" and param[-1] == "]":
+                paramString = param[1:-1]
+                param = paramString.split(",")
+
+            cmdArgs[arg] = param
 
     # If input and output files were specified from the command line, ensures that a pair of files were provided
     if not len(args.input) == 2:
         parser.error('--input must be specified exactly twice (i.e. -i file1.fastq -i file2.fastq)')
 
 
-    print_prefix = "PRODUSE-BWA        "
-    sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Starting...\n")
+    print_prefix = "PRODUSE-BWA\t"
+    sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
 
     if not os.path.isfile(args.input[0]) or not os.path.isfile(args.input[1]):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "ERROR: one or more of input fastq files does not exist - " + args.input[0] + args.input[1] + "\n")
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "ERROR: one or more of input fastq files does not exist - " + args.input[0] + args.input[1] + "\n"]))
         sys.exit(1)
 
     if os.path.isfile(args.output):
-        sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "ERROR: output file already exists - " + args.output + "\n")
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "ERROR: output file already exists - " + args.output + "\n"]))
         sys.exit(1)
 
     # Determine samtools version and ensures it is V 1.3.1 or higher
@@ -137,7 +153,7 @@ def main(args=None):
         line = line.decode("utf-8")
         if line.startswith("Version"):
             if StrictVersion(line.split(" ")[1]) < StrictVersion("1.3.1"):
-                sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Error: samtools must be Version 1.3.1 or higher - " + line.split(" ")[1] + "\n")
+                sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Error: samtools must be Version 1.3.1 or higher - " + line.split(" ")[1] + "\n"]))
                 sys.exit(1)
             break
 
@@ -168,7 +184,7 @@ def main(args=None):
             line = line.decode("utf-8")
             if line.startswith("[M::mem_process_seqs]"):
                 counter += int(line.split(" ")[2])
-                sys.stdout.write(print_prefix + time.strftime('%X') + "    " + "Reads Processed:" + str(counter) + "\n")
+                sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Reads Processed:" + str(counter) + "\n"]))
             elif line.startswith("[E::"):
                 sys.stderr.write(line + "\n")
 
