@@ -1,74 +1,151 @@
 #! /usr/bin/env python
 
-import argparse
+# Import stanard python modules
+import configargparse
 import os
 import subprocess
 import sys
+import time
 
-cwd = os.path.abspath(".") + os.sep
-scriptLoc = os.path.abspath(os.path.dirname(__file__)) + os.sep
+# Import ProDuSe modules
+# If not installed or running in python2, this works fine
+try:
+	import configure_produse
+	import bwa
+	import trim
+	import collapse
+	import snv
 
-parser = argparse.ArgumentParser(description="Runs all stages of the ProDuce pipeline on the provided samples")
-parser.add_argument("-sc", "--sampleconfig", required=True, type=lambda x: isValidFile(x), help="Sample Configuration File")
-parser.add_argument("-c", "--produceconfig", required=True, type=lambda x: isValidFile(x), help="Produce Configuration File")
-parser.add_argument("-r", "--refgenome", required=True, type=lambda x: isValidFile(x), help="Reference genome with BWA index, in FASTA format")
-parser.add_argument("-d", "--outdir", default=cwd, help="Output directory [Default: %(default)s]")
-parser.add_argument("-e", "--scriptdir", default=scriptLoc, help="Directory containing Produce Scripts [Default: %(default)s]")
-parser.add_argument("-x", "--stitcherpath", required=True, type=lambda x: isValidFile(x), help="Path to Stitcher.exe [Default: %(default)s]")
+# If installed and running in python3
+except ImportError:
+	from ProDuSe import configure_produse
+	from ProDuSe import bwa
+	from ProDuSe import trim
+	from ProDuSe import collapse
+	from ProDuSe import snv
+
+"""
+Processes command line arguments
+
+"""
+
+# Used to locate perl scripts required for running ProDuSe
+global scriptDir
+scriptDir = os.path.abspath(os.path.dirname(__file__))
+
+# Pulls command like arguments from the sub-scripts
+parser = configargparse.ArgumentParser(description="Runs the entire ProDuSe pipeline on the supplied samples. ", parents=[configure_produse.parser, trim.parser, bwa.parser, collapse.parser, snv.parser], conflict_handler="resolve")
+parser.add_argument("-c", "--config", required=False, is_config_file=True, help="ProDuSe config file, listing adapter sequences, positions, and other parameters to be passed to pipeline scripts. See (See \'etc/produse_config.ini\' for an example)")
+parser.add_argument("-x", "--stitcherpath", required=True, type=lambda x: isValidFile(x), help="Path to Illumina's Stitcher.exe (Can be obtained from \'https://github.com/Illumina/Pisces\')")
 parser.add_argument("-t", "--threads", default=1, type=int, help="Number of threads to use while running BWA [Default: %(default)s]")
-parser.add_argument("-v", "--vaf", default=0.05, type=float, help="Variant Allele Fraction (VAF) threshold used in variant filtering [Default: %(default)s]")
+parser.add_argument("-v", "--vaf", default=0.02, type=float, help="Variant Allele Fraction (VAF), above which variants will be called as real both strands [Default: %(default)s]")
+
+# Supress command line arguments for these options, as there are irrelevent for this wrapper
+parser.add_argument("-i", "--input", help=configargparse.SUPPRESS)
+parser.add_argument("-o", "--output", help=configargparse.SUPPRESS)
 
 
 def isValidFile(file):
+	"""
+	Checks to ensure the specified file exists, and throws an error if it does not
 
-	if os.path.exists(file):
+	Args:
+		file: A filepath
+		parser: An argparse.ArgumentParser() object. Used to throw an exception if the file does not exist
+
+	Returns:
+		type: The file itself
+
+	Raises:
+		parser.error(): An ArgumentParser.error() object, thrown if the file does not exist
+	"""
+	if os.path.isfile(file):
 		return file
 	else:
-		sys.stderr.write("ERROR: Unable to locate %s\n" % file)
-		sys.stderr.write("Please ensure the file exists\n")
-		exit()
+		parser.error("Unable to locate %s" % (file))
 
 
-def createLogFile(args, logFile="ProDuSe_Task.log"):
+def createLogFile(args, logFile="ProDuSe_Task.log", *versionInfo):
 	"""
-		Creates a log file in the cwd specifying the arguments that ProDuSe was run with
+	Creates a log file in the cwd specifying the arguments that ProDuSe was run with
 
-		Input:
-			args: A namespace object listing ProDuSe arguments
+	Input:
+		args: A namespace object listing ProDuSe arguments
+		logFile: Name of the output file
+		versionInfo: A list of lists containing version information
 	"""
 
 	logString = ["python", sys.argv[0]]
 
 	# Add each argument to the logString
 	for argument, parameter in vars(args).items():
-		logString.extend(["--" + argument, parameter])
+		logString.extend(["--" + argument + " ", str(parameter)])
+
+	# Add the version information for each subprocess
+	for program in versionInfo:
+		logString.append("\n")
+		logString.extend(program)
 
 	with open(logFile, "w") as o:
 		for item in logString:
-			o.write(str(item) + " ")
+			o.write(item)
 		o.write("\n")
 
 
-def runConfig(sConfig, pConfig, refGenome, outDir, scriptDir):
+def check_command(command, versionStr=None):
+	"""
+	Ensures the command is installed on the system, and returns the version if it does exist
 
-	scriptPath = scriptDir + os.sep + "configure_produse.py"
-	if not os.path.exists(scriptPath):
-		sys.stderr.write("ERROR: Unable to locate configure_produce.py in %s\n" % (scriptDir))
-		sys.stderr.write("Please ensure the script exists\n")
-		exit(1)
+	If a command is not found, python will throw an OS error. Catch this, and inform the user.
+	Otherwise, save and return the version number
 
-	configArgs = ["python", scriptPath, "-o", outDir + os.sep, "-c", pConfig, "-sc", sConfig, "-r", refGenome]
-	subprocess.check_call(configArgs)
+	Args:
+		command: Literal name of the command
+        versionStr: The argument paseed to the command to print out the version
+	Returns:
+		version: An array listing the output of running '--version' or 'version'
+	"""
 
+	try:
+		runCom = [command]
+		if versionStr:
+			runCom.append(versionStr)
+		runCheck = subprocess.Popen(runCom, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+		version = []
+		for line in runCheck.stdout:
+			line = line.decode("utf-8")
+			version.append(line)
+
+		return version
+
+	# Prints out an error if the command is not installed
+	except OSError:
+		sys.stderr.write("ERROR: Unable to run %s\n" % (command))
+	sys.stderr.write("Please ensure it is installed, and try again\n")
+	sys.exit(1)
 
 def getSampleList(outDir):
+	"""
+	List all samples to be processed by ProDuSe
 
-	# Generates a list of samples by listing all directoies created in 'produce_analysis_directory'
-	if not os.path.exists(outDir + os.sep + "produse_analysis_directory" + os.sep):
-		sys.stderr.write("ERROR: configure_produce.py did not complete sucessfully\n")
+	Parse the names of the sample subdirectories created by configure_produse
+
+
+	Args:
+		outdir: ProDuSe output directory
+
+	Returns:
+		sampleList: A list of strings, containing sample names
+	"""
+
+	# Sanity Check: Ensure produse_analysis_directory actually exists
+	if not os.path.exists(os.path.join(outDir, "produse_analysis_directory")):
+		sys.stderr.write("ERROR: Unable to find " + os.path.join([outDir, "produse_analysis_directory"]) + "\n")
+		sys.stderr.write("Check to ensure configure_produse completed sucessfully")
 		exit(1)
 
-	sampleList = next(os.walk(outDir + os.sep + "produse_analysis_directory" + os.sep))[1]
+	# Generates a list of samples by listing all directories created in 'produce_analysis_directory'
+	sampleList = next(os.walk(os.path.join(outDir, "produse_analysis_directory")))[1]
 
 	# If configure_produse.py created a reference folder, ignore that directory
 	try:
@@ -79,172 +156,205 @@ def getSampleList(outDir):
 	return sampleList
 
 
-def processSample(sample, sampleDir, scriptDir, threads, stitcherPath, vaf):
+def getConfig(sampleDir, task):
+	"""
+		Returns the path to the config file for the designated task
 
-	def runTrim(sampleDir, scriptDir):
+		Args:
+			sampleDir: Directory for produse analysis
+			task: Name of the task
+	"""
+	configFile = os.path.join(sampleDir, "config", task + "_task.ini")
+	if not os.path.exists(configFile):
+		sys.stderr.write("ERROR: Unable to locate %s\n" % (configFile))
+		sys.stderr.write("Check to ensure configure_produse completed sucessfully")
+	return configFile
 
-		scriptPath = scriptDir + os.sep + "trim.py"
-		trimConfig = sampleDir + os.sep + "config" + os.sep + "trim_task.ini"
 
-		if not os.path.exists(scriptPath):
-			sys.stderr.write("ERROR: Unable to locate \'trim.py\'' in %s\n" % (scriptDir))
-			sys.stderr.write("Please ensure the script exists\n")
-			exit(1)
-		elif not os.path.exists(trimConfig):
-			sys.stderr.write("ERROR: Unable to locate \'trim_task.ini\' in %s\n" % sampleDir)
-			sys.stderr.write("Ensure that \'configure_produce.py\' completed successfully\n")
-			exit(1)
+def runStitcher(inputBAM, stitcherPath):
+	"""
+	Runs Illumina's stitcher on the supplied BAM file
 
-		trimArgs = ["python", scriptPath, "-c", trimConfig]
-		subprocess.check_call(trimArgs)
+	Args:
+		inputBAM: Path to BAM file to be stitched
+		stitcherPath: Path to stitcher.exe
+	Returns:
+		outFile: Path to stitched BAM
+	"""
 
-	def runBWA(config, scriptDir, threads):
+	# Output the stitched BAM file in the same directory
+	outDir = os.path.dirname(inputBAM)
 
-		scriptPath = scriptDir + os.sep + "bwa.py"
-		if not os.path.exists(scriptPath):
-			sys.stderr.write("ERROR: Unable to locate \'bwa.py\'' in %s\n" % (scriptDir))
-			sys.stderr.write("Please ensure the script exists\n")
-			exit(1)
-		elif not os.path.exists(config):
-			sys.stderr.write("ERROR: Unable to locate %s\n" % (config))
-			sys.stderr.write("Ensure that \'configure_produce.py\' completed successfully\n")
-			exit(1)
+	stitcherArgs = ["mono", stitcherPath, "--Bam", inputBAM, "--OutFolder=" + outDir]
+	subprocess.check_call(stitcherArgs)
 
-		bwaArgs = ["python", scriptPath, "-c", config, "-t", str(threads)]
-		subprocess.check_call(bwaArgs)
+	return inputBAM.replace(".bam", ".stitched.bam")
 
-	def runCollapse(sampleDir, scriptDir):
 
-		scriptPath = scriptDir + os.sep + "collapse.py"
-		collapseConfig = sampleDir + os.sep + "config" + os.sep + "collapse_task.ini"
+def runSort(bamFile):
+	"""
+	Sorts the supplied BAM file
 
-		if not os.path.exists(scriptPath):
-			sys.stderr.write("ERROR: Unable to locate \'collapse.py\'' in %s\n" % (scriptDir))
-			sys.stderr.write("Please ensure the script exists\n")
-			exit(1)
-		elif not os.path.exists(collapseConfig):
-			sys.stderr.write("ERROR: Unable to locate \'collapse_task.ini\' in %s\n" % (sampleDir))
-			sys.stderr.write("Ensure that \'configure_produce.py\' completed successfully\n")
-			exit(1)
+	Sorts the designated BAM file using Samtools sort. The sorted BAM file is placed in the same
+	directory as the input BAM file
 
-		collapseArgs = ["python", scriptPath, "-c", collapseConfig]
-		subprocess.check_call(collapseArgs)
+	Args:
+		bamFile: Path to BAM file to be sorted
+	Returns:
+		outFile: Path to sorted BAM file
+	"""
+	outFile = bamFile.replace(".bam", ".sorted.bam")
+	samtoolsArgs = ["samtools", "sort", "-o", outFile, bamFile]
+	subprocess.check_call(samtoolsArgs)
+	return outFile
 
-	def runStitcher(sampleDir, stitcherPath):
 
-		if not os.path.exists(stitcherPath):
-			sys.stderr.write("ERROR: Unable to locate %s\n" % stitcherPath)
-			sys.stderr.write("Please ensure the executable exists\n")
-			exit(1)
+def runSplitMerge(inputBam, outputBam, scriptPath):
+	"""
+	Runs splitmerge.pl on the supplied BAM file
 
-		bamFile = sampleDir + os.sep + "data" + os.sep + "collapse.bam"
-		outDir = sampleDir + os.sep + "data" + os.sep
+	Args:
+		inputBam: Path to BAM file to be split
+		outputBam: Path to output BAM file
+		sciptPath: Path to splitmerge.pl
+	"""
 
-		stitcherArgs = ["mono", stitcherPath, "--Bam", bamFile, "--OutFolder=" + outDir]
-		subprocess.check_call(stitcherArgs)
+	# Sanity check. Ensure the script exists in that directory
+	if not os.path.exists(scriptPath):
+		sys.stderr.write("ERROR: Unable to locate \'splitmerge.pl\' in %s\n" % scriptDir)
+		sys.stderr.write("Please ensure the script exists\n")
 
-	def runSort(bamFile):
+	preSMViewArgs = ["samtools", "view", "-h", inputBam]
+	postSMViewArgs = ["samtools", "view", "-b"]
 
-		outFile = bamFile.replace(".bam", ".sorted.bam")
-		samtoolsArgs = ["samtools", "sort", "-o", outFile, bamFile]
-		subprocess.check_call(samtoolsArgs)
-		return outFile
+	# Runs splitmerge
+	with open(outputBam, "w") as o:
+		preSMView = subprocess.Popen(preSMViewArgs, stdout=subprocess.PIPE)
+		exSM = subprocess.Popen(scriptPath, stdin=preSMView.stdout, stdout=subprocess.PIPE)
 
-	def runSplitMerge(outName, bamFile, scriptDir):
+		subprocess.check_call(postSMViewArgs, stdin=exSM.stdout, stdout=o)
 
-		scriptPath = scriptDir + os.sep + "splitmerge.pl"
-		if not os.path.exists(scriptPath):
-			sys.stderr.write("ERROR: Unable to locate \'splitmerge.pl\' in %s\n" % scriptDir)
-			sys.stderr.write("Please ensure the script exists\n")
 
-		preSMViewArgs = ["samtools", "view", "-h", bamFile]
-		postSMViewArgs = ["samtools", "view", "-b"]
+def runFilter(vaf, inputFile, scriptPath):
+	"""
+	Runs filter_produse.pl
 
-		with open(outName, "w") as o:
-			preSMView = subprocess.Popen(preSMViewArgs, stdout=subprocess.PIPE)
-			exSM = subprocess.Popen(scriptPath, stdin=preSMView.stdout, stdout=subprocess.PIPE)
+	Filters variants called by snv.py using the specified VAF threshold
 
-			subprocess.check_call(postSMViewArgs, stdin=exSM.stdout, stdout=o)
+	Args:
+		vaf: Minimum VAF threshold. Variants below this threshold will be discarded
+		vcfFile: Path to input VCF file
+		scriptPath: Path to filter_produse.pl
+	"""
+	filterArgs = ["perl", scriptPath, str(vaf)]
+	outFile = inputFile.replace(".vcf", ".filtered.vcf")
 
-	def runSNV(config, sampleDir, scriptDir):
+	with open(inputFile) as f, open(outFile, "w") as o:
+		subprocess.Popen(filterArgs, stdin=f, stdout=o)
 
-		scriptPath = scriptDir + os.sep + "snv.py"
-		snvArgs = ["python", scriptPath, "-c", config]
-		subprocess.check_call(snvArgs)
 
-	def runFilter(scriptDir, vaf, vcfFile):
+def runPipeline(args, sampleName, sampleDir):
+	"""
+		Runs the main ProDuSe analysis stages on the provided sample
 
-		scriptPath = scriptDir + os.sep + "filter_produse.pl"
-		filterArgs = ["perl", scriptPath, str(vaf)]
-		outFile = sampleDir + os.sep + "results" + os.sep + "variants.filtered.vcf"
+		Args:
+			args: A namespace object listing command line parameters to be passed to subscripts
+			sampleName: Name of the sample currently being processed
+			sampleDir: Output directory
+	"""
 
-		with open(vcfFile) as f, open(outFile, "w") as o:
-			subprocess.Popen(filterArgs, stdin=f, stdout=o)
+	printPrefix = "PRODUSE-MAIN\t"
 
-	runTrim(sampleDir, scriptDir)
-	sys.stderr.write(sample + ": Trimming Complete\n")
+	# Run Trim
+	args.config = getConfig(sampleDir, "trim")
+	trim.main(args)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Trimming Complete\n"]))
 
-	trimBwaConfig = sampleDir + os.sep + "config" + os.sep + "trim_bwa_task.ini"
-	runBWA(trimBwaConfig, scriptDir, threads)
-	sys.stderr.write(sample + ": Mapping Complete\n")
+	# Run bwa on the trimmed fastqs
+	args.config = getConfig(sampleDir, "trim_bwa")
+	bwa.main(args)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Alignment Complete\n"]))
 
-	runCollapse(sampleDir, scriptDir)
-	sys.stderr.write(sample + ": Collapsing Complete\n")
+	# Run collapse on the trimmed BAM file
+	args.config = getConfig(sampleDir, "collapse")
+	collapse.main(args)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Collapse Complete\n"]))
 
-	collapseBwaConfig = sampleDir + os.sep + "config" + os.sep + "collapse_bwa_task.ini"
-	runBWA(collapseBwaConfig, scriptDir, threads)
-	sys.stderr.write(sample + ": Mapping Complete\n")
+	# Run bwa on the collapsed
+	args.config = getConfig(sampleDir, "collapse_bwa")
+	bwa.main(args)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Alignment Complete\n"]))
 
-	runStitcher(sampleDir, stitcherPath)
-	sys.stderr.write(sample + ": Stitcher Complete\n")
+	# Run stitcher
+	collapsedBamFile = os.path.abspath(os.path.join(sampleDir, "data", "collapse.bam"))
+	stitchedBam = runStitcher(collapsedBamFile, args.stitcherpath)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Stitching Complete\n"]))
 
-	sortedStitchBAM = runSort(sampleDir + os.sep + "data" + os.sep + "collapse.stitched.bam")
+	# Run splitmerge
+	sortedStitchedBam = runSort(stitchedBam)
+	global scriptDir
+	splitMergeBam = os.path.join(sampleDir, "results", "SplitMerge.bam")
+	runSplitMerge(sortedStitchedBam, splitMergeBam, scriptDir + os.sep + "splitmerge.pl")
+	sortedSplitmergeBam = runSort(splitMergeBam)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": SplitMerge Complete\n"]))
 
-	splitMergeName = sampleDir + os.sep + "results" + os.sep + "SplitMerge.bam"
-	runSplitMerge(splitMergeName, sortedStitchBAM, scriptDir)
-	sys.stderr.write(sample + ": SplitMerge Complete\n")
+	# Time for SNV calling, what everyone has been waiting for
+	args.config = getConfig(sampleDir, "snv")
+	snv.main(args)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": SNV Calling Complete\n"]))
 
-	sys.stderr.write(sample + ": Calling SNVs...\n")
-	runSort(splitMergeName)
-	snvConfig = sampleDir + os.sep + "config" + os.sep + "snv_task.ini"
-	runSNV(snvConfig, sampleDir, scriptDir)
-	sys.stderr.write(sample + ": SNV Calling Complete\n")
+	# Filter variants
+	vcfFile = os.path.join(sampleDir, "results", "variants.vcf")
+	runFilter(args.vaf, vcfFile, scriptDir + os.sep + "filter_produse.pl")
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Variant Filtering Complete\n"]))
 
-	vcfFile = sampleDir + os.sep + "results" + os.sep + "variants.vcf"
-	runFilter(scriptDir, vaf, vcfFile)
-	sys.stderr.write(sample + ": Filtering Complete\n")
-
-	sys.stderr.write(sample + ": ProDuSe Complete. Output in " + os.path.join(sampleDir, "results") + "\n")
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": ProDuSe analysis Complete\n"]))
 
 
 def main(args=None):
 
-	if args is None:
+	"""
+	Runs ALL steps of the ProDuSe pipeline on the supplied samples
+
+	Args:
+		args: A namespace object containing command line parameters
+
+	"""
+
+	if not args:
 		args = parser.parse_args()
+		# Clear these, since they are different for each script
+		args.input = None
+		args.output = None
 
-	sys.stderr.write("Processing...\n")
-	if not os.path.isfile(args.stitcherpath):
+	# Checks command line arguments
 
-		sys.stderr.write("ERROR: Unable to locate Stitcher.exe in %s\n" % os.path.dirname(args.stitcherpath))
-		sys.stderr.write("Please provide a full path to Stitcher.exe\n")
-		sys.stderr.write("Stitcher can be downloaded as part of Illumina's Pisces distribution\n")
-		sys.stderr.write("https://github.com/Illumina/Pisces\n")
-		exit(1)
+	# First things first, lets make sure that the programs required to run ProDuSe are installed,
+	# and pull out the version number of each
+	check_command("bwa")
+	samtoolsVer = check_command("samtools", "--version")
+	monoVer = check_command("mono", "--version")
+	perlVer = check_command("perl", "--version")
+	pythonVer = check_command("python", "--version")
 
-	createLogFile(args, os.path.abspath(args.outdir) + os.sep + "ProDuSe_Task.log")
-	runConfig(args.sampleconfig, args.produceconfig, args.refgenome, args.outdir, args.scriptdir)
-	sampleList = getSampleList(args.outdir)
+	printPrefix = "PRODUSE-MAIN\t"
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting ProDuSe\n"]))
 
+	# Setup ProDuSe using configure_produse
+	configure_produse.main(args)
+	sampleList = getSampleList(args.output_directory)
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Configuration Complete\n"]))
+
+	createLogFile(args, os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", "ProDuSe_Task.log"), samtoolsVer, monoVer, perlVer, pythonVer)
+
+	# Run the pipeline on each sample
 	for sample in sampleList:
 
-		sys.stderr.write("\nProcessing sample %s\n" % (sample))
-		sampleDir = args.outdir + os.sep + "produse_analysis_directory" + os.sep + sample
-		processSample(sample, sampleDir, args.scriptdir, args.threads, args.stitcherpath, args.vaf)
-
-	sys.stderr.write("All samples processed. ProDuSe complete.\n")
-
+		sys.stderr.write("\t".join(["\n" + printPrefix, time.strftime('%X'), "Processing sample " + sample + "\n"]))
+		sampleDir = os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", sample)
+		runPipeline(args, sample, sampleDir)
+	sys.stderr.write("\t".join(["\n" + printPrefix, time.strftime('%X'), "All Samples Processed" + "\n"]))
 
 if __name__ == "__main__":
-
 	print("")
 	main()
