@@ -16,6 +16,10 @@ my $min_tot = 3;
 while(my $line = <STDIN>){
     chomp $line;
     my $skip;
+    if ($line =~ /#/) {
+        print "$line\n";
+        next;
+    }
     my @f = split /\t/, $line;
     my $ref = $f[3];
     my $nref = $f[4]; #may be a list of SNVs. Skip all of these?
