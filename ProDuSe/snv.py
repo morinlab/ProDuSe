@@ -10,6 +10,7 @@ except ImportError:
     from ProDuSe import bed
 
 import configargparse
+import configparser
 import pysam
 import os
 
@@ -58,7 +59,7 @@ parser.add_argument(
     )
 parser.add_argument(
     "-mo", "--min_molecules",
-    default=400,
+    default=40,
     type=int,
     help="Number of unique supporting molecules required to call a variant as real for each strand. Reduce this if you are running only on positions you expect to be mutated [Default: %(default)s]"
     )
@@ -67,21 +68,19 @@ parser.add_argument(
     default=3,
     required=False,
     type=int,
-    help="Number of TOTAL molecules (i.e. on the forward and reverse strand) required to call a variant as real (set to 0 if you are forcing variant calling at known sites)"
+    help="Number of TOTAL molecules (i.e. on the forward and reverse strand) required to call a variant as real (set to 0 if you are forcing variant calling at known sites) [Default: %(default)s]"
     )
 parser.add_argument(
-
     "-mrpu", "--min_reads_per_uid",
     default=2,
-    required=True,
     type=int,
-    help="Bases with support between MRPU and SSBT will be classified as a weak supported base"
+    help="Bases with support between MRPU and SSBT will be classified as a weak supported base [Default: %(default)s]"
     )
 parser.add_argument(
     "-ssbt", "--strong_supported_base_threshold",
     default=3,
     type=int,
-    help="Bases with support equal to or greater then SSBT, will be classified as a strong supported base."
+    help="Bases with support equal to or greater then SSBT, will be classified as a strong supported base [Default: %(default)s]"
     )
 
 parser.add_argument(
@@ -94,6 +93,7 @@ parser.add_argument(
     default=3,
     type=int,
     help="Minimum base quality threshold, below which a base will be treated as \'N\'")
+
 # For backwards compatability only. These arguments do nothing
 parser.add_argument(
     "-abct", "--alt_base_count_threshold",
@@ -142,16 +142,28 @@ def main(args=None):
 
     if args is None:
         args = parser.parse_args()
+    elif args.config:
+        # Parse command line arguments from the config file
+        config = configparser.ConfigParser()
+        config.read(args.config)
+        cmdArgs = vars(args)
+        for arg, param in config["config"].items():
+
+            if param[0] == "[" and param[-1] == "]":
+                paramString = param[1:-1]
+                param = paramString.split(",")
+
+            cmdArgs[arg] = param
 
     bamfile = pysam.AlignmentFile(args.input, 'rb')
     fastafile = pysam.FastaFile(args.reference)
     targetbed = None
     if not args.target_bed == None:
+        pysam.index(bamfile)
         targetbed = bed.BedOpen(args.target_bed, 'r');
-    #else:
-    #    sys.exit("You need to specify a targetbed")
 
-    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=args.min_reads_per_uid, min_base_qual=args.min_qual);
+
+    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=int(args.min_reads_per_uid), min_base_qual=int(args.min_qual));
 
     output = None;
     if not args.output == "-":
@@ -186,7 +198,7 @@ def main(args=None):
 
         m += 1
 
-        if pos.is_variant(args.variant_allele_fraction_threshold, args.min_molecules, args.enforce_dual_strand, args.mutant_molecules):
+        if pos.is_variant(float(args.variant_allele_fraction_threshold), int(args.min_molecules), args.enforce_dual_strand, int(args.mutant_molecules)):
 
             if first:
                 pos.write_header(output)
