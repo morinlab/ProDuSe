@@ -38,7 +38,7 @@ parser = configargparse.ArgumentParser(description="Runs the entire ProDuSe pipe
 parser.add_argument("-c", "--config", required=False, is_config_file=True, help="ProDuSe config file, listing adapter sequences, positions, and other parameters to be passed to pipeline scripts. See (See \'etc/produse_config.ini\' for an example)")
 parser.add_argument("-x", "--stitcherpath", required=True, type=lambda x: isValidFile(x), help="Path to Illumina's Stitcher.exe (Can be obtained from \'https://github.com/Illumina/Pisces\')")
 parser.add_argument("-t", "--threads", default=1, type=int, help="Number of threads to use while running BWA [Default: %(default)s]")
-parser.add_argument("-v", "--vaf", default=0.02, type=float, help="Variant Allele Fraction (VAF), above which variants will be called as real both strands [Default: %(default)s]")
+parser.add_argument("-v", "--vaf", default=0.02, type=float, help="Variant Allele Fraction (VAF) threshold for both strands [Default: %(default)s]")
 
 # Supress command line arguments for these options, as there are irrelevent for this wrapper
 parser.add_argument("-i", "--input", help=configargparse.SUPPRESS)

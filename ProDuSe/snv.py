@@ -55,7 +55,7 @@ parser.add_argument(
     "-vaft", "--variant_allele_fraction_threshold",
     default=0.01,
     type=float,
-    help="Minimum variant frequency threshold, above which variants will be called as being real for each strant [Default: %(default)s]"
+    help="Minimum variant frequency threshold for each strand [Default: %(default)s]"
     )
 parser.add_argument(
     "-mo", "--min_molecules",
