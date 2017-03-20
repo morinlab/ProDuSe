@@ -24,7 +24,7 @@ setup(
         "pysam",
         "numpy"
         ],
-    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.18.0.tar.gz",
+    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.1.tar.gz",
     license="GNU GPLv3",
     scripts=["bin/produse"],
     data_files = [("ProDuSe", ["LICENSE.txt", "README.md", "ProDuSe/splitmerge.pl", "ProDuSe/filter_produse.pl"])]
