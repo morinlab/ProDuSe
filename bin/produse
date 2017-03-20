@@ -12,6 +12,10 @@ from ProDuSe import ProdusePipeline
 
 parser = configargparse.ArgParser()
 
+parser.add_argument(
+    "--version",
+    action="store_true",
+)
 subparsers = parser.add_subparsers()
 
 parser_run_pipeline = subparsers.add_parser(
@@ -84,6 +88,10 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 args = parser.parse_args()
+
+if args.version:
+    print("ProDuSe Version 0.2.1")
+    sys.exit(1)
 
 if args.which == "adapter_predict":
     adapter_predict.main(args)
