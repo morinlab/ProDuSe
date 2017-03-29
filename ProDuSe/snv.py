@@ -61,7 +61,7 @@ parser.add_argument(
     "-mo", "--min_molecules",
     default=40,
     type=int,
-    help="Number of unique supporting molecules required to call a variant as real for each strand. Reduce this if you are running only on positions you expect to be mutated [Default: %(default)s]"
+    help="Number of total molecules (supporting or otherwise) required to call a variant at this position. Reduce this if you are running only on positions you expect to be mutated [Default: %(default)s]"
     )
 parser.add_argument(
     "-mum", "--mutant_molecules",
