@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='ProDuSe',
-    version="0.2.1",
+    version="0.2.2",
     description='Process Duplex Sequence Data',
     author='Marco Albuquerque',
     author_email='malbuque@sfu.ca',
