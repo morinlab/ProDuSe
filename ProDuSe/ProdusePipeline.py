@@ -15,6 +15,7 @@ try:
 	import trim
 	import collapse
 	import snv
+	import filter_produse
 
 # If installed and running in python3
 except ImportError:
@@ -23,6 +24,7 @@ except ImportError:
 	from ProDuSe import trim
 	from ProDuSe import collapse
 	from ProDuSe import snv
+	from ProDuSe import filter_produse
 
 """
 Processes command line arguments
@@ -34,11 +36,10 @@ global scriptDir
 scriptDir = os.path.abspath(os.path.dirname(__file__))
 
 # Pulls command like arguments from the sub-scripts
-parser = configargparse.ArgumentParser(description="Runs the entire ProDuSe pipeline on the supplied samples. ", parents=[configure_produse.parser, trim.parser, bwa.parser, collapse.parser, snv.parser], conflict_handler="resolve")
+parser = configargparse.ArgumentParser(description="Runs the entire ProDuSe pipeline on the supplied samples. ", parents=[configure_produse.parser, trim.parser, bwa.parser, collapse.parser, snv.parser, filter_produse.parser], conflict_handler="resolve")
 parser.add_argument("-c", "--config", required=False, is_config_file=True, help="ProDuSe config file, listing adapter sequences, positions, and other parameters to be passed to pipeline scripts. See (See \'etc/produse_config.ini\' for an example)")
 parser.add_argument("-x", "--stitcherpath", required=True, type=lambda x: isValidFile(x), help="Path to Illumina's Stitcher.exe (Can be obtained from \'https://github.com/Illumina/Pisces\')")
 parser.add_argument("-t", "--threads", default=1, type=int, help="Number of threads to use while running BWA [Default: %(default)s]")
-parser.add_argument("-v", "--vaf", default=0.02, type=float, help="Variant Allele Fraction (VAF) threshold for both strands [Default: %(default)s]")
 
 # Supress command line arguments for these options, as there are irrelevent for this wrapper
 parser.add_argument("-i", "--input", help=configargparse.SUPPRESS)
@@ -75,11 +76,11 @@ def createLogFile(args, logFile="ProDuSe_Task.log", *versionInfo):
 		versionInfo: A list of lists containing version information
 	"""
 
-	logString = ["python", sys.argv[0]]
+	logString = ["python ", sys.argv[0]]
 
 	# Add each argument to the logString
 	for argument, parameter in vars(args).items():
-		logString.extend(["--" + argument + " ", str(parameter)])
+		logString.extend([" --" + argument + " ", str(parameter)])
 
 	# Add the version information for each subprocess
 	for program in versionInfo:
@@ -101,7 +102,7 @@ def check_command(command, versionStr=None):
 
 	Args:
 		command: Literal name of the command
-        versionStr: The argument paseed to the command to print out the version
+	        versionStr: The argument paseed to the command to print out the version
 	Returns:
 		version: An array listing the output of running '--version' or 'version'
 	"""
@@ -121,8 +122,8 @@ def check_command(command, versionStr=None):
 	# Prints out an error if the command is not installed
 	except OSError:
 		sys.stderr.write("ERROR: Unable to run %s\n" % (command))
-	sys.stderr.write("Please ensure it is installed, and try again\n")
-	sys.exit(1)
+		sys.stderr.write("Please ensure it is installed, and try again\n")
+		sys.exit(1)
 
 def getSampleList(outDir):
 	"""
@@ -286,14 +287,14 @@ def runPipeline(args, sampleName, sampleDir):
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Alignment Complete\n"]))
 
 	# Run stitcher
-	collapsedBamFile = os.path.abspath(os.path.join(sampleDir, "data", "collapse.bam"))
+	collapsedBamFile = os.path.abspath(os.path.join(sampleDir, "data", sampleName + ".collapse.bam"))
 	stitchedBam = runStitcher(collapsedBamFile, args.stitcherpath)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Stitching Complete\n"]))
 
 	# Run splitmerge
 	sortedStitchedBam = runSort(stitchedBam)
 	global scriptDir
-	splitMergeBam = os.path.join(sampleDir, "results", "SplitMerge.bam")
+	splitMergeBam = os.path.join(sampleDir, "results", sampleName + ".SplitMerge.bam")
 	runSplitMerge(sortedStitchedBam, splitMergeBam, scriptDir + os.sep + "splitmerge.pl")
 	sortedSplitmergeBam = runSort(splitMergeBam)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": SplitMerge Complete\n"]))
@@ -304,8 +305,12 @@ def runPipeline(args, sampleName, sampleDir):
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": SNV Calling Complete\n"]))
 
 	# Filter variants
-	vcfFile = os.path.join(sampleDir, "results", "variants.vcf")
-	runFilter(args.vaf, vcfFile, scriptDir + os.sep + "filter_produse.pl")
+	vcfFile = os.path.join(sampleDir, "results", sampleName + ".variants.vcf")
+	outFile = vcfFile.replace(".vcf", ".filtered.vcf")
+	args.input=vcfFile
+	args.output=outFile
+	filter_produse.main(args)
+	# runFilter(args.vaf, vcfFile, scriptDir + os.sep + "filter_produse.pl")
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Variant Filtering Complete\n"]))
 
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": ProDuSe analysis Complete\n"]))

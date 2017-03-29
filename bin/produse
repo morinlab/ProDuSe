@@ -9,13 +9,10 @@ from ProDuSe import trim
 from ProDuSe import snv
 from ProDuSe import bwa
 from ProDuSe import ProdusePipeline
+from ProDuSe import filter_produse
 
 parser = configargparse.ArgParser()
 
-parser.add_argument(
-    "--version",
-    action="store_true",
-)
 subparsers = parser.add_subparsers()
 
 parser_run_pipeline = subparsers.add_parser(
@@ -25,7 +22,7 @@ parser_run_pipeline = subparsers.add_parser(
     )
 parser_run_pipeline.set_defaults(
     which="run_produse"
-)
+    )
 parser_configure_produse = subparsers.add_parser(
     "configure_produse",
     parents=[configure_produse.parser],
@@ -46,7 +43,6 @@ parser_trim.set_defaults(
     which="trim"
     )
 
-
 parser_align = subparsers.add_parser(
     "bwa",
     parents=[bwa.parser],
@@ -55,7 +51,6 @@ parser_align = subparsers.add_parser(
 parser_align.set_defaults(
     which="bwa"
     )
-
 
 parser_collapse = subparsers.add_parser(
     "collapse",
@@ -75,6 +70,16 @@ parser_variants.set_defaults(
     which="snv"
     )
 
+parser_filter = subparsers.add_parser(
+    "filter",
+    parents=[filter_produse.parser],
+    add_help=False
+    )
+
+parser_filter.set_defaults(
+    which="filter"
+    )
+
 parser_barcode = subparsers.add_parser(
     "adapter_predict",
     parents=[adapter_predict.parser],
@@ -88,10 +93,6 @@ if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 args = parser.parse_args()
-
-if args.version:
-    print("ProDuSe Version 0.2.1")
-    sys.exit(1)
 
 if args.which == "adapter_predict":
     adapter_predict.main(args)
@@ -113,3 +114,6 @@ if args.which == "align":
 
 if args.which == "run_produse":
     ProdusePipeline.main(args)
+
+if args.which == "filter":
+    filter_produse.main(args)
