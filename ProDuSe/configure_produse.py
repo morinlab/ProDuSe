@@ -19,7 +19,7 @@ import subprocess
 import time
 
 
-def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
+def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_name=""):
     """
         Creates subdirectories, symlinks, and config files for ProDuSe
 
@@ -33,6 +33,7 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
             sampleConfig: Dictionary listing the parameters specified in the sample config file
             pconfig: Path to ProDuSe configurations file
             reference: Reference genome, in FASTA format
+            sample_name: Name of the sample
 
 
     """
@@ -70,8 +71,8 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
         sys.exit(1)
 
     # Sets up fastq files
-    raw_fastq1 = os.sep.join([data_dir, "raw_R1.fastq"])
-    raw_fastq2 = os.sep.join([data_dir, "raw_R2.fastq"])
+    raw_fastq1 = os.sep.join([data_dir, sample_name + "raw_R1.fastq"])
+    raw_fastq2 = os.sep.join([data_dir, sample_name + "raw_R2.fastq"])
     if os.path.splitext(fastqs[0])[1] == ".gz" and os.path.splitext(fastqs[1])[1] == ".gz":
         raw_fastq1 = '.'.join([raw_fastq1, "gz"])
         raw_fastq2 = '.'.join([raw_fastq2, "gz"])
@@ -84,10 +85,10 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
     os.symlink(os.path.abspath(fastqs[1]), raw_fastq2)
 
     # Sets up symlinks for intermediate  ProDuSe files
-    trim_one_tmp = os.sep.join([tmp_dir, "trim_R1.fastq.gz"])
-    trim_two_tmp = os.sep.join([tmp_dir, "trim_R2.fastq.gz"])
-    trim_one_data = os.sep.join([data_dir, "trim_R1.fastq.gz"])
-    trim_two_data = os.sep.join([data_dir, "trim_R2.fastq.gz"])
+    trim_one_tmp = os.sep.join([tmp_dir, sample_name + "trim_R1.fastq.gz"])
+    trim_two_tmp = os.sep.join([tmp_dir, sample_name + "trim_R2.fastq.gz"])
+    trim_one_data = os.sep.join([data_dir, sample_name + "trim_R1.fastq.gz"])
+    trim_two_data = os.sep.join([data_dir, sample_name + "trim_R2.fastq.gz"])
 
     os.symlink(trim_one_tmp, trim_one_data)
     os.symlink(trim_two_tmp, trim_two_data)
@@ -106,8 +107,8 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
     output.close()
 
     # Creates BWA output symlinks
-    trim_tmp = os.sep.join([tmp_dir, "trim.bam"])
-    trim_data = os.sep.join([data_dir, "trim.bam"])
+    trim_tmp = os.sep.join([tmp_dir, sample_name + "trim.bam"])
+    trim_data = os.sep.join([data_dir, sample_name + "trim.bam"])
     os.symlink(trim_tmp, trim_data)
 
     # Creates BWA trim config file
@@ -125,10 +126,10 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
     output.close()
 
     # Creates collapse output symlinks
-    collapse_one_tmp = os.sep.join([tmp_dir, "collapse_R1.fastq.gz"])
-    collapse_two_tmp = os.sep.join([tmp_dir, "collapse_R2.fastq.gz"])
-    collapse_one_data = os.sep.join([data_dir, "collapse_R1.fastq.gz"])
-    collapse_two_data = os.sep.join([data_dir, "collapse_R2.fastq.gz"])
+    collapse_one_tmp = os.sep.join([tmp_dir, sample_name + "collapse_R1.fastq.gz"])
+    collapse_two_tmp = os.sep.join([tmp_dir, sample_name + "collapse_R2.fastq.gz"])
+    collapse_one_data = os.sep.join([data_dir, sample_name + "collapse_R1.fastq.gz"])
+    collapse_two_data = os.sep.join([data_dir, sample_name + "collapse_R2.fastq.gz"])
 
     os.symlink(collapse_one_tmp, collapse_one_data)
     os.symlink(collapse_two_tmp, collapse_two_data)
@@ -147,8 +148,8 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
     output.close()
 
     # Creates bwa collapse output symlinks
-    collapse_tmp = os.sep.join([tmp_dir, "collapse.bam"])
-    collapse_data = os.sep.join([data_dir, "collapse.bam"])
+    collapse_tmp = os.sep.join([tmp_dir, sample_name + "collapse.bam"])
+    collapse_data = os.sep.join([data_dir, sample_name + "collapse.bam"])
 
     os.symlink(collapse_tmp, collapse_data)
 
@@ -169,8 +170,8 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference):
     # Creates SNV calling config file
     new_config = configparser.RawConfigParser()
     new_config.add_section("config")
-    new_config.set("config", "input", results_dir + os.sep + "SplitMerge.sorted.bam")
-    new_config.set("config", "output", os.sep.join([results_dir, "variants.vcf"]))
+    new_config.set("config", "input", results_dir + os.sep + sample_name + "SplitMerge.sorted.bam")
+    new_config.set("config", "output", os.sep.join([results_dir, sample_name + "variants.vcf"]))
     new_config.set("config", "reference", reference)
     for (key, val) in cparser.items("snv"):
         new_config.set("config", key, val)
@@ -229,18 +230,6 @@ def make_makefile(produse_directory, analysis_dir, samples):
         make.close()
 
 
-def what_args():
-    """
-    Returns a list of command line arguments required by this script
-    """
-    return ["--fastqs",
-        "--output_directory",
-        "--reference",
-        "--config",
-        "--sample_config"
-            ]
-
-
 def check_ref(ref_file, produse_path):
     """
     Checks if BWA and normal index for the reference exist, and if they do not, generate them locally
@@ -253,7 +242,7 @@ def check_ref(ref_file, produse_path):
         referenceFile: Reference genome file
     """
 
-    printPrefix = "PRODUSE-CONFIG    "
+    printPrefix = "PRODUSE-CONFIG\t\t"
 
     # Searches for index files
     fai_file = ref_file + ".fai"
@@ -273,7 +262,7 @@ def check_ref(ref_file, produse_path):
     # Lets just symlink them over as well
     # That said, bwa generates everything if you run index, so if any of those are missing, there is no point symlinking them
     if not all_indexes_present:
-        sys.stdout.write(printPrefix + time.strftime('%X') + "    Generating Indexes\n")
+        sys.stdout.write(printPrefix + time.strftime('%X') + "\tGenerating Indexes\n")
         ref_dir = produse_path + os.sep + "Reference_Genome" + os.sep
         out_ref = ref_dir + os.path.basename(ref_file)
         os.mkdir(ref_dir)
@@ -303,7 +292,7 @@ def check_ref(ref_file, produse_path):
             os.symlink(pac_file, ref_dir + ".pac")
             os.symlink(sa_file, ref_dir + ".sa")
 
-        sys.stdout.write("Indexing complete. Using reference and indexes located in %s\n" % (ref_dir))
+        sys.stdout.write(printPrefix + time.strftime('%X') + "\tIndexing complete. Using reference and indexes located in %s\n" % (ref_dir))
         return out_ref
     else:
         # If all the necessary indexes exist already, just return the original path to the reference
@@ -322,9 +311,11 @@ Raises:
 # Process command line arguments
 desc = "Process Duplex Sequencing Data"
 parser = argparse.ArgumentParser(description=desc)
-parser.add_argument(
+inputArgs = parser.add_mutually_exclusive_group(required=True)
+inputArgs.add_argument(
     "-f", "--fastqs",
     metavar="FASTA",
+    nargs=2,
     type=lambda x: is_valid_file(x, parser),
     help="Forward and reverse fastq files from paired end sequencing. Overwritten by --sample_config"
     )
@@ -348,7 +339,7 @@ parser.add_argument(
     type=lambda x: is_valid_file(x, parser),
     help="ProDuSe config file, listing adapter sequences, positions, and other parameters to be passed to pipeline scripts. See (See \'etc/produse_config.ini\' for an example)"
     )
-parser.add_argument(
+inputArgs.add_argument(
     "-sc", "--sample_config",
     metavar="INI",
     required=False,
@@ -449,42 +440,47 @@ def main(args=None):
     else:
         os.makedirs(output_directory)
 
-    # Reads sections and key-value pairs from config file
-    sample_config = configparser.RawConfigParser()
-    sample_config.read(args.sample_config)
-
-    # Creates a MakeFile
-    make_makefile(produse_directory, output_directory, sample_config.sections())
-
     # Checks for the necessary index files, and generates them if they do not exist
     ref_file = check_ref(args.reference, output_directory)
 
-    # Create a sample direectory and config files for each sample listed i the sample config file
-    for sample in sample_config.sections():
+    if args.sample_config is not None:
+        # Reads sections and key-value pairs from config file
+        sample_config = configparser.RawConfigParser()
+        sample_config.read(args.sample_config)
 
-        sample_dir = os.sep.join([output_directory, sample])
-        os.makedirs(sample_dir)
+        # Creates a MakeFile
+        make_makefile(produse_directory, output_directory, sample_config.sections())
 
-        sampleDict = dict(sample_config.items(sample))
+        # Create a sample direectory and config files for each sample listed i the sample config file
+        for sample in sample_config.sections():
 
-        # Obtains fastq files from either the command line or sampleconfig file
-        if "fastqs" in sampleDict:
+            sample_dir = os.sep.join([output_directory, sample])
+            os.makedirs(sample_dir)
 
-            fastqs = sampleDict["fastqs"].split(",")
-            if len(fastqs) != 2:
-                sys.stderr.write("ERROR: Exactly two fastq files must be list in the sample config file, comma seperated\n")
-                sys.stderr.write("Example: fastqs=path/foward.fq.gz,path/reverse.fq.gz\n")
+            sampleDict = dict(sample_config.items(sample))
+
+            # Obtains fastq files from either the command line or sampleconfig file
+            if "fastqs" in sampleDict:
+
+                fastqs = sampleDict["fastqs"].split(",")
+                if len(fastqs) != 2:
+                    sys.stderr.write("ERROR: Exactly two fastq files must be list in the sample config file, comma seperated\n")
+                    sys.stderr.write("Example: fastqs=path/foward.fq.gz,path/reverse.fq.gz\n")
+                    exit(1)
+
+            elif not args.fastqs:
+                sys.stderr.write("ERROR: \'fastqs\' are not specified in %s, nor were they provided in the arguments\n" % (args.sample_config))
+                sys.stderr.write("Fastqs can be specified using \'-f\'\n")
                 exit(1)
-
-        elif not args.fastqs:
-            sys.stderr.write("ERROR: \'fastqs\' are not specified in %s, nor were they provided in the arguments\n" % (args.sample_config))
-            sys.stderr.write("Fastqs can be specified using \'-f\'\n")
-            exit(1)
-        else:
-            fastqs = args.fastqs
-
+            # Setup sample directory
+            make_directory(sample_dir, fastqs, sampleDict, args.config, ref_file, sample + ".")
+    else:
+        fastqs = args.fastqs
+        sample_dir = os.path.join(output_directory, "Sample")
+        # Creates a MakeFile
+        make_makefile(produse_directory, output_directory, fastqs)
         # Setup sample directory
-        make_directory(sample_dir, fastqs, sampleDict, args.config, ref_file)
+        make_directory(sample_dir, fastqs, {}, args.config, ref_file, "Sample" + ".")
 
 
 if __name__ == '__main__':
