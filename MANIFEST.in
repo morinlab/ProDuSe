@@ -23,3 +23,4 @@ include bin/produse
 include ProDuSe/splitmerge.pl
 include ProDuSe/filter_produse.pl
 include ProDuSe/ProdusePipeline.py
+include ProDuSe/filter_produse.py
