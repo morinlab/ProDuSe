@@ -129,22 +129,21 @@ def main(args=None):
         args = parser.parse_args()
     elif args.config:
 
-        # Parse input and output file names from the config file
+        # Since configargparse does not parse commands from the config file if they are passed as argument here
+        # They must be parsed manually
+        cmdArgs = vars(args)
         config = configparser.ConfigParser()
         config.read(args.config)
-        cmdArgs = vars(args)
-        inputParam = config.get("config", "input")
-        outputParam = config.get("config", "output")
+        configOptions = config.options("config")
+        for option in configOptions:
+            param = config.get("config", option)
+            # Convert arguments that are lists into an actual list
+            if param[0] == "[" and param[-1] == "]":
+                paramString = param[1:-1]
+                param = paramString.split(",")
 
-        # Convert arguments that are lists into an actual list
-        if inputParam[0] == "[" and inputParam[-1] == "]":
-            paramString = inputParam[1:-1]
-            inputParam = paramString.split(",")
-        if outputParam[0] == "[" and outputParam[-1] == "]":
-            paramString = outputParam[1:-1]
-            outputParam = paramString.split(",")
-        cmdArgs["input"] = inputParam
-        cmdArgs["output"] = outputParam
+            # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
+            cmdArgs[option] = param
 
         # This is gross, but set the flags to false
         if "v" not in cmdArgs:

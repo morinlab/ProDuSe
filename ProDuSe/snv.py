@@ -143,36 +143,34 @@ def main(args=None):
     if args is None:
         args = parser.parse_args()
     elif args.config:
-        # Parse command line arguments from the config file
+        # Since configargparse does not parse commands from the config file if they are passed as argument here
+        # They must be parsed manually
+        cmdArgs = vars(args)
         config = configparser.ConfigParser()
         config.read(args.config)
-        cmdArgs = vars(args)
-        inputParam = config.get("config", "input")
-        outputParam = config.get("config", "output")
+        configOptions = config.options("config")
+        for option in configOptions:
+            param = config.get("config", option)
+            # Convert arguments that are lists into an actual list
+            if param[0] == "[" and param[-1] == "]":
+                paramString = param[1:-1]
+                param = paramString.split(",")
 
-        # Convert arguments that are lists into an actual list
-        if inputParam[0] == "[" and inputParam[-1] == "]":
-            paramString = inputParam[1:-1]
-            inputParam = paramString.split(",")
-        if outputParam[0] == "[" and outputParam[-1] == "]":
-            paramString = outputParam[1:-1]
-            outputParam = paramString.split(",")
-        cmdArgs["input"] = inputParam
-        cmdArgs["output"] = outputParam
+            # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
+            cmdArgs[option] = param
 
     bamfile = pysam.AlignmentFile(args.input, 'rb')
     fastafile = pysam.FastaFile(args.reference)
     targetbed = None
-    if not args.target_bed == None:
+    if args.target_bed is not None:
         pysam.index(bamfile)
-        targetbed = bed.BedOpen(args.target_bed, 'r');
+        targetbed = bed.BedOpen(args.target_bed, 'r')
 
+    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=int(args.min_reads_per_uid), min_base_qual=int(args.min_qual))
 
-    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=int(args.min_reads_per_uid), min_base_qual=int(args.min_qual));
-
-    output = None;
+    output = None
     if not args.output == "-":
-        output = open(args.output, 'w');
+        output = open(args.output, 'w')
 
     # if args.mode == 'validation':
     #     for pos in posCollection:
