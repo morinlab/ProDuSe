@@ -15,14 +15,6 @@ parser = configargparse.ArgParser()
 
 subparsers = parser.add_subparsers()
 
-parser_run_pipeline = subparsers.add_parser(
-    "run_produse",
-    parents=[ProdusePipeline.parser],
-    add_help=False
-    )
-parser_run_pipeline.set_defaults(
-    which="run_produse"
-    )
 parser_configure_produse = subparsers.add_parser(
     "configure_produse",
     parents=[configure_produse.parser],
@@ -87,6 +79,16 @@ parser_barcode = subparsers.add_parser(
     )
 parser_barcode.set_defaults(
     which="adapter_predict"
+    )
+
+parser_run_pipeline = subparsers.add_parser(
+    "run_produse",
+    parents=[ProdusePipeline.parser],
+    add_help=False,
+    )
+
+parser_run_pipeline.set_defaults(
+    which="run_produse"
     )
 
 if len(sys.argv[1:]) == 0:
