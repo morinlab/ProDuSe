@@ -35,18 +35,224 @@ Processes command line arguments
 global scriptDir
 scriptDir = os.path.abspath(os.path.dirname(__file__))
 
-# Pulls command like arguments from the sub-scripts
-parser = configargparse.ArgumentParser(description="Runs the entire ProDuSe pipeline on the supplied samples. ", parents=[configure_produse.parser, trim.parser, bwa.parser, collapse.parser, snv.parser, filter_produse.parser], conflict_handler="resolve")
-parser.add_argument("-c", "--config", required=False, is_config_file=True, help="ProDuSe config file, listing adapter sequences, positions, and other parameters to be passed to pipeline scripts. See (See \'etc/produse_config.ini\' for an example)")
-parser.add_argument("-x", "--stitcherpath", required=True, type=lambda x: isValidFile(x), help="Path to Illumina's Stitcher.exe (Can be obtained from \'https://github.com/Illumina/Pisces\')")
-parser.add_argument("-t", "--threads", default=1, type=int, help="Number of threads to use while running BWA [Default: %(default)s]")
+# Look, we both know this is terrible. But resolve_conflicts is also terrible. Thus, I don't have any choice but to copy-paste arguments over
+parser = configargparse.ArgumentParser(description="Runs the entire ProDuSe pipeline on the supplied samples. ")
 
-# Supress command line arguments for these options, as there are irrelevent for this wrapper
-parser.add_argument("-i", "--input", help=configargparse.SUPPRESS)
-parser.add_argument("-o", "--output", help=configargparse.SUPPRESS)
+# Universal Args
+pipelineArgs = parser.add_argument_group("Pipeline Arguments")
+
+pipelineArgs.add_argument("-c", "--config", required=False, is_config_file=True, help="ProDuSe config file, listing adapter sequences, positions, and other parameters to be passed to pipeline scripts. See (See \'etc/produse_config.ini\' for an example)")
+pipelineArgs.add_argument("-x", "--stitcherpath", required=True, type=lambda x: isValidFile(x, parser), help="Path to Illumina's Stitcher.exe (Can be obtained from \'https://github.com/Illumina/Pisces\')")
+
+# configure_produse args
+confArgs = parser.add_argument_group("configure_produse Arguments")
+inputArgs = confArgs.add_mutually_exclusive_group(required=True)
+inputArgs.add_argument(
+    "-f", "--fastqs",
+    metavar="FASTA",
+    nargs=2,
+    type=lambda x: isValidFile(x, parser),
+    help="Forward and reverse fastq files from paired end sequencing. Overwritten by --sample_config"
+    )
+confArgs.add_argument(
+    "-d", "--output_directory",
+    metavar="DIR",
+    default="." + os.sep,
+    help="Output directory for ProDuSe analysis [Default: %(default)s]"
+    )
+confArgs.add_argument(
+    "-r", "--reference",
+    metavar="FASTA",
+    required=True,
+    type=lambda x: isValidFile(x, parser),
+    help="Reference genome, in FASTA format. A BWA Index should be located in the same directory"
+    )
+
+inputArgs.add_argument(
+    "-sc", "--sample_config",
+    metavar="INI",
+    required=False,
+    type=lambda x: isValidFile(x, parser),
+    help="Config file listing sample names and FASTQ locations (See \'etc/sample_config.ini\' for an example)"
+    )
+
+# Trim args
+trimArgs = parser.add_argument_group("Trim Arguments")
+trimArgs.add(
+    "--adapter_sequence",
+    type=str,
+    required=True,
+    help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
+    )
+trimArgs.add(
+    "--adapter_position",
+    type=str,
+    required=True,
+    help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
+    )
+trimArgs.add(
+    "--max_mismatch",
+    type=int,
+    required=True,
+    help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
+    )
+trimArgs.add(
+    "-v",
+    action="store_true",
+    help="Instead, output entries that are distant from the adapter sequence"
+    )
+trimArgs.add(
+    "-u",
+    action="store_true",
+    help="Instead, output entries without trimming the adapter sequence"
+    )
+
+# bwa args
+bwaArgs = parser.add_argument_group("bwa Arguments")
+bwaArgs.add(
+    "-t", "--threads",
+    required=False,
+    default=1,
+    help="Number of threads to use while running BWA [Default: %(default)s]"
+    )
+
+bwaArgs.add(
+    "-R", "--readgroup",
+    required=False,
+    type=str,
+    help="Fastq read group"
+    )
+
+# Collapse arguments
+collapseArgs = parser.add_argument_group("Collapse Arguments")
+collapseArgs.add(
+    "-sp", "--strand_position",
+    metavar="STR",
+    type=str,
+    required=True,
+    help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes."
+    )
+
+collapseArgs.add(
+    "-dp", "--duplex_position",
+    metavar="STR",
+    type=str,
+    required=True,
+    help="The positions in the adapter sequence to include in distance calculations between forward and reverse reads, 0 for no, 1 for yes"
+    )
+
+# Used to maintain backwards compatibility with the poorly-named strand mis-match
+adapterMismatch = collapseArgs.add_mutually_exclusive_group(required=True)
+adapterMismatch.add(
+    "-amm", "--adapter_max_mismatch",
+    type=int,
+    help="The maximum number of mismatches allowed between the expected and actual adapter sequences [Default: %(default)s]",
+    )
+adapterMismatch.add(
+    "--strand_max_mismatch",
+    type=int,
+    help=configargparse.SUPPRESS,
+)
+
+collapseArgs.add(
+    "-dmm", "--duplex_max_mismatch",
+    type=int,
+    required=True,
+    help="The maximum number of mismatches allowed between the expected and actual duplexed adapter sequences",
+    )
+
+collapseArgs.add(
+    "-smm", "--sequence_max_mismatch",
+    type=int,
+    required=False,
+    default=20,
+    help="The maximum number of mismatches allowed in an alignment"
+    )
+
+collapseArgs.add(
+    "-oo", "--original_output",
+    type=str,
+    required=False,
+    action="append",
+    default=None,
+    help="A pair of empty fastq files to rewrite original fastqs with duplex information"
+    )
+
+collapseArgs.add(
+    "-sf", "--stats_file",
+    type=str,
+    required=False,
+    default=None,
+    help="An optional output file to list stats generated during collapse"
+    )
+
+# SNV arguments
+snvArgs = parser.add_argument_group("SNV Argumentss")
 
 
-def isValidFile(file):
+snvArgs.add_argument(
+    "-tb", "--target_bed",
+    required=False,
+    help="A tab-delinated file listing regions on which variant calling will be restricted to"
+    )
+snvArgs.add_argument(
+    "-vaft", "--variant_allele_fraction_threshold",
+    default=0.01,
+    type=float,
+    help="Minimum variant frequency threshold for each strand [Default: %(default)s]"
+    )
+snvArgs.add_argument(
+    "-mo", "--min_molecules",
+    default=40,
+    type=int,
+    help="Number of total molecules (supporting or otherwise) required to call a variant at this position. Reduce this if you are running only on positions you expect to be mutated [Default: %(default)s]"
+    )
+snvArgs.add_argument(
+    "-mum", "--mutant_molecules",
+    default=3,
+    required=False,
+    type=int,
+    help="Number of TOTAL molecules (i.e. on the forward and reverse strand) required to call a variant as real (set to 0 if you are forcing variant calling at known sites) [Default: %(default)s]"
+    )
+snvArgs.add_argument(
+    "-mrpu", "--min_reads_per_uid",
+    default=2,
+    type=int,
+    help="Bases with support between MRPU and SSBT will be classified as a weak supported base [Default: %(default)s]"
+    )
+snvArgs.add_argument(
+    "-ssbt", "--strong_supported_base_threshold",
+    default=3,
+    type=int,
+    help="Bases with support equal to or greater then SSBT, will be classified as a strong supported base [Default: %(default)s]"
+    )
+
+snvArgs.add_argument(
+    "-eds", "--enforce_dual_strand",
+    action='store_true',
+    help="require at least one molecule to be read in each of the two directions"
+    )
+snvArgs.add_argument(
+    "-mq", "--min_qual",
+    default=3,
+    type=int,
+    help="Minimum base quality threshold, below which a base will be treated as \'N\'")
+
+# Filter Args
+filterArgs = parser.add_argument_group("Filter Arguments")
+#filterArgs.add_argument("-c", "--config", is_config_file=True, type=lambda x: isValidFile(x, parser), help="Optional configuration file, which can provide any of the input arguments.")
+filterArgs.add_argument("-dsv", "--totalvaf", type=float, default=0.05, help="Dual-strand VAF threshold [Default: %(default)s]")
+filterArgs.add_argument("-md", "--min_duplex", type=int, default=3, help="Minimum duplex support required to call a variant [Default: %(default)s]")
+filterArgs.add_argument("-mp", "--min_pos_strand", type=int, default=1, help="Minimum positive strand support required to call a varaint [Default: %(default)s]")
+filterArgs.add_argument("-mn", "--min_neg_strand", type=int, default=1, help="Minimum negative strand support required to call a variant [Default: %(default)s]")
+filterArgs.add_argument("-ms", "--min_singleton", type=int, default=3, help="Minimum singleton support required to call a variant [Default: %(default)s]")
+filterArgs.add_argument("-ww", "--weak_base_weight", type=lambda x: isValidWeight(x, parser), default=0.1, help="Weight of weak bases, relative to strong supported bases [Default: %(default)s]")
+#filterArgs.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser), required=True, help="Input ProDuSe vcf file, the output of \'snv.py\'")
+filterArgs.add_argument("-sb", "--strand_bias", type=float, default=0.05, help="Strand bias p-value threshold, below which variants will be ignored")
+#filterArgs.add_argument("-o", "--output", required=True, help="Output VCF file name")
+
+
+def isValidFile(file, parser):
 	"""
 	Checks to ensure the specified file exists, and throws an error if it does not
 
