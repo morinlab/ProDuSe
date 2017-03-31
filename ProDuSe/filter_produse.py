@@ -53,13 +53,13 @@ def isValidWeight(weight, parser):
 		parser.error(): A ConfigArgparser error object, if the value is not a float or is not reasonable
 	"""
 
-	if not isinstance(weight, float):
-		raise parser.error("Weak base weight must be a float")
-	else:
+	try:
 		weight = float(weight)
 		if weight < 0 or weight > 1:
 			raise parser.error("Weak base weight must be a float between 0 and 1")
-	return weight
+		return weight
+	except ValueError:
+		raise parser.error("Weak base weight must be a float between 0 and 1")
 
 
 def findFields(infoCol):
@@ -224,8 +224,8 @@ def filterVariant(refAllele, altAllele, desc, minVaf, minDuplex, minPosStrand, m
 
 	# Step 2: Check VAF
 	# Calculate VAF
-	refCount = int(desc["MC"].split(",")[refIndex])
-	altCount = sum(int(desc["MC"].split(",")[i]) for i in altIndex)
+	refCount = float(desc["MC"].split(",")[refIndex])
+	altCount = sum(float(desc["MC"].split(",")[i]) for i in altIndex)
 	vaf = altCount / (altCount + refCount)
 
 	# Run vaf filter

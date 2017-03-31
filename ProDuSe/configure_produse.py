@@ -262,7 +262,7 @@ def check_ref(ref_file, produse_path):
     # Lets just symlink them over as well
     # That said, bwa generates everything if you run index, so if any of those are missing, there is no point symlinking them
     if not all_indexes_present:
-        sys.stdout.write(printPrefix + time.strftime('%X') + "\tGenerating Indexes\n")
+        sys.stdout.write(printPrefix + time.strftime('%X') + "\tGenerating Indexes...\n")
         ref_dir = produse_path + os.sep + "Reference_Genome" + os.sep
         out_ref = ref_dir + os.path.basename(ref_file)
         os.mkdir(ref_dir)
@@ -283,7 +283,31 @@ def check_ref(ref_file, produse_path):
             # Sanity check: Lets make sure bwa is installed on the system
             check_command("bwa")
             bwaArgs = ["bwa", "index", out_ref]
-            subprocess.check_call(bwaArgs)
+            runBwa = subprocess.Popen(bwaArgs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            for line in runBwa.stdout:
+                line = line.decode("utf-8")
+                # Parse the size of the ref genome
+                # Note: This will break if bwa changes their status update formatting
+                if "[BWTIncCreate] textLength" in line:
+                    genLength = line.split(" ")[1].split("=")[1][:-1]
+                    # If the formatting has changes, don't even try to generate a completion estimate
+                    try:
+                        genLength = float(genLength)
+                    except ValueError:
+                        break
+
+                # Parse the current status from bwa's stdout
+                if "[BWTIncConstructFromPacked]" in line:
+                    currentStatus = line.split(" ")[4]
+                    # Once again, if the formatting has changes, don't even try to generate a completion estimate
+                    try:
+                        currentStatus = float(currentStatus)
+                    except ValueError:
+                        break
+                    sys.stdout.write(printPrefix + time.strftime('%X') + "\tIndexing " + str(currentStatus/genLength * 100) + "% Complete\n")
+                if "Finished constructing BWT" in line:
+                    sys.stdout.write(printPrefix + time.strftime('%X') + "\tFinalizing Indexes...\n")
+
         else:
             os.symlink(amb_file, out_ref + ".amb")
             os.symlink(ann_file, ref_dir + ".ann")

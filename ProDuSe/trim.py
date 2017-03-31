@@ -85,7 +85,7 @@ parser.add(
     help="Instead, output entries that are distant from the adapter sequence"
     )
 parser.add(
-    "-t",
+    "-u",
     action="store_true",
     help="Instead, output entries without trimming the adapter sequence"
     )
@@ -129,23 +129,28 @@ def main(args=None):
         args = parser.parse_args()
     elif args.config:
 
-        # Parse command line arguments from the config file
+        # Parse input and output file names from the config file
         config = configparser.ConfigParser()
         config.read(args.config)
-
         cmdArgs = vars(args)
-        for arg, param in config["config"].items():
+        inputParam = config.get("config", "input")
+        outputParam = config.get("config", "output")
 
-            # Convert arguments that are lists into an actual list
-            if param[0] == "[" and param[-1] == "]":
-                paramString = param[1:-1]
-                param = paramString.split(",")
-            # Overwrite existing arguments with those from the config file
-            cmdArgs[arg] = param
+        # Convert arguments that are lists into an actual list
+        if inputParam[0] == "[" and inputParam[-1] == "]":
+            paramString = inputParam[1:-1]
+            inputParam = paramString.split(",")
+        if outputParam[0] == "[" and outputParam[-1] == "]":
+            paramString = outputParam[1:-1]
+            outputParam = paramString.split(",")
+        cmdArgs["input"] = inputParam
+        cmdArgs["output"] = outputParam
 
         # This is gross, but set the flags to false
-        args.v = False
-        args.t = False
+        if "v" not in cmdArgs:
+            args.v = False
+        if "t" not in cmdArgs:
+            args.t = False
 
     # If input and output files were specified from the command line, ensures that a pair of files were provided
     if not len(args.input) == 2:

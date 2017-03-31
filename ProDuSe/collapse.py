@@ -168,18 +168,23 @@ def main(args=None):
     if args is None:
         args = parser.parse_args()
     elif args.config:
-        # Parse command line arguments from the config file
+
+        # Parse input and output arguments from the config file
         config = configparser.ConfigParser()
         config.read(args.config)
         cmdArgs = vars(args)
-        for arg, param in config["config"].items():
+        inputParam = config.get("config", "input")
+        outputParam = config.get("config", "output")
 
-           # Convert arguments that are lists into an actual list
-            if param[0] == "[" and param[-1] == "]":
-                paramString = param[1:-1]
-                param = paramString.split(",")
-
-            cmdArgs[arg] = param
+        # Convert arguments that are lists into an actual list
+        if inputParam[0] == "[" and inputParam[-1] == "]":
+            paramString = inputParam[1:-1]
+            inputParam = paramString.split(",")
+        if outputParam[0] == "[" and outputParam[-1] == "]":
+            paramString = outputParam[1:-1]
+            outputParam = paramString.split(",")
+        cmdArgs["input"] = inputParam
+        cmdArgs["output"] = outputParam
 
     if not args.adapter_max_mismatch:
         args.adapter_max_mismatch = args.strand_max_mismatch
