@@ -10,6 +10,7 @@ from ProDuSe import snv
 from ProDuSe import bwa
 from ProDuSe import ProdusePipeline
 from ProDuSe import filter_produse
+from ProDuSe import SplitMerge
 
 parser = configargparse.ArgParser()
 
@@ -42,6 +43,15 @@ parser_align = subparsers.add_parser(
     )
 parser_align.set_defaults(
     which="bwa"
+    )
+
+parser_splitmerge = subparsers.add_parser(
+    "split_merge",
+    parents=[SplitMerge.parser],
+    add_help=False
+    )
+parser_splitmerge.set_defaults(
+    which="split_merge"
     )
 
 parser_collapse = subparsers.add_parser(
@@ -119,3 +129,5 @@ if args.which == "run_produse":
 
 if args.which == "filter":
     filter_produse.main(args)
+if args.which == "split_merge":
+    SplitMerge.main(args)
