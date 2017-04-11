@@ -115,6 +115,7 @@ parser.add(
     type=str,
     required=False,
     action="append",
+    nargs=2,
     default=None,
     help="A pair of empty fastq files to rewrite original fastqs with duplex information"
     )
