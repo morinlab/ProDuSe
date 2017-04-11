@@ -167,6 +167,20 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     new_config.write(output)
     output.close()
 
+    # Splitmerge files
+    splitmerge_collapse_tmp = os.sep.join([tmp_dir, sample_name + "collapse.sorted.bam"])
+    splitmerge_stit_tmp = os.sep.join([tmp_dir, sample_name + "collapse.stitched.sorted.bam"])
+
+    # Creates SplitMerge config file
+    new_config = configparser.RawConfigParser()
+    new_config.add_section("config")
+    new_config.set("config", "input", splitmerge_stit_tmp)
+    new_config.set("config", "output", os.sep.join([results_dir, sample_name + "SplitMerge.bam"]))
+    new_config.set("config", "unstitched_input", splitmerge_collapse_tmp)
+    output = open(os.sep.join([config_dir, "splitmerge_task.ini"]), 'w')
+    new_config.write(output)
+    output.close()
+
     # Creates SNV calling config file
     new_config = configparser.RawConfigParser()
     new_config.add_section("config")
@@ -347,6 +361,7 @@ parser.add_argument(
     "-d", "--output_directory",
     metavar="DIR",
     default="." + os.sep,
+    type=lambda x: is_valid_dir(x, parser),
     help="Output directory for ProDuSe analysis [Default: %(default)s]"
     )
 parser.add_argument(
@@ -381,7 +396,7 @@ def is_valid_file(file, parser):
         parser: An argparse.ArgumentParser() object. Used to throw an exception if the file does not exist
 
     Returns:
-        type: The file itself
+        file: The file itself
 
     Raises:
         parser.error(): An ArgumentParser.error() object, thrown if the file does not exist
@@ -399,6 +414,24 @@ def is_valid_file(file, parser):
         return file
     else:
         parser.error("The file %s does not exist" % (file))
+
+
+def is_valid_dir(directory, parser):
+    """
+    Checks to ensure the specified directory exists, and throws an error if it does not
+
+    Args:
+        directory: A filepath to a directory
+        parser: An argparse.ArgumentParser() object
+    Returns:
+        dir: The path itself
+    raises:
+        parser.error(): An ArgumentParser.error() object thrown if the directory does not exist
+    """
+    if not os.path.exists(directory):
+        raise parser.error("The directory %s does not exist" % (directory))
+    else:
+        return directory
 
 
 def check_command(command, versionStr=None):
