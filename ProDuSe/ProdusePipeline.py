@@ -1,5 +1,18 @@
 #! /usr/bin/env python
 
+# USAGE:
+# 	See ProdusePipeline -h for details
+#
+# DESCRIPTION
+# 	Runs the entire ProDuSe variant calling pipeline on the provided samples
+# 	A single sample can be run by specifying -f <fastq1> <fastq2>
+# 	To run multiple samples, specify a sample_config file
+# 	Note that paramters specified in the sample_config file override other paramters for that sample
+# 	Arguments specified in the produse_config file override command line arguments
+#
+# AUTHORS
+# 	Christopher Rushton (ckrushto@sfu.ca)
+
 # Import stanard python modules
 import configargparse
 import os
@@ -16,6 +29,7 @@ try:
 	import collapse
 	import snv
 	import filter_produse
+	import SplitMerge
 
 # If installed and running in python3
 except ImportError:
@@ -25,15 +39,12 @@ except ImportError:
 	from ProDuSe import collapse
 	from ProDuSe import snv
 	from ProDuSe import filter_produse
+	from ProDuSe import SplitMerge
 
 """
 Processes command line arguments
 
 """
-
-# Used to locate perl scripts required for running ProDuSe
-global scriptDir
-scriptDir = os.path.abspath(os.path.dirname(__file__))
 
 # Look, we both know this is terrible. But resolve_conflicts is also terrible. Thus, I don't have any choice but to copy-paste arguments over
 parser = configargparse.ArgumentParser(description="Runs the entire ProDuSe pipeline on the supplied samples. ")
@@ -55,7 +66,7 @@ inputArgs.add_argument(
     help="Forward and reverse fastq files from paired end sequencing. Overwritten by --sample_config"
     )
 confArgs.add_argument(
-    "-d", "--output_directory",
+    "-d", "--output_directory", "-o",
     metavar="DIR",
     default="." + os.sep,
     help="Output directory for ProDuSe analysis [Default: %(default)s]"
@@ -240,16 +251,14 @@ snvArgs.add_argument(
 
 # Filter Args
 filterArgs = parser.add_argument_group("Filter Arguments")
-#filterArgs.add_argument("-c", "--config", is_config_file=True, type=lambda x: isValidFile(x, parser), help="Optional configuration file, which can provide any of the input arguments.")
 filterArgs.add_argument("-dsv", "--totalvaf", type=float, default=0.05, help="Dual-strand VAF threshold [Default: %(default)s]")
 filterArgs.add_argument("-md", "--min_duplex", type=int, default=3, help="Minimum duplex support required to call a variant [Default: %(default)s]")
 filterArgs.add_argument("-mp", "--min_pos_strand", type=int, default=1, help="Minimum positive strand support required to call a varaint [Default: %(default)s]")
 filterArgs.add_argument("-mn", "--min_neg_strand", type=int, default=1, help="Minimum negative strand support required to call a variant [Default: %(default)s]")
 filterArgs.add_argument("-ms", "--min_singleton", type=int, default=3, help="Minimum singleton support required to call a variant [Default: %(default)s]")
 filterArgs.add_argument("-ww", "--weak_base_weight", type=lambda x: isValidWeight(x, parser), default=0.1, help="Weight of weak bases, relative to strong supported bases [Default: %(default)s]")
-#filterArgs.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser), required=True, help="Input ProDuSe vcf file, the output of \'snv.py\'")
 filterArgs.add_argument("-sb", "--strand_bias", type=float, default=0.05, help="Strand bias p-value threshold, below which variants will be ignored")
-#filterArgs.add_argument("-o", "--output", required=True, help="Output VCF file name")
+
 
 
 def isValidFile(file, parser):
@@ -398,7 +407,7 @@ def runStitcher(inputBAM, stitcherPath):
 	return inputBAM.replace(".bam", ".stitched.bam")
 
 
-def runSort(bamFile):
+def runSort(bamFile, byName=False):
 	"""
 	Sorts the supplied BAM file
 
@@ -407,11 +416,14 @@ def runSort(bamFile):
 
 	Args:
 		bamFile: Path to BAM file to be sorted
+		byName: Whether or not to sort the BAM file by read name
 	Returns:
 		outFile: Path to sorted BAM file
 	"""
 	outFile = bamFile.replace(".bam", ".sorted.bam")
 	samtoolsArgs = ["samtools", "sort", "-o", outFile, bamFile]
+	if byName:
+		samtoolsArgs.append("-n")
 	subprocess.check_call(samtoolsArgs)
 	return outFile
 
@@ -493,16 +505,18 @@ def runPipeline(args, sampleName, sampleDir):
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Alignment Complete\n"]))
 
 	# Run stitcher
-	collapsedBamFile = os.path.abspath(os.path.join(sampleDir, "data", sampleName + ".collapse.bam"))
+	collapsedBamFile = os.path.abspath(os.path.join(sampleDir, "tmp", sampleName + ".collapse.bam"))
 	stitchedBam = runStitcher(collapsedBamFile, args.stitcherpath)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Stitching Complete\n"]))
 
-	# Run splitmerge
-	sortedStitchedBam = runSort(stitchedBam)
-	global scriptDir
+	# Sort files prior to splitmerge
+	runSort(stitchedBam, byName=True)
+	runSort(collapsedBamFile, byName=True)
+
+	args.config = getConfig(sampleDir, "splitmerge")
 	splitMergeBam = os.path.join(sampleDir, "results", sampleName + ".SplitMerge.bam")
-	runSplitMerge(sortedStitchedBam, splitMergeBam, scriptDir + os.sep + "splitmerge.pl")
-	sortedSplitmergeBam = runSort(splitMergeBam)
+	SplitMerge.main(args)
+	runSort(splitMergeBam)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": SplitMerge Complete\n"]))
 
 	# Time for SNV calling, what everyone has been waiting for
@@ -545,7 +559,6 @@ def main(args=None):
 	check_command("bwa")
 	samtoolsVer = check_command("samtools", "--version")
 	monoVer = check_command("mono", "--version")
-	perlVer = check_command("perl", "--version")
 	pythonVer = check_command("python", "--version")
 
 	printPrefix = "PRODUSE-MAIN\t"
@@ -556,7 +569,7 @@ def main(args=None):
 	sampleList = getSampleList(args.output_directory)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Configuration Complete\n"]))
 
-	createLogFile(args, os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", "ProDuSe_Task.log"), samtoolsVer, monoVer, perlVer, pythonVer)
+	createLogFile(args, os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", "ProDuSe_Task.log"), samtoolsVer, monoVer, pythonVer)
 
 	# Run the pipeline on each sample
 	for sample in sampleList:
@@ -565,6 +578,7 @@ def main(args=None):
 		sampleDir = os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", sample)
 		runPipeline(args, sample, sampleDir)
 	sys.stderr.write("\t".join(["\n" + printPrefix, time.strftime('%X'), "All Samples Processed" + "\n"]))
+
 
 if __name__ == "__main__":
 	print("")
