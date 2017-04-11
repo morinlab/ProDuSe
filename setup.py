@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='ProDuSe',
-    version="0.2.2",
+    version="0.2.3",
     description='Process Duplex Sequence Data',
     author='Marco Albuquerque',
     author_email='malbuque@sfu.ca',
@@ -24,7 +24,7 @@ setup(
         "pysam",
         "numpy"
         ],
-    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.2.tar.gz",
+    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.3.tar.gz",
     license="GNU GPLv3",
     scripts=["bin/produse"],
     data_files = [("ProDuSe", ["LICENSE.txt", "README.md", "ProDuSe/splitmerge.pl", "ProDuSe/filter_produse.pl"])]
