@@ -577,11 +577,10 @@ def findIndel(origForward, origReverse, fStitchedCigar, rStitchedCigar, offset):
 					break
 				rOutCigar[i + j] = offsetType
 			"""
-	# There are soft-clipped bases on the forward and reverse read. In this case,
+	# There are soft-clipped bases on the forward and reverse read. In this case, some sort of local realignment will be required
 	else:
-		print(origFCigar)
-		print(origRCigar)
-		print("A miracle occured!")
+		fOutCigar = fStitchedCigar
+		rOutCigar = rStitchedCigar
 
 	return fOutCigar, rOutCigar
 
