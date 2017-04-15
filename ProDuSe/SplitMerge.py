@@ -1,5 +1,24 @@
 #!/usr/bin/env python
 
+# USAGE:
+# 	See python SplitMerge.py -h for details
+#
+# DESCRIPTION:
+#  	Seperates paired-ends reads which have been merged together by Stitcher
+#
+# 	If a read was not merged, it is simply written to the output BAM file
+# 	If a read was merged (stitched) together, the read tag written by Stitcher (i.e. 'XD')
+# 	is examined to identify which bases in the sequence originated from which read.
+# 	The merged (stitched) sequence is then divided into apropriate forward and reverse reads.
+# 	Note that stitching is simplified, so in the case of complicated stitching (ex. 12F2R3F16S20R)
+# 	some bases may be placed on one read when they originated from the opposite read. In addition,
+# 	changes in read alignment caused by stitching are detected, and the cigar string of output reads
+# 	is modified to include an INDEL at the apropriate location to restore proper read alignment
+#
+# AUTHOR:
+# 	Christopher Rushton (ckrushto@sfu.ca)
+
+
 import configargparse
 import configparser
 import sys
@@ -9,7 +28,8 @@ import copy
 import re
 import time
 
-parser = configargparse.ArgumentParser(description="Splits reads merged ")
+# Processes command line arguments
+parser = configargparse.ArgumentParser(description="Splits reads merged by stitcher")
 parser.add_argument("-c", "--config", required=False, is_config_file=True, type=lambda x: isValidFile(x, parser), help="Optional configuration file, which can provide any of the input arguments.")
 parser.add_argument("-i", "--input", metavar="BAM", required=True, type=lambda x: isValidFile(x, parser), help="Input sorted BAM file, containing merged reads to be split")
 parser.add_argument("-u", "--unstitched_input", metavar="BAM", required=True, type=lambda x: isValidFile(x, parser), help="Input sorted BAM file, coresponding to the original unstitched reads")
@@ -108,6 +128,8 @@ def cigarToList(cigar):
 def listToCigar(array):
 	"""
 	Converts a list to a cigar string
+
+	I'm calling it an array, even though I know it's a list
 
 	Args:
 		array: A list coresponding to the cigar of interest
@@ -347,7 +369,7 @@ def overlayCigars(iCigar, template, sequence):
 		fSeq = ""
 	if rCigarList is not None and "M" not in rCigarList and "I" not in rCigarList:
 		if sharedCigarList is None:
-	 		# If the reverse cigar was second, append it to the forward cigar
+			# If the reverse cigar was second, append it to the forward cigar
 			if reverseOffset > forwardOffset:
 				fCigarList.extend(rCigarList)
 				fSeq = fSeq + rSeq
@@ -421,6 +443,22 @@ def findCigar(subCigar, origCigar):
 
 def getCigarSeq(subCig, template, origCigList, sequence):
 	"""
+	Finds the indexes of the sub-cigar string, and uses that to divide the sequence
+
+	Determines the start and end index of the sub-cigar in the template cigar. Using this,
+	the offset from the start of the sequence, and the sequence represented by this cigar,
+	is determined. The proportion of the original cigar presented by this sub-cigar is also
+	determined, and returned.
+
+	Args:
+		subCigar: A string coresponding to a sub-cigar of template cigar
+		template: The original cigar string (string)
+		origCigList: A list representing the read's actual cigar sequence
+		seqnece: A nucleotide sequence (string)
+	Returns:
+		offset: The offset of this sub-cigar from the start of the cigar (int)
+		cigOutList: The sequence of the original cigar represented by the sub-cigar (list)
+		outSequence: The nucleotide sequence represented by the sub-cigar sequence (string) 
 	"""
 	if subCig is None:
 		return None, None, ""
@@ -482,7 +520,21 @@ def getStartIndex(start, cigarList, origCigar=None):
 
 def createRead(iRead, flag, divStart, divEnd, tempLen, cigarSeq, mateStart, start):
 	"""
-	TODO
+	Creates a pysam.AlignmentSequence() object with the listed characteristics
+
+	Creates a copy of iRead, and divides it accoriding to the specified paramters
+
+	Args:
+		iRead: A pysam.AlignmentSequence() object coresponding to the stitched (merged) read
+		flag: An int corespoding to the Read flag (see https://samtools.github.io/hts-specs/SAMv1.pdf for details)
+		divStart: Start locus of the divided sequence (int)
+		divEnd: End locus of the divided sequence (int)
+		tempLen: An int coresponding to template length or insert size
+		cigarSeq: A string coresponding to the cigar string (see https://samtools.github.io/hts-specs/SAMv1.pdf for details)
+		mateStart: An int coresponding to the mate read's start index
+		start: An int coresponding to this read's start index
+	Returns:
+		oRead: A pysam.AlignmentSequence() object representing the output read
 	"""
 
 	oRead = copy.deepcopy(iRead)
@@ -499,8 +551,6 @@ def createRead(iRead, flag, divStart, divEnd, tempLen, cigarSeq, mateStart, star
 
 def findIndel(origForward, origReverse, fStitchedCigar, rStitchedCigar, offset):
 	"""
-
-	ABANDONED DUE TO MIS-STITCH ERRORS
 
 	Determines the location of the indel in the stitched reads
 
@@ -550,6 +600,7 @@ def findIndel(origForward, origReverse, fStitchedCigar, rStitchedCigar, offset):
 				fOutCigar.insert(i, offsetType)
 		else:
 			pass
+			# TODO: Handle insertions
 			"""
 			for j in range(0, abs(offset)):
 				# Here, the insertion is too big to be explained by soft-clipping alone. Rescue failed
@@ -563,13 +614,15 @@ def findIndel(origForward, origReverse, fStitchedCigar, rStitchedCigar, offset):
 			if origRCigar[i] != "S":
 				i -= 1
 				break
+			offsetLength = len(origRCigar) - i
+			offsetLength = len(rStitchedCigar) - offsetLength
 		# Modifify the de-stitched cigar as apropriate
 		if offsetType == "D":
 			for j in range(0, abs(offset)):
-				rOutCigar.insert(i, offsetType)
+				rOutCigar.insert(0, offsetType)
 		else:
 			pass
-			# This is kind of complicated.
+			# TODO: Handle insertions
 			"""
 			for j in range(0, abs(offset)):
 				# Here, the insertion is too big to be explained by soft-clipping alone. Rescue failed
@@ -577,16 +630,30 @@ def findIndel(origForward, origReverse, fStitchedCigar, rStitchedCigar, offset):
 					break
 				rOutCigar[i + j] = offsetType
 			"""
-	# There are soft-clipped bases on the forward and reverse read. In this case, some sort of local realignment will be required
+	# There are soft-clipped bases on the forward and reverse read. In this case,
 	else:
-		fOutCigar = fStitchedCigar
-		rOutCigar = rStitchedCigar
+		pass
 
 	return fOutCigar, rOutCigar
 
 
 def processRead(read, origReads, counter):
 	"""
+	Seperates Stitched Reads
+
+	If a read is passed which is not stitched, it is simply returned.
+	If a N-read is passed, nothing is returned
+	If a stitched read was passed, the bases originating from each original read are identified from the stitched tag
+	One or two reads are returned depending on if the original reads completely overlap, or if one is soft-clipped
+	Also identifies reads where the stitched alignment is different than the original alignment, and either corrects the
+	alignment (if the difference is likely due to a real INDEL), or discards them
+
+	Args:
+		read: A pysam.AlignmentSequence() object coresponding to a read from the merged (stitched) BAM file
+		origReads: A list containing one or two pysam.AlignmentSequence(), coresponding to the original reads for the stitched read
+		counter: An int listing the number of reads which have been processed so far
+	Returns:
+		outReads: A list containing zero, one, or two pysam.AlignmentSequence() objects, coresponding to the de-stitched (if-applicable) reads
 	"""
 
 	# If the read is simply a bunch of Ns, ignore this read
@@ -603,34 +670,13 @@ def processRead(read, origReads, counter):
 	if not read.has_tag("XD"):
 		return [read]
 
-	# Ok, this read was merged by stitcher. We need to parse the elements of the cigar string, and determine which bases are unique to each read
-	# Determine if the read originates from the foward or reverse strand
-	if ":-:" in read.query_name:
-		forwardFlag = 163
-		reverseFlag = 83
-	else:
-		forwardFlag = 99
-		reverseFlag = 147
-
-	# Sanity check
 	sepReads = overlayCigars(read.cigarstring, read.get_tag("XD"), read.query_sequence)
-	if len(sepReads["fSeq"]) + len(sepReads["rSeq"]) + len(sepReads["sSeq"]) != len(read.query_sequence):
-		print(str(len(sepReads["fSeq"])))
-		print(str(sepReads["fCigarList"]))
-		print(str(len(sepReads["rSeq"])))
-		print(str(len(sepReads["sSeq"])))
-		print(len(read.query_sequence))
-		print(read)
-		print("Something awful happened")
-		exit(1)
-	"""
-	if effectiveLengthFromCigar(sepReads["fCigar"]) != len(sepReads["fSeq"]):
-		print("Cigar Failure")
-	if effectiveLengthFromCigar(sepReads["sCigar"]) != len(sepReads["sSeq"]):
-		print("Cigar Failure")
-	if effectiveLengthFromCigar(sepReads["rCigar"]) != len(sepReads["rSeq"]):
-		print("Cigar Failure")
-	"""
+
+	# =========================================================================================== #
+	# This may just look like needless blocks of code, but there are subtle differences between each
+	# Beware when making changes!
+	# =========================================================================================== #
+
 	# One read completely encapulates the other. In this case, simply output the larger read alone
 	if not sepReads["sCigarList"]:
 		if not sepReads["rCigarList"]:
@@ -665,7 +711,9 @@ def processRead(read, origReads, counter):
 		if sepReads["sOffset"] > sepReads["rOffset"]:
 			stitchedOffset = read.reference_start + effectiveLengthFromCigar(cigarToList(read.cigarstring)) - origReads[0].reference_start - effectiveLengthFromCigar(cigarToList(origReads[0].cigarstring))
 			if stitchedOffset != 0:
+				# I'm going to throw out these reads, as they seem to be errors by stitcher more commonly than not
 				return []
+
 			rStart = getStartIndex(read.reference_start, sepReads["rCigarList"], origReads[1].cigarstring)
 			fStart = getStartIndex(read.reference_start + effectiveLengthFromCigar(sepReads["rCigarList"]), sepReads["sCigarList"], origReads[0].cigarstring)
 			fRead = createRead(read, origReads[0].flag, sepReads["sOffset"], sepReads["sOffset"] + len(sepReads["sSeq"]), origReads[0].template_length, listToCigar(sepReads["sCigarList"]), rStart, fStart)
@@ -673,25 +721,60 @@ def processRead(read, origReads, counter):
 		else:
 			stitchedOffset = read.reference_start + effectiveLengthFromCigar(cigarToList(read.cigarstring)) - origReads[1].reference_start - effectiveLengthFromCigar(cigarToList(origReads[1].cigarstring))
 			if stitchedOffset != 0:
+				# I'm going to throw out these reads, as they seem to be errors by stitcher more commonly than not
 				return []
-			rStart = getStartIndex(read.reference_start + len(sepReads["sSeq"]), sepReads["rCigarList"], origReads[1].cigarstring)
+			rStart = getStartIndex(read.reference_start + effectiveLengthFromCigar(sepReads["sCigarList"]), sepReads["rCigarList"], origReads[1].cigarstring)
 			fStart = getStartIndex(read.reference_start, sepReads["sCigarList"], origReads[0].cigarstring)
 			fRead = createRead(read, origReads[0].flag, 0, len(sepReads["sSeq"]), origReads[0].template_length, listToCigar(sepReads["sCigarList"]), rStart, fStart)
 			rRead = createRead(read, origReads[1].flag, sepReads["rOffset"], sepReads["rOffset"] + len(sepReads["rSeq"]), origReads[1].template_length, listToCigar(sepReads["rCigarList"]), fStart, rStart)
 		return [fRead, rRead]
+
+	# There are no bases unique to the foward read, but some are unique to the reverse read
+	elif sepReads["fCigarList"] and not sepReads["rCigarList"]:
+
+		if sepReads["sOffset"] > sepReads["fOffset"]:
+			stitchedOffset = read.reference_start + effectiveLengthFromCigar(cigarToList(read.cigarstring)) - origReads[1].reference_start - effectiveLengthFromCigar(cigarToList(origReads[1].cigarstring))
+			if stitchedOffset != 0:
+				# I'm going to throw out these reads, as they seem to be errors by stitcher more commonly than not
+				return []
+			rStart = getStartIndex(read.reference_start + effectiveLengthFromCigar(sepReads["fCigarList"]), sepReads["sCigarList"], origReads[1].cigarstring)
+			fStart = getStartIndex(read.reference_start, sepReads["sCigarList"], origReads[0].cigarstring)
+			fRead = createRead(read, origReads[0].flag, sepReads["fOffset"], sepReads["fOffset"] + len(sepReads["fSeq"]), origReads[0].template_length, listToCigar(sepReads["fCigarList"]), rStart, fStart)
+			rRead = createRead(read, origReads[1].flag, sepReads["sOffset"], sepReads["sOffset"] + len(sepReads["sSeq"]), origReads[1].template_length, listToCigar(sepReads["sCigarList"]), fStart, rStart)
+		else:
+			stitchedOffset = read.reference_start + effectiveLengthFromCigar(cigarToList(read.cigarstring)) - origReads[0].reference_start - effectiveLengthFromCigar(cigarToList(origReads[0].cigarstring))
+			if stitchedOffset != 0:
+				# I'm going to throw out these reads, as they seem to be errors by stitcher more commonly than not
+				return []
+			rStart = getStartIndex(read.reference_start, sepReads["sCigarList"], origReads[1].cigarstring)
+			fStart = getStartIndex(read.reference_start + effectiveLengthFromCigar(sepReads["sCigarList"]), sepReads["fCigarList"], origReads[0].cigarstring)
+			fRead = createRead(read, origReads[0].flag, sepReads["fOffset"], sepReads["fOffset"] + len(sepReads["fSeq"]), origReads[0].template_length, listToCigar(sepReads["fCigarList"]), rStart, fStart)
+			rRead = createRead(read, origReads[1].flag, sepReads["sOffset"], sepReads["sOffset"] + len(sepReads["sSeq"]), origReads[1].template_length, listToCigar(sepReads["sCigarList"]), fStart, rStart)
+		return [fRead, rRead]
+
 	elif sepReads["fCigarList"] and sepReads["rCigarList"]:
 
 		if sepReads["fOffset"] > sepReads["rOffset"]:
 
 			stitchedOffset = read.reference_start + effectiveLengthFromCigar(cigarToList(read.cigarstring)) - origReads[0].reference_start - effectiveLengthFromCigar(cigarToList(origReads[0].cigarstring))
 			if stitchedOffset != 0:
-				return []
+				sepReads["rCigarList"], sepReads["fCigarList"] = findIndel(origReads[1], origReads[0], sepReads["rCigarList"], sepReads["fCigarList"], stitchedOffset)
+
 			# Randomly assign the shared bases to one of the two reads
-			if counter % 2 == 0:
+			# If an indel was added to one of the two reads, add the shared bases to that read
+			if sepReads["fCigarList"][0] == "D" or sepReads["fCigarList"][0] == "I":
 				sepReads["fOffset"] = sepReads["sOffset"]
 				sepReads["fSeq"] = sepReads["sSeq"] + sepReads["fSeq"]
 				sepReads["sCigarList"].extend(sepReads["fCigarList"])
-				sepReads["fCigarList"] == sepReads["sCigarList"]
+				sepReads["fCigarList"] = sepReads["sCigarList"]
+			elif sepReads["rCigarList"][-1] == "D" or sepReads["rCigarList"][-1] == "I":
+				sepReads["rSeq"] = sepReads["rSeq"] + sepReads["sSeq"]
+				sepReads["rCigarList"].extend(sepReads["sCigarList"])
+			elif counter % 2 == 0:
+				sepReads["fOffset"] = sepReads["sOffset"]
+				sepReads["fSeq"] = sepReads["sSeq"] + sepReads["fSeq"]
+				sepReads["sCigarList"].extend(sepReads["fCigarList"])
+				sepReads["fCigarList"] = sepReads["sCigarList"]
 			else:
 				sepReads["rSeq"] = sepReads["rSeq"] + sepReads["sSeq"]
 				sepReads["rCigarList"].extend(sepReads["sCigarList"])
@@ -703,8 +786,7 @@ def processRead(read, origReads, counter):
 
 			stitchedOffset = read.reference_start + effectiveLengthFromCigar(cigarToList(read.cigarstring)) - origReads[1].reference_start - effectiveLengthFromCigar(cigarToList(origReads[1].cigarstring))
 			if stitchedOffset != 0:
-				return []
-				# sepReads["fCigarList"], sepReads["rCigarList"] = findIndel(origReads[0], origReads[1], sepReads["fCigarList"], sepReads["rCigarList"], stitchedOffset)
+				sepReads["fCigarList"], sepReads["rCigarList"] = findIndel(origReads[0], origReads[1], sepReads["fCigarList"], sepReads["rCigarList"], stitchedOffset)
 
 			# If an indel was added to one of the two reads, add the shared bases to that read
 			if sepReads["fCigarList"][-1] == "D" or sepReads["fCigarList"][-1] == "I":
@@ -714,7 +796,7 @@ def processRead(read, origReads, counter):
 				sepReads["rOffset"] = sepReads["sOffset"]
 				sepReads["rSeq"] = sepReads["sSeq"] + sepReads["rSeq"]
 				sepReads["sCigarList"].extend(sepReads["rCigarList"])
-				sepReads["rCigarList"] == sepReads["sCigarList"]
+				sepReads["rCigarList"] = sepReads["sCigarList"]
 			# Randomly assign the shared bases to one of the two reads
 			elif counter % 2 == 0:
 				sepReads["fSeq"] = sepReads["fSeq"] + sepReads["sSeq"]
@@ -723,7 +805,7 @@ def processRead(read, origReads, counter):
 				sepReads["rOffset"] = sepReads["sOffset"]
 				sepReads["rSeq"] = sepReads["sSeq"] + sepReads["rSeq"]
 				sepReads["sCigarList"].extend(sepReads["rCigarList"])
-				sepReads["rCigarList"] == sepReads["sCigarList"]
+				sepReads["rCigarList"] = sepReads["sCigarList"]
 
 			rStart = getStartIndex(read.reference_start + effectiveLengthFromCigar(sepReads["fCigarList"]), sepReads["rCigarList"], origReads[1].cigarstring)
 			fStart = getStartIndex(read.reference_start, sepReads["fCigarList"], origReads[0].cigarstring)
@@ -731,8 +813,6 @@ def processRead(read, origReads, counter):
 			fRead = createRead(read, origReads[0].flag, 0, len(sepReads["fSeq"]), origReads[0].template_length, listToCigar(sepReads["fCigarList"]), rStart, fStart)
 
 		return [fRead, rRead]
-
-	return []
 
 
 def main(args=None):
@@ -800,6 +880,7 @@ def main(args=None):
 				if matchedOrig[0].flag != 99 and matchedOrig[0].flag != 163:
 					matchedOrig.reverse()
 
+			# De-stitch the read
 			outputReads = processRead(read, matchedOrig, counter)
 
 			for outRead in outputReads:
