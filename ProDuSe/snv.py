@@ -13,6 +13,7 @@ import configargparse
 import configparser
 import pysam
 import os
+from collections import OrderedDict
 
 """
 Processes command line arguments
@@ -138,6 +139,24 @@ def is_valid_file(file, parser):
         parser.error("The file %s does not exist" % (file))
 
 
+def parseContigs(fastaIndex):
+    """
+    Parses the name and size of contigs in the reference genome
+
+    Args:
+        fastaIndex: Path to fasta index file
+    Returns:
+        contigs: An OrderedDictionary listing the name:size of the contigs
+    """
+    contigs = OrderedDict()
+    with open(fastaIndex) as f:
+        for line in f:
+            # Pase the contig name and length from the line
+            contigName, contigLength = line.split()[0:2]
+            contigs[contigName] = contigLength
+    return contigs
+
+
 def main(args=None):
 
     if args is None:
@@ -158,6 +177,7 @@ def main(args=None):
 
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param
+
 
     bamfile = pysam.AlignmentFile(args.input, 'rb')
     fastafile = pysam.FastaFile(args.reference)
@@ -204,7 +224,10 @@ def main(args=None):
         if pos.is_variant(float(args.variant_allele_fraction_threshold), int(args.min_molecules), args.enforce_dual_strand, int(args.mutant_molecules)):
 
             if first:
-                pos.write_header(output)
+                # Parses contig names and lengths from the fasta index file
+                fastaIndex = args.reference + ".fai"
+                contigs = parseContigs(fastaIndex)
+                pos.write_header(output, contigs, args.reference)
                 first = False
             pos.write_variant(output)
             # output.write(pos.coords() + "\n")
