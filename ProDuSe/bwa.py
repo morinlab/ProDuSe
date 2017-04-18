@@ -104,7 +104,7 @@ def main(args=None):
     if args is None:
         args = parser.parse_args()
 
-            # Ensures bwa is installed on the system
+        # Ensures bwa is installed on the system
         try:
             DEVNULL = open(os.devnull, "w")
             checkBWA = subprocess.Popen("bwa", stderr=DEVNULL, stdout=DEVNULL)
@@ -198,7 +198,6 @@ def main(args=None):
 
     # Ensure that BWA completed sucessfully
     if bwaReturnCode != 0:
-        sys.stdout.write(str(runBwa.returncode) + "\n")
         sys.exit(1)
 
 
