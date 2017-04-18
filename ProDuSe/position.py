@@ -407,8 +407,11 @@ class PosCollection:
             return True
 
 
-    def write_header(self, file_handler):
+    def write_header(self, file_handler, contigs, reference_file):
         file_handler.write('##fileformat=VCFv4.2\n')
+        file_handler.write('##reference=%s\n' % (reference_file))
+        for contig, length in contigs.items():
+            file_handler.write('##contig=<ID=%s,length=%s,>\n' % (contig, length))
         file_handler.write('##INFO=<ID=DPN,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Strong Negative Consensus">\n')
         file_handler.write('##INFO=<ID=DPn,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Weak Negative Consensus">\n')
         file_handler.write('##INFO=<ID=DpN,Number=R,Type=Integer,Description="Duplex Support with Weak Positive and Strong Negative Consensus">\n')
@@ -540,8 +543,6 @@ class PosCollectionCreate:
                 continue
 
             # For each base in the alignment, add to the collection structure
-            # cigarstuff = list(itertools.chain.from_iterable(numpy.repeat(val[0],val[1]) for val in read.cigartuples))
-            # print "support for %s is %s, >= %s" % (qname,qname.support,self.min_reads_per_uid)
             for pairs in read.get_aligned_pairs(matches_only=True):
 
                 if pairs[0] == None or pairs[1] == None:
@@ -558,11 +559,6 @@ class PosCollectionCreate:
 
                 base = read.seq[pairs[0]]
                 qual = read.qual[pairs[0]]
-
-
-		#if pairs[1] == 148508727:
-		#    if base == "C":
-                #        print read.qname
 
                 current_pos = Pos(base, qual, qname, order, self.min_base_qual)
 
