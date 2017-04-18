@@ -37,12 +37,12 @@ parser_trim.set_defaults(
     )
 
 parser_align = subparsers.add_parser(
-    "bwa",
+    "align",
     parents=[bwa.parser],
     add_help=False
     )
 parser_align.set_defaults(
-    which="bwa"
+    which="align"
     )
 
 parser_splitmerge = subparsers.add_parser(
