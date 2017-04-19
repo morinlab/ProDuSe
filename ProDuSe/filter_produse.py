@@ -196,6 +196,10 @@ def filterVariant(refAllele, altAllele, desc, minVaf, minDuplex, minPosStrand, m
 		vaf: Variant allele fraction of the variant, if it passes filters. If it fails filters, 'None' is returned
 
 	"""
+
+	if refAllele == "N":
+		return None, None
+
 	nucToIndex = {"A":0, "C":1, "G":2, "T":3}
 	indexToNuc = {0:"A", 1:"C", 2:"G", 3:"T"}
 	refIndex = nucToIndex[refAllele]
