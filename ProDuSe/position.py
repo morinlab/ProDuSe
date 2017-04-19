@@ -338,7 +338,7 @@ class PosCollection:
         Args:
             outFile: An open file object, which the header line is written to
         """
-        outFile.write("#TotalMolec\tDPN\tDPn\tDpN\tDpn\tSP\tSp\tSN\tSn\n")
+        outFile.write("#TotalMol\tDPN\tDPn\tDpN\tDpn\tSP\tSp\tSN\tSn\n")
 
     def position_stats(self, outFile):
         """
