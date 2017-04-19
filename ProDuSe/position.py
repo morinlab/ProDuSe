@@ -167,11 +167,6 @@ class PosCollection:
         self.base_array = {"DPN":{}, "DPn":{}, "DpN":{}, "Dpn":{}, "SP":{}, "Sp":{}, "SN":{} ,"Sn":{},"StP":{},"Stp":{},"StN":{},"Stn":{},"StrBiasP":{}}
         for categ in self.base_array.keys():
             self.base_array[categ] = {"A":0, "C":0, "T":0,"G":0,"N":0}
-        #self.base_array = pandas.DataFrame(
-        #    numpy.zeros((5, 8)),
-        #    index = ["A", "C", "G", "T", "N"],
-        #    columns = ["DPN", "DPn", "DpN", "Dpn", "SP", "Sp", "SN", "Sn"]
-        #    )
         self.list_of_pos = list_of_pos
         self.order = order
         self.chrom = chrom
@@ -179,12 +174,6 @@ class PosCollection:
         self.ref = nucleotide.makeCapital(ref)
         self.alt = []
         self.alt_reason = []
-        # self.molecule_bases = []
-        # self.pos_coords = {}
-        # self.neg_coords = {}
-        # self.pos_bases = []
-        # self.neg_bases = []
-        # self.true_bases = []
         self.variant_status = None
         self.bases = {}
         self.duplex_bases = []
@@ -202,10 +191,11 @@ class PosCollection:
         self.pos_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
         self.neg_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
 
-    def calc_base_stats(self, min_reads_per_uid,max_mismatch_per_aligned_read=5):
+
+    def calc_base_stats(self, min_reads_per_uid, max_mismatch_per_aligned_read=5):
         #to be compatible with FLASH outputs, read strand information should only be considered from un-merged reads (i.e. mapped as pairs)
         for pos in self.list_of_pos:
-            if not pos.qname.duplex_id in self.bases:
+            if pos.qname.duplex_id not in self.bases:
                 self.bases[pos.qname.duplex_id] = []
             self.bases[pos.qname.duplex_id].append(pos)
         skipped = 0
@@ -222,10 +212,9 @@ class PosCollection:
                 is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
                 is_paired = self.bases[duplex_id][0].qname.is_paired
                 if too_many_mismatches:
-                    #print "SS skipping %s because %i mismatchess" % (self.bases[duplex_id][0].qname.qname,self.bases[duplex_id][0].qname.mismatches)
-                    skipped +=1
+                    skipped += 1
                     continue
-                #print "pairing for %s is %s" % (self.bases[duplex_id][0].qname,is_paired)
+
                 if passes_filter and is_positive:
                     column = "SP"
 
@@ -262,18 +251,17 @@ class PosCollection:
                 else:
                     self.neg_counts[self.bases[duplex_id][0].base] += 1
 
-
             elif len(self.bases[duplex_id]) == 2:
-                too_many_mismatches1 = self.bases[duplex_id][0].qname.mismatches> max_mismatch_per_aligned_read
-                too_many_mismatches2 = self.bases[duplex_id][1].qname.mismatches> max_mismatch_per_aligned_read
+                too_many_mismatches1 = self.bases[duplex_id][0].qname.mismatches > max_mismatch_per_aligned_read
+                too_many_mismatches2 = self.bases[duplex_id][1].qname.mismatches > max_mismatch_per_aligned_read
                 is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
                 if too_many_mismatches1:
                     #print "skipping DS %s because %i mismatchess" % (self.bases[duplex_id][0].qname.qname,self.bases[duplex_id][0].qname.mismatches)
-                    skipped +=1
+                    skipped += 1
                     continue
                 if too_many_mismatches2:
                     #print "skipping DS %s because %i mismatchess" % (self.bases[duplex_id][1].qname.qname,self.bases[duplex_id][1].qname.mismatches)
-                    skipped +=1
+                    skipped += 1
                     continue
                 if self.bases[duplex_id][0].base == self.bases[duplex_id][1].base:
 
@@ -343,6 +331,35 @@ class PosCollection:
                         self.bad_conflicting_duplex_bases.append(self.bases[duplex_id][0].base + self.bases[duplex_id][1].base)
         self.skipped_reads = skipped
 
+    def position_stats_header(self, outFile):
+        """
+        Writes a header string coresponding to molecule abundances to the provided file
+
+        Args:
+            outFile: An open file object, which the header line is written to
+        """
+        outFile.write("#TotalMolec\tDPN\tDPn\tDpN\tDpn\tSP\tSp\tSN\tSn\n")
+
+    def position_stats(self, outFile):
+        """
+        Prints out molecule count information at this locus
+
+        Args:
+            outFile: An open file object, which the molecule counts are written to
+        """
+        pos_info = ""
+        # Calculates overall molecule abundance at this position (representing depth)
+        categs = ["DPN", "DPn", "DpN", "Dpn", "SP", "Sp", "SN", "Sn"]
+        bases = ["A", "C", "G", "T"]
+        molecule_counts = 0
+        for categ in categs:
+            counts = sum(self.base_array[categ][base] for base in bases)
+            pos_info += str(counts) + "\t"
+            molecule_counts += counts
+
+        pos_info = str(molecule_counts) + "\t" + pos_info[:-2] + "\n"
+        outFile.write(pos_info)
+
     def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
 
         base_sum = {"A": 0, "T": 0, "C": 0, "G": 0, "N": 0}
@@ -406,7 +423,6 @@ class PosCollection:
         else:
             return True
 
-
     def write_header(self, file_handler, contigs, reference_file):
         file_handler.write('##fileformat=VCFv4.2\n')
         file_handler.write('##reference=%s\n' % (reference_file))
@@ -429,7 +445,7 @@ class PosCollection:
 
         categs = ["DPN","DPn","DpN","Dpn","SP","Sp","SN","Sn","StP","Stp","StN","Stn","StrBiasP"]
         bases = ["A", "C", "G", "T"]
-        info_column = ';'.join(['='.join([categ, ','.join([ str(self.base_array[categ][base]) for base in bases])]) for categ in categs])
+        info_column = ';'.join(['='.join([categ, ','.join([str(self.base_array[categ][base]) for base in bases])]) for categ in categs])
 
         molecule_counts = {"A":0, "C":0,"G":0,"T":0}
         for base in bases:
