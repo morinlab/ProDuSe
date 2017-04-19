@@ -185,6 +185,7 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     new_config = configparser.RawConfigParser()
     new_config.add_section("config")
     new_config.set("config", "input", results_dir + os.sep + sample_name + "SplitMerge.sorted.bam")
+    new_config.set("config", "molecule_stats", data_dir + os.sep + sample_name + "Molecule_Counts.txt")
     new_config.set("config", "output", os.sep.join([results_dir, sample_name + "variants.vcf"]))
     new_config.set("config", "reference", reference)
     for (key, val) in cparser.items("snv"):
