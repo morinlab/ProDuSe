@@ -351,15 +351,17 @@ class PosCollection:
         pos_info = ""
         # Calculates overall molecule abundance at this position (representing depth)
         categs = ["DPN", "DPn", "DpN", "Dpn", "SP", "Sp", "SN", "Sn"]
-        molecule_counts = 0
+        total_molecules = 0
         allBases = ["A", "C", "G", "T"]
         refBases = list(x for x in allBases if x not in self.alt)
         for categ in categs:
             counts = sum(self.base_array[categ][base] for base in self.alt)
-            pos_info += str(counts) + "\t"
-            molecule_counts += counts + sum(self.base_array[categ][base] for base in refBases)
+            molecule_counts = counts + sum(self.base_array[categ][base] for base in refBases)
+            molecVAF = float(counts)/float(molecule_counts)
+            pos_info += str(molecVAF) + "\t"
+            total_molecules += molecule_counts
 
-        pos_info = str(molecule_counts) + "\t" + pos_info[:-1] + "\n"
+        pos_info = str(total_molecules) + "\t" + pos_info[:-1] + "\n"
         outFile.write(pos_info)
 
     def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
