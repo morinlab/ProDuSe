@@ -338,11 +338,12 @@ class PosCollection:
         Args:
             outFile: An open file object, which the header line is written to
         """
+        outFile.write("##Alternate allele(s) molecule counts for each locus\n")
         outFile.write("#TotalMol\tDPN\tDPn\tDpN\tDpn\tSP\tSp\tSN\tSn\n")
 
     def position_stats(self, outFile):
         """
-        Prints out molecule count information at this locus
+        Prints out alt molecule count information at this locus
 
         Args:
             outFile: An open file object, which the molecule counts are written to
@@ -350,12 +351,13 @@ class PosCollection:
         pos_info = ""
         # Calculates overall molecule abundance at this position (representing depth)
         categs = ["DPN", "DPn", "DpN", "Dpn", "SP", "Sp", "SN", "Sn"]
-        bases = ["A", "C", "G", "T"]
         molecule_counts = 0
+        allBases = ["A", "C", "G", "T"]
+        refBases = list(x for x in allBases if x not in self.alt)
         for categ in categs:
-            counts = sum(self.base_array[categ][base] for base in bases)
+            counts = sum(self.base_array[categ][base] for base in self.alt)
             pos_info += str(counts) + "\t"
-            molecule_counts += counts
+            molecule_counts += counts + sum(self.base_array[categ][base] for base in refBases)
 
         pos_info = str(molecule_counts) + "\t" + pos_info[:-1] + "\n"
         outFile.write(pos_info)
