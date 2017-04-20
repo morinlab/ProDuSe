@@ -224,6 +224,7 @@ def main(args=None):
 
     counter = 1
     first = True
+    first_molec = True
     for pos in posCollection:
 
         pos.calc_base_stats(
@@ -233,6 +234,10 @@ def main(args=None):
 
         counter += 1
 
+        if first_molec:
+            pos.position_stats_header(statsFile)
+            first_molec = False
+        pos.position_stats(statsFile)
         if pos.is_variant(float(args.variant_allele_fraction_threshold), int(args.min_molecules), args.enforce_dual_strand, int(args.mutant_molecules)):
 
             if first:
@@ -240,10 +245,8 @@ def main(args=None):
                 fastaIndex = args.reference + ".fai"
                 contigs = parseContigs(fastaIndex)
                 pos.write_header(output, contigs, args.reference)
-                pos.position_stats_header(statsFile)
                 first = False
 
-            pos.position_stats(statsFile)
             pos.write_variant(output)
             # output.write(pos.coords() + "\n")
             # output.write(pos.ref + " > " + ''.join(pos.alt) + "\n")
