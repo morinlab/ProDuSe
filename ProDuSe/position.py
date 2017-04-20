@@ -357,7 +357,7 @@ class PosCollection:
             pos_info += str(counts) + "\t"
             molecule_counts += counts
 
-        pos_info = str(molecule_counts) + "\t" + pos_info[:-2] + "\n"
+        pos_info = str(molecule_counts) + "\t" + pos_info[:-1] + "\n"
         outFile.write(pos_info)
 
     def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
