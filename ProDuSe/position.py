@@ -357,7 +357,12 @@ class PosCollection:
         for categ in categs:
             counts = sum(self.base_array[categ][base] for base in self.alt)
             molecule_counts = counts + sum(self.base_array[categ][base] for base in refBases)
-            molecVAF = float(counts)/float(molecule_counts)
+            # If there are no molecules of this type at this locus, that is informative
+            # Set the VAF to 0
+            if molecule_counts == 0:
+                molecVAF = 0
+            else:
+                molecVAF = float(counts) / float(molecule_counts)
             pos_info += str(molecVAF) + "\t"
             total_molecules += molecule_counts
 
