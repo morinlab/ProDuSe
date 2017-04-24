@@ -181,18 +181,35 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     new_config.write(output)
     output.close()
 
+    # SNV files
+    snv_vcf_results = results_dir + os.sep + sample_name + "variants.vcf"
+    snv_stats_data = data_dir + os.sep + sample_name + "Molecule_Counts.txt"
+
     # Creates SNV calling config file
     new_config = configparser.RawConfigParser()
     new_config.add_section("config")
     new_config.set("config", "input", results_dir + os.sep + sample_name + "SplitMerge.sorted.bam")
-    new_config.set("config", "molecule_stats", data_dir + os.sep + sample_name + "Molecule_Counts.txt")
-    new_config.set("config", "output", os.sep.join([results_dir, sample_name + "variants.vcf"]))
+    new_config.set("config", "molecule_stats", snv_stats_data)
+    new_config.set("config", "output", snv_vcf_results)
     new_config.set("config", "reference", reference)
     for (key, val) in cparser.items("snv"):
         new_config.set("config", key, val)
         if key in sampleConfig:
             val = sampleConfig[key]
     output = open(os.sep.join([sample_dir, "config", os.sep, "snv_task.ini"]), 'w')
+    new_config.write(output)
+
+    # Creates Filter config file
+    new_config = configparser.RawConfigParser()
+    new_config.add_section("config")
+    new_config.set("config", "input", snv_vcf_results)
+    new_config.set("config", "molecule_stats", snv_stats_data)
+    new_config.set("config", "output", snv_vcf_results.replace(".vcf", ".filtered.vcf"))
+    for (key, val) in cparser.items("filter_produse"):
+        new_config.set("config", key, val)
+        if key in sampleConfig:
+            val = sampleConfig[key]
+    output = open(os.sep.join([sample_dir, "config", os.sep, "filter_task.ini"]), 'w')
     new_config.write(output)
 
 
