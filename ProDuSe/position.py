@@ -177,6 +177,7 @@ class PosCollection:
         self.variant_status = None
         self.bases = {}
         self.duplex_bases = []
+        self.weak_quality = []
         self.good_singleton_bases = []
         self.bad_singleton_bases = []
         self.good_duplex_bases = []
@@ -223,9 +224,11 @@ class PosCollection:
 
                 elif not passes_filter and is_positive:
                     column = "Sp"
+                    self.weak_quality.append(self.bases[duplex_id][0].qual)
 
                 else:
                     column = "Sn"
+                    self.weak_quality.append(self.bases[duplex_id][0].qual)
 
                 self.base_array[column][self.bases[duplex_id][0].base] += 1
                 if passes_filter and is_positive_strand:
@@ -308,6 +311,7 @@ class PosCollection:
                           #  print self.bases[duplex_id][0].qname.qname
                            # print self.bases[duplex_id][1].qname.qname
                         column = "Dpn"
+                        self.weak_quality.append(self.bases[duplex_id][0].qual)
 
                     self.base_array[column][self.bases[duplex_id][0].base] += 1
                     self.pos_counts[self.bases[duplex_id][0].base] += 1
