@@ -339,7 +339,7 @@ class PosCollection:
             outFile: An open file object, which the header line is written to
         """
         outFile.write("##Alternate allele(s) molecule counts for each locus\n")
-        outFile.write("#TotalMol\tDPN\tDPn\tDpN\tDpn\tSP\tSp\tSN\tSn\n")
+        outFile.write("#TotalMol\tDPN_TOTAL\tDPN_ALT\tDPn_TOTAL\tDPn_ALT\tDpN_TOTAL\tDpN_ALT\tDpn_TOTAL\tDpn_ALT\tSP_TOTAL\tSP_ALT\tSp_TOTAL\tSp_ALT\tSN_TOTAL\tSN_ALT\tSn_TOTAL\tSn_ALT\n")
 
     def position_stats(self, outFile):
         """
@@ -354,19 +354,21 @@ class PosCollection:
         total_molecules = 0
         allBases = ["A", "C", "G", "T"]
         refBases = list(x for x in allBases if x not in self.alt)
+        last = len(categs) - 1
+        i = 0
         for categ in categs:
+            # Count the number of alternate and total molecules of this type
             counts = sum(self.base_array[categ][base] for base in self.alt)
             molecule_counts = counts + sum(self.base_array[categ][base] for base in refBases)
-            # If there are no molecules of this type at this locus, that is informative
-            # Set the VAF to 0
-            if molecule_counts == 0:
-                molecVAF = 0
-            else:
-                molecVAF = float(counts) / float(molecule_counts)
-            pos_info += str(molecVAF) + "\t"
             total_molecules += molecule_counts
 
-        pos_info = str(total_molecules) + "\t" + pos_info[:-1] + "\n"
+            if i == last:
+                pos_info += str(molecule_counts) + "\t" + str(counts)
+            else:
+                pos_info += str(molecule_counts) + "\t" + str(counts) + "\t"
+            i += 1
+
+        pos_info = str(total_molecules) + "\t" + pos_info + "\n"
         outFile.write(pos_info)
 
     def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
