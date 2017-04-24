@@ -233,11 +233,6 @@ def main(args=None):
         # print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
 
         counter += 1
-
-        if first_molec:
-            pos.position_stats_header(statsFile)
-            first_molec = False
-        pos.position_stats(statsFile)
         if pos.is_variant(float(args.variant_allele_fraction_threshold), int(args.min_molecules), args.enforce_dual_strand, int(args.mutant_molecules)):
 
             if first:
@@ -251,6 +246,11 @@ def main(args=None):
             # output.write(pos.coords() + "\n")
             # output.write(pos.ref + " > " + ''.join(pos.alt) + "\n")
             # output.write(str(pos))
+
+        if first_molec:
+            pos.position_stats_header(statsFile)
+            first_molec = False
+        pos.position_stats(statsFile)
 
         # if pos.coords2() in targetbed:
 
