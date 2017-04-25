@@ -224,11 +224,18 @@ class PosCollection:
 
                 elif not passes_filter and is_positive:
                     column = "Sp"
-                    self.weak_quality.append(self.bases[duplex_id][0].qual)
+                    # In BAM files, quality scores are saved as ASCII characters, in the format of
+                    # (quality + 33) -> ASCII char
+                    # De-covert this character to its coresponding quality score
+                    if self.bases[duplex_id][0].base != self.ref:
+                        quality = ord(self.bases[duplex_id][0].qual) - 33
+                        self.weak_quality.append(quality)
 
                 else:
                     column = "Sn"
-                    self.weak_quality.append(self.bases[duplex_id][0].qual)
+                    if self.bases[duplex_id][0].base != self.ref:
+                        quality = ord(self.bases[duplex_id][0].qual) - 33
+                        self.weak_quality.append(quality)
 
                 self.base_array[column][self.bases[duplex_id][0].base] += 1
                 if passes_filter and is_positive_strand:
@@ -311,7 +318,9 @@ class PosCollection:
                           #  print self.bases[duplex_id][0].qname.qname
                            # print self.bases[duplex_id][1].qname.qname
                         column = "Dpn"
-                        self.weak_quality.append(self.bases[duplex_id][0].qual)
+                        if self.bases[duplex_id][0].base != self.ref:
+                            quality = ord(self.bases[duplex_id][0].qual) - 33
+                            self.weak_quality.append(quality)
 
                     self.base_array[column][self.bases[duplex_id][0].base] += 1
                     self.pos_counts[self.bases[duplex_id][0].base] += 1
@@ -475,6 +484,12 @@ class PosCollection:
         sr_detail = "SR=" + str(self.skipped_reads)
         info_column = ';'.join([ info_column, sr_detail])
 
+        # If this position contains weak supporting molecules, output the average base quality of these bases
+        if len(self.weak_quality) == 0:
+            quality = 0
+        else:
+            quality = int(round(numpy.mean(self.weak_quality)))
+
         reason = "."
         if len(self.alt_reason) >= 0:
             reason = ','.join(self.alt_reason)
@@ -485,7 +500,7 @@ class PosCollection:
                 ".",
                 self.ref,
                 ','.join(numpy.unique(self.alt)),
-                ".",
+                str(quality),
                 ".",
                 info_column
                 ]))
