@@ -198,7 +198,7 @@ def main(args=None):
     printPrefix = "PRODUSE-SNV\t"
     sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
 
-    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=int(args.min_reads_per_uid), min_base_qual=int(args.min_qual))
+    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=int(args.min_reads_per_uid))
 
     output = None
     if not args.output == "-":
@@ -228,7 +228,8 @@ def main(args=None):
     for pos in posCollection:
 
         pos.calc_base_stats(
-            min_reads_per_uid=args.strong_supported_base_threshold
+            min_reads_per_uid=args.strong_supported_base_threshold,
+            min_base_qual=args.min_qual
             )
         # print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
 
