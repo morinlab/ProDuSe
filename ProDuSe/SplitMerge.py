@@ -458,7 +458,7 @@ def getCigarSeq(subCig, template, origCigList, sequence):
 	Returns:
 		offset: The offset of this sub-cigar from the start of the cigar (int)
 		cigOutList: The sequence of the original cigar represented by the sub-cigar (list)
-		outSequence: The nucleotide sequence represented by the sub-cigar sequence (string) 
+		outSequence: The nucleotide sequence represented by the sub-cigar sequence (string)
 	"""
 	if subCig is None:
 		return None, None, ""
@@ -811,6 +811,10 @@ def processRead(read, origReads, counter):
 			fStart = getStartIndex(read.reference_start, sepReads["fCigarList"], origReads[0].cigarstring)
 			rRead = createRead(read, origReads[1].flag, sepReads["rOffset"], sepReads["rOffset"] + len(sepReads["rSeq"]), origReads[1].template_length, listToCigar(sepReads["rCigarList"]), fStart, rStart)
 			fRead = createRead(read, origReads[0].flag, 0, len(sepReads["fSeq"]), origReads[0].template_length, listToCigar(sepReads["fCigarList"]), rStart, fStart)
+		else:
+			# Something awful has happened here. I'm not even sure how this is possible, but it does occur *very* rarely in some samples
+			# TODO: Figure out what is going on here. For now, I am just going to discard these reads
+			return []
 
 		return [fRead, rRead]
 
