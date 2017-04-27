@@ -245,13 +245,14 @@ snvArgs.add_argument(
     )
 snvArgs.add_argument(
     "-mq", "--min_qual",
-    default=3,
+    default=30,
     type=int,
-    help="Minimum base quality threshold, below which a base will be treated as \'N\'")
+    help="Minimum base quality threshold, below which a WEAK base will be ignored'")
 
 # Filter Args
 filterArgs = parser.add_argument_group("Filter Arguments")
 filterArgs.add_argument("-ss", "--allow_single_stranded", action="store_true", default=False, help="Allow variants with only single stranded support")
+filterArgs.add_argument("-sb", "--strand_bias_threshold", default=0.05, type=int, help="Strand bias p-value threshold, below which vairants will be discarded")
 """
 filterArgs.add_argument("-dsv", "--totalvaf", type=float, default=0.05, help="Dual-strand VAF threshold [Default: %(default)s]")
 filterArgs.add_argument("-md", "--min_duplex", type=int, default=3, help="Minimum duplex support required to call a variant [Default: %(default)s]")
