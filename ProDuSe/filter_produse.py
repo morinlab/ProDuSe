@@ -252,7 +252,14 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 						passingAltAlleles.append(allele)
 
 			if passingAltAlleles:
-				outLine = line
+				# Calculate the VAF of these alleles
+				altMolecules = 0
+				for allele in passingAltAlleles:
+					altMolecules += float(infoFields["MC"][baseToIndex[allele]])
+				totalMolecules = sum(float(infoFields["MC"][x]) for x in range(0, 4))
+				vaf = altMolecules / totalMolecules
+				outInfo = ";".join([infoCol, "VAF=" + str(vaf)])
+				outLine = line.replace(infoCol, outInfo)
 				origAltAlleles = line.split()[4]
 				newAltAlleles = ",".join(passingAltAlleles)
 				outLine = outLine.replace(origAltAlleles, newAltAlleles)
