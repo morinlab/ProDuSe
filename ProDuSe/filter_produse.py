@@ -1,27 +1,36 @@
 #! /usr/bin/env python
 
+# USAGE:
+# 	See filter_produse.py -h for details
+#
+# Description:
+# 	Filters ProDuSe variant calls
+# 	TODO: Expand this
+#
+# AUTHOR:
+# 	Christopher Rushton (ckrushto@sfu.ca)
 
 import configargparse
+import configparser
 import os
+import numpy as np
+import time
+import sys
 
 """
 Processes command line arguments
 """
-parser = configargparse.ArgumentParser(description="Filters ProDuSe variants calls")
+parser = configargparse.ArgumentParser(description="Filters ProDuSe variant calls")
 parser.add_argument("-c", "--config", is_config_file=True, type=lambda x: isValidFile(x, parser), help="Optional configuration file, which can provide any of the input arguments.")
-parser.add_argument("-dsv", "--totalvaf", type=float, default=0.05, help="Dual-strand VAF threshold [Default: %(default)s]")
-parser.add_argument("-md", "--min_duplex", type=int, default=3, help="Minimum duplex support required to call a variant [Default: %(default)s]")
-parser.add_argument("-mp", "--min_pos_strand", type=int, default=1, help="Minimum positive strand support required to call a varaint [Default: %(default)s]")
-parser.add_argument("-mn", "--min_neg_strand", type=int, default=1, help="Minimum negative strand support required to call a variant [Default: %(default)s]")
-parser.add_argument("-ms", "--min_singleton", type=int, default=3, help="Minimum singleton support required to call a variant [Default: %(default)s]")
-parser.add_argument("-ww", "--weak_base_weight", type=lambda x: isValidWeight(x, parser), default=0.1, help="Weight of weak bases, relative to strong supported bases [Default: %(default)s]")
-parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser), required=True, help="Input ProDuSe vcf file, the output of \'snv.py\'")
-parser.add_argument("-sb", "--strand_bias", type=float, default=0.05, help="Strand bias p-value threshold, below which variants will be ignored")
+parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser), required=True, help="Input ProDuSe vcf file, output of \'snv.py\'")
+parser.add_argument("-m", "--molecule_stats", type=lambda x: isValidFile(x, parser), required=True, help="Input molecule stats file, output of \'snv.py\'")
 parser.add_argument("-o", "--output", required=True, help="Output VCF file name")
+parser.add_argument("-sb", "--strand_bias_threshold", default=0.05, type=float, help="Strand bias p-value threshold, below which vairants will be discarded")
+parser.add_argument("-ss", "--allow_single_stranded", action="store_true", default=False, help="Allow variants with only single stranded support")
 
 
 def isValidFile(file, parser):
-	"""
+    """
     Checks to ensure the specified file exists, and throws an error if it does not
 
     Args:
@@ -29,234 +38,246 @@ def isValidFile(file, parser):
         parser: An argparse.ArgumentParser() object. Used to throw an exception if the file does not exist
 
     Returns:
-        type: The file itself
+        file: The file itself
 
     Raises:
         parser.error(): An ArgumentParser.error() object, thrown if the file does not exist
     """
-	if os.path.isfile(file):
-		return file
-	else:
-		parser.error("Unable to locate %s" % (file))
+    if os.path.isfile(file):
+        return file
+    else:
+        parser.error("Unable to locate %s" % (file))
 
 
-def isValidWeight(weight, parser):
+def getMoleculeIndex(header):
 	"""
-	Confirms that the weak supported base weight is a sensible value
+	Identifies the column of each molecule type from the header
+
+	Molecule types: DPN, DPn, DpN, Dpn, SN, SP, Sn, Sp
 
 	Args:
-		weight: The user-provided value
-		paser: A configargparse object
+		header: A tab-delinated string coresponding to the file header line
 	Returns:
-		weight: The user-provided value, if it is value
-	Throws:
-		parser.error(): A ConfigArgparser error object, if the value is not a float or is not reasonable
+		moleculeIndexes: A dictionary listing molecule:Index
 	"""
+	moleculeIndexes = {}
 
-	try:
-		weight = float(weight)
-		if weight < 0 or weight > 1:
-			raise parser.error("Weak base weight must be a float between 0 and 1")
-		return weight
-	except ValueError:
-		raise parser.error("Weak base weight must be a float between 0 and 1")
-
-
-def findFields(infoCol):
-	"""
-	Identifies the index of fields in the supplied string
-
-	Args:
-		infoCol: A list generated from the VCF info column, seperated by ";"
-	Returns:
-		fieldCols: A dictionary listing the name of each field and its index
-	Raises
-		TypeError: If one or more of the fields cannot be identified
-	"""
-	fieldCols = {"DPN":None, "DPn":None, "DpN":None, "Dpn":None, "SP":None, "Sp":None, "Sn":None, "SN":None, "StrBiasP":None, "MC":None}
-
-	# Find the index of each field
+	headerColumns = header.split()
 	i = 0
-	for field in infoCol:
-		fieldName = field.split("=")[0]
-		if fieldName in fieldCols:
-			fieldCols[fieldName] = i
-
+	for column in headerColumns:
+		moleculeIndexes[column] = i
 		i += 1
 
-	# Check to ensure each field was found
-	for name, index in fieldCols.items():
-		if index is None:
-			raise TypeError("Unable to locate %s in the info column of the input file" % (name))
+	return moleculeIndexes
 
-	return fieldCols
+
+def setThresholds(statsFile):
+	"""
+	Sets filtering thresolds based upon molecule counts
+
+	TODO: Expand explination
+
+	Args:
+		statsFile: Path to a file listing molecule abundance and total counts for each position
+	Return:
+		molecThresholds: A dictionary containing the slope and offset (intersect) for each molecule
+
+	"""
+
+	# moleculeTypes = ["#TotalMol", "DPN_TOTAL", "DPN_ALT", "DPn_TOTAL", "DPn_ALT", "DpN_TOTAL", "DpN_ALT", "Dpn_TOTAL", "Dpn_ALT\tSP_TOTAL\tSP_ALT\tSp_TOTAL\tSp_ALT\tSN_TOTAL\tSN_ALT\tSn_TOTAL\tSn_ALT\n"]
+	# Lists to store the counts and total depth for each type of molecule
+	moleculeCounts = {"DPN": [], "DPn": [], "DpN": [], "Dpn": [], "SN": [], "SP": [], "Sn": [], "Sp": []}
+
+	# Obtain molecule abundance and total depth at each locus
+	with open(statsFile) as f:
+		for line in f:
+			# Skip header lines
+			if line[0] == "#":
+				if line[0:2] == "##":
+					continue
+				columnIndex = getMoleculeIndex(line)
+				continue
+
+			molCounts = line.split()
+			try:
+				# Obtain the total molecule abundance at this locus
+				for molecule in moleculeCounts:
+					totalMol = int(molCounts[columnIndex[molecule + "_TOTAL"]])
+					altMol = int(molCounts[columnIndex[molecule + "_ALT"]])
+
+					# Weight this locus based upon overall depth
+					for i in range(0, totalMol // 8):
+						moleculeCounts[molecule].append([totalMol, altMol])
+			except KeyError as x:
+				raise TypeError("The header of %s is malformed or missing" % (statsFile))
+
+	molecThreshold = {}
+
+	# Here, determine the minimum TOTAL number of molecules required to accurately filter something with this type of molecule
+	for molecule in moleculeCounts:
+
+		lineCoord = sorted(moleculeCounts[molecule], key=lambda x: x[0])
+		x = list(lineCoord[x][0] for x in range(0, len(lineCoord)))
+		y = list(lineCoord[x][1] for x in range(0, len(lineCoord)))
+		# If there are no molecules of this type across the entire capture space, they will not be used for filtering
+		if (len(x) == 0 or np.mean(x) == 0) and (len(y) == 0 or np.mean(y) == 0):
+			slope = 0
+			offset = 0
+		else:
+			slope, offset = np.polyfit(x, y, 1)
+		# If the offset is below 0 (which doesn't really make sense biologically), set it to 0
+		if offset < 0:
+			offset = 0
+		molecThreshold[molecule] = {"slope": slope, "offset": offset + 2}
+
+	return molecThreshold
+
+
+def processFields(line):
+	"""
+	Creates a dictionary from each field in the supplied string
+
+	Args:
+		line: A string containing semi-colon deliminated fields, in the format of NAME=E1,E2,E3,E4,E5 etc
+	Returns:
+		fieldDict: A dictionary listing the fields, in the format of fieldDict[NAME] = [E1, E2, E3, E4, E5]
+	"""
+
+	fieldDict = {}
+	lineFields = line.split(";")
+	for field in lineFields:
+		fieldName, fieldElements = field.split("=")
+		elementList = fieldElements.split(",")
+		fieldDict[fieldName] = elementList
+	return fieldDict
+
+
+def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=False):
+	"""
+	Filters variants at each locus based upon molecule counts at that locus
+
+	TODO: Expand this
+
+	Args:
+		vcfFile: Path to ProDuSe raw variants file, output of produse snv
+		threholds: A dictionary listing slope and offset for each molecule type
+		outFile: Path to use for the output VCF
+		require_dual: Require variant support on both strands to call a variant as real
+	"""
+	printPrefix = "PRODUSE-FILTER\t"
+	sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
+
+	baseToIndex = {"A": 0, "C": 1, "G": 2, "T": 3}
+	molTypes = ["DPN", "DPn", "DpN", "SN", "SP", "Dpn", "Sn", "Sp"]
+	with open(vcfFile) as f, open(outFile, "w") as o:
+		for line in f:
+			# Ignore header lines
+			if line[0] == "#":
+				o.write(line)
+				continue
+
+			passingPosAlleles = []
+			passingNegAlleles = []
+
+			refAllele, altAlleles = line.split()[3:5]
+			if "," in altAlleles:
+				altAlleles = altAlleles.split(",")
+			else:
+				altAlleles = [altAlleles]
+
+			infoCol = line.split()[7]
+			infoFields = processFields(infoCol)
+
+			# Here, I am implementing a "3-strike rule". If there is a lot (>100) of molecules at this locus, and none of them indicate a variant,
+			# there is likely no variant at this position
+			# This should remove a lot of noisy variants in high-duplicate samples
+			strikes = []
+			for molecule in molTypes:
+
+				supportsVariant = False
+				if len(strikes) >= 3:
+					break
+				# Count the number of ref and alt molecules at this locus
+				totalMolecules = float(infoFields[molecule][baseToIndex[refAllele]])
+				for altAllele in altAlleles:
+					totalMolecules += float(infoFields[molecule][baseToIndex[altAllele]])
+
+				# Set the threshold based upon total molecule depth
+				threshold = thresholds[molecule]["offset"] + thresholds[molecule]["slope"] * totalMolecules
+
+				# Process each possible alternate allele individually
+				for altAllele in altAlleles:
+
+					# Ignore alleles with significant strand bias
+					if float(infoFields["StrBiasP"][baseToIndex[altAllele]]) <= strandBiasThresh:
+						continue
+
+					altMolecules = float(infoFields[molecule][baseToIndex[altAllele]])
+					if altMolecules > threshold:
+
+						supportsVariant = True
+						# What strand supports this variant?
+						if "p" in molecule or "P" in molecule:
+							if altAllele not in passingPosAlleles:
+								passingPosAlleles.append(altAllele)
+						if "n" in molecule or "N" in molecule:
+							if altAllele not in passingNegAlleles:
+								passingNegAlleles.append(altAllele)
+				if not supportsVariant and sum(int(infoFields[molecule][x]) for x in range(0, 4)) > threshold * 2:
+					# Do not strike if the same molecule class has already been given a strike
+					if molecule == "DpN" and "DPn" in strikes:
+						continue
+					elif molecule == "SP" and "SN" in strikes:
+						continue
+					elif molecule == "Sp" and "Sn" in strikes:
+						continue
+					strikes.append(molecule)
+
+			passingAltAlleles = []
+			if not allow_single:
+				for allele in ["A", "C", "G", "T"]:
+					if allele in passingPosAlleles and allele in passingNegAlleles:
+						passingAltAlleles.append(allele)
+			else:
+				for allele in ["A", "C", "G", "T"]:
+					if allele in passingPosAlleles or allele in passingNegAlleles:
+						passingAltAlleles.append(allele)
+
+			if passingAltAlleles:
+				outLine = line
+				origAltAlleles = line.split()[4]
+				newAltAlleles = ",".join(passingAltAlleles)
+				outLine = outLine.replace(origAltAlleles, newAltAlleles)
+				o.write(outLine)
 
 
 def main(args=None):
+    """
 
-	if args is None:
-		args = parser.parse_args()
+    """
+    # Obtain arguments
+    if args is None:
+        args = parser.parse_args()
+    elif args.config:
+        # Since configargparse does not parse commands from the config file if they are passed as argument here
+        # They must be parsed manually
+        cmdArgs = vars(args)
+        config = configparser.ConfigParser()
+        config.read(args.config)
+        configOptions = config.options("config")
+        for option in configOptions:
+            param = config.get("config", option)
+            # Convert arguments that are lists into an actual list
+            if param[0] == "[" and param[-1] == "]":
+                paramString = param[1:-1]
+                param = paramString.split(",")
 
-	with open(args.input) as f, open(args.output, "w") as o:
+            # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
+            cmdArgs[option] = param
 
-		headerFound = False
-		fieldsFound = False
+    thresholds = setThresholds(args.molecule_stats)
+    runFilter(args.input, thresholds, args.output, args.strand_bias_threshold, args.allow_single_stranded)
 
-		for line in f:
-
-			# Ignore header and info lines, just print them out
-			if line[0] == "#":
-
-				# Quick sanity check: For the header line, check to ensure the file meets VCF requirements
-				if line[0:6] == "#CHROM":
-					headerFound=True
-					if line != "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n":
-						raise TypeError("The input file is not in VCF format")
-				o.write(line)
-
-			else:
-				# If no header was found, this file may not be in VCF format
-				if not headerFound:
-					raise TypeError("The input file is not in VCF format")
-
-				# Identify normal allele and variant(s)
-				refAllele = line.split("\t")[3]
-				variants = line.split("\t")[4]
-				if "," in variants:
-					variants = variants.split(",")
-				else:
-					variants = list(variants)
-
-				# Grab the VCF info column
-				infoCol = line.split("\t")[7].split(";")
-
-				# If this is the first content line, determine the locations of the relevant fiends in the INFO column
-				if not fieldsFound:
-					fieldIndex = findFields(infoCol)
-					fieldsFound = True
-
-				# Parse the fields of interest
-				fieldValue = {}
-				for field, index in fieldIndex.items():
-					fieldValue[field] = infoCol[index].split("=")[1]
-
-				# Time to actual filter variants
-				valAlleles, vaf = filterVariant(
-					refAllele,
-					variants,
-					fieldValue,
-					args.totalvaf,
-					args.min_duplex,
-					args.min_pos_strand,
-					args.min_neg_strand,
-					args.min_singleton,
-					args.strand_bias,
-					args.weak_base_weight)
-
-				if valAlleles is not None: # i.e. the variant passed filters
-					vafOutput = "VAF=" + str(vaf) + "\n"
-					# If a locus has multiple variants, and not all of those variants passed filters, adjust the output line
-					if valAlleles != variants:
-						outList = []
-						outList.extend(line.split("\t")[0:4])
-						outList.append(",".join(valAlleles))
-						outList.extend(line.split("\t")[5:])
-						outLine = "\t".join(outList)
-					else:
-						outLine = line
-					o.write(",".join([outLine[:-1], vafOutput]))
-
-
-def filterVariant(refAllele, altAllele, desc, minVaf, minDuplex, minPosStrand, minNegStrand, minSingleton, strandBiasThreshold, weakBaseWeight):
-	"""
-	Filters supplied variant in accordance with specified thresholds
-
-	This variant fails filtering if:
-	1) There is significant indication of strand bias (falls below the specified p-value threshold)
-	2) The variant occurs exists below the specified VAF theshold
-	3) Variant has too little duplex support AND the variant has too little singleton support on each strand and overall singleton support
-
-	Note that locus properties are stored in the format of Name:A, C, G, T
-
-	TODO: Treat a locus with multiple alternate alleles better
-	Args:
-		refAllele: Reference allele
-		altAllele: A list of one or more alternate alleles
-		desc: A dictionary of locus properies, including allele support, strand bias, and molecule counts
-		minVaf: Minimum VAF threshold (See 2)
-		minDuplex: Minimum number of duplex molecules supporting the variant (See 3)
-		minPosStrand: Minimum number of singleton molecules from the positive strand supporting the variant (See 3)
-		minNegStrand: Minimum number of singleton molecules from the negative strand supporting the variant (See 3)
-		minSingleton: Minimum total number of singleton molecules supporting the variant (See 3)
-		strandBiasThreshold: P-value threshold for strand bias (See 1)
-		weakBaseWeight: Weight that should be given to weakly supporting bases relative to strong supporting bases (See 3)
-
-	Returns:
-		passedAlt: A list of alternate alleles that passed filters
-		vaf: Variant allele fraction of the variant, if it passes filters. If it fails filters, 'None' is returned
-
-	"""
-
-	if refAllele == "N":
-		return None, None
-
-	nucToIndex = {"A":0, "C":1, "G":2, "T":3}
-	indexToNuc = {0:"A", 1:"C", 2:"G", 3:"T"}
-	refIndex = nucToIndex[refAllele]
-	altIndex = list(nucToIndex[alt] for alt in altAllele)
-
-	# Step 1: Check Strand Bias
-	# If multiple alternative alleles are present, each are checked for strand bias.
-	# If an alternative allele exhibits strand bias, it is excluded from further analysis
-
-	# I'm just going to play it safe and create a copy of the array
-	altPassedStrandB = []
-
-	for index in altIndex:
-		strandP = float(desc["StrBiasP"].split(",")[index])
-		if strandP > strandBiasThreshold:
-			# Passes filter
-			altPassedStrandB.append(index)
-
-	# If no alleles passed strand bias filters, stop here
-	# Otherwise, continue filtering with the remaining alleles
-	if len(altPassedStrandB) == 0:
-		return None, None
-	else:
-		altIndex = altPassedStrandB
-		passedAlleles = list(indexToNuc[allele] for allele in altIndex)
-
-	# Step 2: Check VAF
-	# Calculate VAF
-	refCount = float(desc["MC"].split(",")[refIndex])
-	altCount = sum(float(desc["MC"].split(",")[i]) for i in altIndex)
-	vaf = altCount / (altCount + refCount)
-
-	# Run vaf filter
-	if vaf < minVaf:
-		return None, None
-
-	# Step 3: Check for sufficient duplex or singleton support
-	dupStrSupport = sum(int(desc["DPN"].split(",")[i]) for i in altIndex)
-	dupWeakSupport = sum(int(desc["DPn"].split(",")[i]) for i in altIndex)
-	dupWeakSupport += sum(int(desc["DpN"].split(",")[i]) for i in altIndex)
-	dupWeakSupport += sum(int(desc["Dpn"].split(",")[i]) for i in altIndex)
-	dupWeakSupport = dupWeakSupport * weakBaseWeight
-
-	# If there is sufficient duplex support, stop here. The variant has passed all filters
-	if dupStrSupport + dupWeakSupport >= minDuplex:
-		return passedAlleles, vaf
-	# If not, check singleton support
-	else:
-		negSupport = sum(int(desc["SP"].split(",")[i]) for i in altIndex)
-		negSupport += sum(int(desc["Sp"].split(",")[i]) for i in altIndex) * weakBaseWeight
-		posSupport = sum(int(desc["SN"].split(",")[i]) for i in altIndex)
-		posSupport += sum(int(desc["Sn"].split(",")[i]) for i in altIndex) * weakBaseWeight
-		if negSupport >= minNegStrand and posSupport >= minPosStrand and negSupport + posSupport >= minSingleton:
-			return passedAlleles, vaf
-		else:
-			return None, None
 
 if __name__ == "__main__":
-
 	main()
