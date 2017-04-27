@@ -25,7 +25,9 @@ parser.add_argument("-c", "--config", is_config_file=True, type=lambda x: isVali
 parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser), required=True, help="Input ProDuSe vcf file, output of \'snv.py\'")
 parser.add_argument("-m", "--molecule_stats", type=lambda x: isValidFile(x, parser), required=True, help="Input molecule stats file, output of \'snv.py\'")
 parser.add_argument("-o", "--output", required=True, help="Output VCF file name")
-parser.add_argument("-sb", "--strand_bias_threshold", default=0.05, type=float, help="Strand bias p-value threshold, below which vairants will be discarded")
+parser.add_argument("-sb", "--strand_bias_threshold", default=0.05, help="Strand bias p-value threshold, below which vairants will be discarded")
+parser.add_argument("-st", "--strong_base_threshold", default=1, type=int, help="Strong supported base count threshold [Default: %(default)s]")
+parser.add_argument("-wt", "--weak_base_threshold", default=2, type=int, help="Weak supported base count theshold [Default: %(default)s]")
 parser.add_argument("-ss", "--allow_single_stranded", action="store_true", default=False, help="Allow variants with only single stranded support")
 
 
@@ -71,7 +73,7 @@ def getMoleculeIndex(header):
 	return moleculeIndexes
 
 
-def setThresholds(statsFile):
+def setThresholds(statsFile, strongBaseline, weakBaseline):
 	"""
 	Sets filtering thresolds based upon molecule counts
 
@@ -79,12 +81,14 @@ def setThresholds(statsFile):
 
 	Args:
 		statsFile: Path to a file listing molecule abundance and total counts for each position
+		strongBaseline: An int representing the minimum number of strong molecules required to call a variant as real
+		weakBaseline: An int representing the minimum number of strong molecules required to call a variant as real
+
 	Return:
 		molecThresholds: A dictionary containing the slope and offset (intersect) for each molecule
 
 	"""
 
-	# moleculeTypes = ["#TotalMol", "DPN_TOTAL", "DPN_ALT", "DPn_TOTAL", "DPn_ALT", "DpN_TOTAL", "DpN_ALT", "Dpn_TOTAL", "Dpn_ALT\tSP_TOTAL\tSP_ALT\tSp_TOTAL\tSp_ALT\tSN_TOTAL\tSN_ALT\tSn_TOTAL\tSn_ALT\n"]
 	# Lists to store the counts and total depth for each type of molecule
 	moleculeCounts = {"DPN": [], "DPn": [], "DpN": [], "Dpn": [], "SN": [], "SP": [], "Sn": [], "Sp": []}
 
@@ -128,7 +132,11 @@ def setThresholds(statsFile):
 		# If the offset is below 0 (which doesn't really make sense biologically), set it to 0
 		if offset < 0:
 			offset = 0
-		molecThreshold[molecule] = {"slope": slope, "offset": offset + 2}
+		# Determine the type of molecule, and thus the minimum molecule threshold
+		if "P" in molecule or "N" in molecule:  # Strong molecule
+			molecThreshold[molecule] = {"slope": slope, "offset": offset + strongBaseline}
+		else:
+			molecThreshold[molecule] = {"slope": slope, "offset": offset + weakBaseline}
 
 	return molecThreshold
 
@@ -203,13 +211,13 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 					totalMolecules += float(infoFields[molecule][baseToIndex[altAllele]])
 
 				# Set the threshold based upon total molecule depth
-				threshold = thresholds[molecule]["offset"] + thresholds[molecule]["slope"] * totalMolecules
+				threshold = int(round(thresholds[molecule]["offset"])) + thresholds[molecule]["slope"] * totalMolecules
 
 				# Process each possible alternate allele individually
 				for altAllele in altAlleles:
 
-					# Ignore alleles with significant strand bias
-					if float(infoFields["StrBiasP"][baseToIndex[altAllele]]) <= strandBiasThresh:
+					# Throw ignore alleles with significant strand bias
+					if infoFields["StrBiasP"][baseToIndex[altAllele]] <= strandBiasThresh:
 						continue
 
 					altMolecules = float(infoFields[molecule][baseToIndex[altAllele]])
@@ -223,7 +231,7 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 						if "n" in molecule or "N" in molecule:
 							if altAllele not in passingNegAlleles:
 								passingNegAlleles.append(altAllele)
-				if not supportsVariant and sum(int(infoFields[molecule][x]) for x in range(0, 4)) > threshold * 2:
+				if not supportsVariant and sum(int(infoFields[molecule][baseToIndex[x]]) for x in range(0, 4)) > threshold * 2:
 					# Do not strike if the same molecule class has already been given a strike
 					if molecule == "DpN" and "DPn" in strikes:
 						continue
@@ -275,7 +283,7 @@ def main(args=None):
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param
 
-    thresholds = setThresholds(args.molecule_stats)
+    thresholds = setThresholds(args.molecule_stats, args.strong_base_threshold, args.weak_base_threshold)
     runFilter(args.input, thresholds, args.output, args.strand_bias_threshold, args.allow_single_stranded)
 
 
