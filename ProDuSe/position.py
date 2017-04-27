@@ -193,7 +193,7 @@ class PosCollection:
         self.neg_strand_counts = {"A":0, "C":0, "T":0, "G":0, "N":0}
 
 
-    def calc_base_stats(self, min_reads_per_uid, max_mismatch_per_aligned_read=5):
+    def calc_base_stats(self, min_reads_per_uid, max_mismatch_per_aligned_read=5, min_base_qual = 0):
         #to be compatible with FLASH outputs, read strand information should only be considered from un-merged reads (i.e. mapped as pairs)
         for pos in self.list_of_pos:
             if pos.qname.duplex_id not in self.bases:
@@ -227,15 +227,25 @@ class PosCollection:
                     # In BAM files, quality scores are saved as ASCII characters, in the format of
                     # (quality + 33) -> ASCII char
                     # De-covert this character to its coresponding quality score
-                    if self.bases[duplex_id][0].base != self.ref:
+                    if self.bases[duplex_id][0].base != self.ref and self.bases[duplex_id][0].base != "N":
                         quality = ord(self.bases[duplex_id][0].qual) - 33
-                        self.weak_quality.append(quality)
+                        # If the quality falls below the threshold, skip this base
+                        if quality < min_base_qual:
+                            skipped += 1
+                            continue
+                        else:
+                            self.weak_quality.append(quality)
 
                 else:
                     column = "Sn"
-                    if self.bases[duplex_id][0].base != self.ref:
+                    if self.bases[duplex_id][0].base != self.ref and self.bases[duplex_id][0].base != "N":
                         quality = ord(self.bases[duplex_id][0].qual) - 33
-                        self.weak_quality.append(quality)
+                        # If the quality falls below the threshold, skip this base
+                        if quality < min_base_qual:
+                            skipped += 1
+                            continue
+                        else:
+                            self.weak_quality.append(quality)
 
                 self.base_array[column][self.bases[duplex_id][0].base] += 1
                 if passes_filter and is_positive_strand:
@@ -320,7 +330,12 @@ class PosCollection:
                         column = "Dpn"
                         if self.bases[duplex_id][0].base != self.ref:
                             quality = ord(self.bases[duplex_id][0].qual) - 33
-                            self.weak_quality.append(quality)
+                            # If the quality falls below the threshold, skip this base
+                            if quality < min_base_qual:
+                                skipped += 1
+                                continue
+                            else:
+                                self.weak_quality.append(quality)
 
                     self.base_array[column][self.bases[duplex_id][0].base] += 1
                     self.pos_counts[self.bases[duplex_id][0].base] += 1
@@ -484,12 +499,6 @@ class PosCollection:
         sr_detail = "SR=" + str(self.skipped_reads)
         info_column = ';'.join([ info_column, sr_detail])
 
-        # If this position contains weak supporting molecules, output the average base quality of these bases
-        if len(self.weak_quality) == 0:
-            quality = 0
-        else:
-            quality = int(round(numpy.mean(self.weak_quality)))
-
         reason = "."
         if len(self.alt_reason) >= 0:
             reason = ','.join(self.alt_reason)
@@ -500,7 +509,7 @@ class PosCollection:
                 ".",
                 self.ref,
                 ','.join(numpy.unique(self.alt)),
-                str(quality),
+                ".",
                 ".",
                 info_column
                 ]))
