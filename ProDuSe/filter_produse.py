@@ -217,7 +217,7 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 				for altAllele in altAlleles:
 
 					# Throw ignore alleles with significant strand bias
-					if infoFields["StrBiasP"][baseToIndex[altAllele]] <= strandBiasThresh:
+					if float(infoFields["StrBiasP"][baseToIndex[altAllele]]) <= strandBiasThresh:
 						continue
 
 					altMolecules = float(infoFields[molecule][baseToIndex[altAllele]])
@@ -231,7 +231,7 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 						if "n" in molecule or "N" in molecule:
 							if altAllele not in passingNegAlleles:
 								passingNegAlleles.append(altAllele)
-				if not supportsVariant and sum(int(infoFields[molecule][baseToIndex[x]]) for x in range(0, 4)) > threshold * 2:
+				if not supportsVariant and sum(int(infoFields[molecule][x]) for x in range(0, 4)) > threshold * 2:
 					# Do not strike if the same molecule class has already been given a strike
 					if molecule == "DpN" and "DPn" in strikes:
 						continue
