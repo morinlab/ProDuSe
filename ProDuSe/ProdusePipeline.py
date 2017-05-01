@@ -255,6 +255,7 @@ filterArgs.add_argument("-ss", "--allow_single_stranded", action="store_true", d
 filterArgs.add_argument("-sb", "--strand_bias_threshold", default=0.05, type=float, help="Strand bias p-value threshold, below which vairants will be discarded [Default: %(default)s]")
 filterArgs.add_argument("-st", "--strong_base_threshold", default=1, type=int, help="Strong supported base count threshold [Default: %(default)s]")
 filterArgs.add_argument("-wt", "--weak_base_threshold", default=2, type=int, help="Weak supported base count theshold [Default: %(default)s]")
+filterArgs.add_argument("-md", "--min_depth", type=int, default=2, help="Minimum depth threshold [Default: %(default)s]")
 """
 filterArgs.add_argument("-dsv", "--totalvaf", type=float, default=0.05, help="Dual-strand VAF threshold [Default: %(default)s]")
 filterArgs.add_argument("-md", "--min_duplex", type=int, default=3, help="Minimum duplex support required to call a variant [Default: %(default)s]")

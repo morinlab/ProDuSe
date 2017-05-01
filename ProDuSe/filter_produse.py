@@ -29,6 +29,7 @@ parser.add_argument("-sb", "--strand_bias_threshold", default=0.05, help="Strand
 parser.add_argument("-st", "--strong_base_threshold", default=1, type=int, help="Strong supported base count threshold [Default: %(default)s]")
 parser.add_argument("-wt", "--weak_base_threshold", default=2, type=int, help="Weak supported base count theshold [Default: %(default)s]")
 parser.add_argument("-ss", "--allow_single_stranded", action="store_true", default=False, help="Allow variants with only single stranded support")
+parser.add_argument("-md", "--min_depth", type=int, default=2, help="Minimum depth threshold [Default: %(default)s]")
 
 
 def isValidFile(file, parser):
@@ -160,7 +161,7 @@ def processFields(line):
 	return fieldDict
 
 
-def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=False):
+def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, allowSingle=False):
 	"""
 	Filters variants at each locus based upon molecule counts at that locus
 
@@ -170,7 +171,9 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 		vcfFile: Path to ProDuSe raw variants file, output of produse snv
 		threholds: A dictionary listing slope and offset for each molecule type
 		outFile: Path to use for the output VCF
-		require_dual: Require variant support on both strands to call a variant as real
+		minDepth: Minimum depth required at a locus to call a variant
+		strandBias: Strand bias p-value, blow which variants will be discarded
+		allowSingle: Allow variants without duplex support to pass the filter
 	"""
 	printPrefix = "PRODUSE-FILTER\t"
 	sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
@@ -195,6 +198,11 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 
 			infoCol = line.split()[7]
 			infoFields = processFields(infoCol)
+
+			# Filter for minimum depth
+			totalDepth = sum(int(infoFields["MC"][x] for x in range(0, 4)))
+			if totalDepth < minDepth:
+				continue
 
 			# Here, I am implementing a "3-strike rule". If there is a lot (>100) of molecules at this locus, and none of them indicate a variant,
 			# there is likely no variant at this position
@@ -242,7 +250,7 @@ def runFilter(vcfFile, thresholds, outFile, strandBiasThresh=0.05, allow_single=
 					strikes.append(molecule)
 
 			passingAltAlleles = []
-			if not allow_single:
+			if not allowSingle:
 				for allele in ["A", "C", "G", "T"]:
 					if allele in passingPosAlleles and allele in passingNegAlleles:
 						passingAltAlleles.append(allele)
@@ -291,7 +299,7 @@ def main(args=None):
             cmdArgs[option] = param
 
     thresholds = setThresholds(args.molecule_stats, args.strong_base_threshold, args.weak_base_threshold)
-    runFilter(args.input, thresholds, args.output, args.strand_bias_threshold, args.allow_single_stranded)
+    runFilter(args.input, thresholds, args.output, args.min_depth, args.strand_bias_threshold, args.allow_single_stranded)
 
 
 if __name__ == "__main__":
