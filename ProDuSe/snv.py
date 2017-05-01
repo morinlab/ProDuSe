@@ -263,7 +263,7 @@ def main(args=None):
         #         output.write('\n');
 
     # else:
-        if counter % 100000 == 0:
+        if counter % 1000000 == 0:
                 sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Positions Processed: %i\n" % (counter)]))
     #     for pos in posCollection:
 
