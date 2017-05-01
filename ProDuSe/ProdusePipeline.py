@@ -245,12 +245,18 @@ snvArgs.add_argument(
     )
 snvArgs.add_argument(
     "-mq", "--min_qual",
-    default=3,
+    default=30,
     type=int,
-    help="Minimum base quality threshold, below which a base will be treated as \'N\'")
+    help="Minimum base quality threshold, below which a WEAK base will be ignored'")
 
 # Filter Args
 filterArgs = parser.add_argument_group("Filter Arguments")
+filterArgs.add_argument("-ss", "--allow_single_stranded", action="store_true", default=False, help="Allow variants with only single stranded support [Default: %(default)s]")
+filterArgs.add_argument("-sb", "--strand_bias_threshold", default=0.05, type=float, help="Strand bias p-value threshold, below which vairants will be discarded [Default: %(default)s]")
+filterArgs.add_argument("-st", "--strong_base_threshold", default=1, type=int, help="Strong supported base count threshold [Default: %(default)s]")
+filterArgs.add_argument("-wt", "--weak_base_threshold", default=2, type=int, help="Weak supported base count theshold [Default: %(default)s]")
+filterArgs.add_argument("-md", "--min_depth", type=int, default=2, help="Minimum depth threshold [Default: %(default)s]")
+"""
 filterArgs.add_argument("-dsv", "--totalvaf", type=float, default=0.05, help="Dual-strand VAF threshold [Default: %(default)s]")
 filterArgs.add_argument("-md", "--min_duplex", type=int, default=3, help="Minimum duplex support required to call a variant [Default: %(default)s]")
 filterArgs.add_argument("-mp", "--min_pos_strand", type=int, default=1, help="Minimum positive strand support required to call a varaint [Default: %(default)s]")
@@ -258,7 +264,7 @@ filterArgs.add_argument("-mn", "--min_neg_strand", type=int, default=1, help="Mi
 filterArgs.add_argument("-ms", "--min_singleton", type=int, default=3, help="Minimum singleton support required to call a variant [Default: %(default)s]")
 filterArgs.add_argument("-ww", "--weak_base_weight", type=lambda x: isValidWeight(x, parser), default=0.1, help="Weight of weak bases, relative to strong supported bases [Default: %(default)s]")
 filterArgs.add_argument("-sb", "--strand_bias", type=float, default=0.05, help="Strand bias p-value threshold, below which variants will be ignored")
-
+"""
 
 
 def isValidFile(file, parser):
@@ -525,10 +531,7 @@ def runPipeline(args, sampleName, sampleDir):
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": SNV Calling Complete\n"]))
 
 	# Filter variants
-	vcfFile = os.path.join(sampleDir, "results", sampleName + ".variants.vcf")
-	outFile = vcfFile.replace(".vcf", ".filtered.vcf")
-	args.input=vcfFile
-	args.output=outFile
+	args.config = getConfig(sampleDir, "filter")
 	filter_produse.main(args)
 	# runFilter(args.vaf, vcfFile, scriptDir + os.sep + "filter_produse.pl")
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Variant Filtering Complete\n"]))

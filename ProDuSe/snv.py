@@ -13,6 +13,8 @@ import configargparse
 import configparser
 import pysam
 import os
+import sys
+import time
 from collections import OrderedDict
 
 """
@@ -41,6 +43,12 @@ parser.add(
     type=str,
     help="Output Variant Call Format (vcf) file"
     )
+parser.add(
+    "-s",
+    "--molecule_stats",
+    required=True,
+    type=str,
+    help="Output file for molecule and coverage statistics")
 parser.add(
     "-r", "--reference",
     required=True,
@@ -182,11 +190,15 @@ def main(args=None):
     bamfile = pysam.AlignmentFile(args.input, 'rb')
     fastafile = pysam.FastaFile(args.reference)
     targetbed = None
+    statsFile = open(args.molecule_stats, "w")
     if args.target_bed is not None:
         pysam.index(bamfile)
         targetbed = bed.BedOpen(args.target_bed, 'r')
 
-    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=int(args.min_reads_per_uid), min_base_qual=int(args.min_qual))
+    printPrefix = "PRODUSE-SNV\t"
+    sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
+
+    posCollection = position.PosCollectionCreate(bamfile, fastafile, filter_overlapping_reads=True, target_bed=targetbed, min_reads_per_uid=int(args.min_reads_per_uid))
 
     output = None
     if not args.output == "-":
@@ -210,17 +222,18 @@ def main(args=None):
 
     # elif args.mode == 'discovery':
 
-    m = 1
+    counter = 1
     first = True
+    first_molec = True
     for pos in posCollection:
 
         pos.calc_base_stats(
-            min_reads_per_uid=args.strong_supported_base_threshold
+            min_reads_per_uid=args.strong_supported_base_threshold,
+            min_base_qual=args.min_qual
             )
         # print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
 
-        m += 1
-
+        counter += 1
         if pos.is_variant(float(args.variant_allele_fraction_threshold), int(args.min_molecules), args.enforce_dual_strand, int(args.mutant_molecules)):
 
             if first:
@@ -229,10 +242,16 @@ def main(args=None):
                 contigs = parseContigs(fastaIndex)
                 pos.write_header(output, contigs, args.reference)
                 first = False
+
             pos.write_variant(output)
             # output.write(pos.coords() + "\n")
             # output.write(pos.ref + " > " + ''.join(pos.alt) + "\n")
             # output.write(str(pos))
+
+        if first_molec:
+            pos.position_stats_header(statsFile)
+            first_molec = False
+        pos.position_stats(statsFile)
 
         # if pos.coords2() in targetbed:
 
@@ -244,7 +263,8 @@ def main(args=None):
         #         output.write('\n');
 
     # else:
-
+        if counter % 1000000 == 0:
+                sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Positions Processed: %i\n" % (counter)]))
     #     for pos in posCollection:
 
     #         is_variant = pos.is_variant( \
@@ -264,6 +284,7 @@ def main(args=None):
 
     if not args.output == "-":
         output.close()
+    sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Positions Processed:%i\n" % (counter)]))
 
 
 if __name__ == '__main__':
