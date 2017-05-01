@@ -200,7 +200,7 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
 			infoFields = processFields(infoCol)
 
 			# Filter for minimum depth
-			totalDepth = sum(int(infoFields["MC"][x] for x in range(0, 4)))
+			totalDepth = sum(int(infoFields["MC"][x]) for x in range(0, 4))
 			if totalDepth < minDepth:
 				continue
 
