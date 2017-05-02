@@ -478,6 +478,7 @@ class PosCollection:
         file_handler.write('##INFO=<ID=MC,Number=R,Type=Integer,Description="Molecule Counts">\n')
         file_handler.write('##INFO=<ID=PC,Number=R,Type=Integer,Description="Molecule Count in Positive Strand Including Bases of Disagreeance\n')
         file_handler.write('##INFO=<ID=NC,Number=R,Type=Integer,Description="Molecule Count in Negative Strand Including Bases of Disagreeance\n')
+        file_handler.write('##INFO=<ID=VAF,Number=R,Type=Integer,Description="Variant allele fraction of alternate allele(s) at this locus\n')
         file_handler.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
 
     def write_variant(self, file_handler):
@@ -493,11 +494,17 @@ class PosCollection:
                     continue
                 molecule_counts[base] += self.base_array[categ][base]
 
-        info_column = ';'.join([ info_column, '='.join(["MC", ','.join([ str(molecule_counts[base]) for base in bases])])])
-        info_column = ';'.join([ info_column, '='.join(["PC", ','.join([ str(self.pos_counts[base]) for base in bases])])])
-        info_column = ';'.join([ info_column, '='.join(["NC", ','.join([ str(self.neg_counts[base]) for base in bases])])])
+        info_column = ';'.join([info_column, '='.join(["MC", ','.join([str(molecule_counts[base]) for base in bases])])])
+        info_column = ';'.join([info_column, '='.join(["PC", ','.join([str(self.pos_counts[base]) for base in bases])])])
+        info_column = ';'.join([info_column, '='.join(["NC", ','.join([str(self.neg_counts[base]) for base in bases])])])
+        info_column = ';'.join([info_column, '='.join(["NC", ','.join([str(self.neg_counts[base]) for base in bases])])])
         sr_detail = "SR=" + str(self.skipped_reads)
-        info_column = ';'.join([ info_column, sr_detail])
+        info_column = ';'.join([info_column, sr_detail])
+        # Added by Chris: Calculates VAF
+        alt_base_count = sum(float(molecule_counts[base]) for base in list(set(self.alt)))
+        total_base_count = sum(float(molecule_counts[base]) for base in bases)
+        vaf = alt_base_count / total_base_count
+        info_column = ";".join([info_column, "=".join(["VAF", str(vaf)])])
 
         reason = "."
         if len(self.alt_reason) >= 0:
@@ -514,6 +521,7 @@ class PosCollection:
                 info_column
                 ]))
             file_handler.write("\n")
+        return self.alt
 
     def coords(self):
 

@@ -108,7 +108,7 @@ parser.add_argument(
     "-abct", "--alt_base_count_threshold",
     default=5,
     type=int,
-    help=configargparse.SUPPRESS  #  "The minimum number of alternative bases to identify separately in the positive and negative read collections"
+    help=configargparse.SUPPRESS #  "The minimum number of alternative bases to identify separately in the positive and negative read collections"
     )
 parser.add_argument(
     "-sbt", "--strand_bias_threshold",
@@ -116,7 +116,7 @@ parser.add_argument(
     )
 parser.add_argument(
     "--adapter_sequence",
-    help=configargparse.SUPPRESS  #  "The minimum number of alternative bases to identify separately in the positive and negative read collections"
+    help=configargparse.SUPPRESS #  "The minimum number of alternative bases to identify separately in the positive and negative read collections"
     )
 parser.add_argument(
     "--adapter_position",
@@ -126,6 +126,7 @@ parser.add_argument(
     "--max_mismatch",
     help=configargparse.SUPPRESS
     )
+
 
 def is_valid_file(file, parser):
     """
@@ -185,7 +186,6 @@ def main(args=None):
 
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param
-
 
     bamfile = pysam.AlignmentFile(args.input, 'rb')
     fastafile = pysam.FastaFile(args.reference)

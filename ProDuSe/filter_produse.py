@@ -224,7 +224,7 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
 				# Process each possible alternate allele individually
 				for altAllele in altAlleles:
 
-					# Throw ignore alleles with significant strand bias
+					# Ignore alleles with significant strand bias
 					if float(infoFields["StrBiasP"][baseToIndex[altAllele]]) <= strandBiasThresh:
 						continue
 
@@ -260,13 +260,15 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
 						passingAltAlleles.append(allele)
 
 			if passingAltAlleles:
-				# Calculate the VAF of these alleles
+				# Replace the existing VAF with the VAF of alt alleles which passed filters
 				altMolecules = 0
 				for allele in passingAltAlleles:
 					altMolecules += float(infoFields["MC"][baseToIndex[allele]])
 				totalMolecules = sum(float(infoFields["MC"][x]) for x in range(0, 4))
 				vaf = altMolecules / totalMolecules
-				outInfo = ";".join([infoCol, "VAF=" + str(vaf)])
+				newInfoCol = infoCol.split(";")[:-1]
+				newInfoCol.append("VAF=" + str(vaf))
+				outInfo = ";".join(newInfoCol)
 				outLine = line.replace(infoCol, outInfo)
 				origAltAlleles = line.split()[4]
 				newAltAlleles = ",".join(passingAltAlleles)
@@ -304,3 +306,4 @@ def main(args=None):
 
 if __name__ == "__main__":
 	main()
+
