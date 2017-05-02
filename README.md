@@ -40,14 +40,21 @@ You will first need to retrieve two configuration files:
  * retrieve a sample sample_config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini)
 
 To run the analysis pipeline you simply need to run the following command:
-
-```produse run_produse
+```
+    produse run_produse
     -c config.ini
     -sc sample_config.ini
     -r /path/to/ref.fa
     -x /path/to/stitcher.exe
 ```
-
+Alternatively, if you wish to run ProDuSe without installing it, you can run `ProdusePipeline.py` manually in a similar manner:
+```
+    /path/to/ProDuSe/ProdusePipeline.py
+    -c config.ini
+    -sc sample_config.ini
+    -r /path/to/ref.fa
+    -x /path/to/stitcher.exe
+```
 This will run the entire ProDuSe pipeline on all samples specified in the sample_config.ini file
 Results will be located in the following directory:
 
