@@ -401,11 +401,15 @@ class PosCollection:
 
     def is_variant(self, min_alt_vaf, min_molecule_count, enforce_dual_strand, mutant_molecules):
 
+        # Added by Chris: Fixes an edge case where the reference base at this position is an N
+        if self.ref == "N":
+            return False
+
         base_sum = {"A": 0, "T": 0, "C": 0, "G": 0, "N": 0}
         alt_bases = []
         for categ in self.base_array.keys():
             for base in self.base_array[categ].keys():
-                if not base == self.ref:
+                if base != self.ref:
                     alt_bases.append(base)
                 base_sum[base] += self.base_array[categ][base]
 
