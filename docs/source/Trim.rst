@@ -1,0 +1,62 @@
+Trim
+============
+
+Purpose
+^^^^^^^
+
+Trims adapter sequence from barcoded reads, and saves this information in the read name.
+Reads which do not fall in barcode range and mismatch threshold are discarded.
+
+Run Using
+^^^^^^^^^
+
+::
+
+    produse trim
+    /path/to/ProDuSe/ProDuSe/trim.py
+
+Paramters
+^^^^^^^^^
+
+    :-c, --config:
+        A configuration file, which can list one or more arguments
+    :-i --input:
+        A fastq file which will be trimmed (may be gzipped. This argument must be specified twice.
+    :-o --output:
+        | An output file for writting trimmed reads. This argument must be specified twice.
+        | The output can automatically be gzipped by adding the apropriate file extension (i.e. .gz) to the output file name.
+        | The output file order coresponds with the input file order
+    :-as --adapter_sequence:
+        The barcode sequence range, described using IUPAC bases
+    :-ap --adapter_position:
+        | The positions in the adapter sequence to consider when comparing reference (i.e. -as) and actual adapter sequences
+        | 0 = Do not consider this position
+        | 1 = Consider this position
+        | Note that the entire adapter sequence will be trimmed, even if a position is labelled 0
+    :--mm --max_mismatch:
+        The maximum number of mismatches allowed between the reference and actual adapter sequences
+    :-v:
+        | Instead of discarding reads with mismatching adapter sequences and saving all other read, do the opposite (save mismatching reads, discard all others)
+        | Useful for debugging
+    :-t:
+        Do not trim the adapter sequence
+
+
+Input and Output
+^^^^^^^^^^^^^^^^
+
+    :Input:
+        Two fastq files
+    :Output:
+        Two fastq files
+
+Helpful tips
+^^^^^^^^^^^^
+
+If the discard rate is extremely high, check the supplied adapter sequence.
+
+Additional Notes
+^^^^^^^^^^^^^^^^
+
+If the supplied fastqs are multiplexed, a single sample can be extracted if no other samples use barcoded adapters, or if the barcoded adapter sequences are distinct enough (i.e. the difference between the two barcode sequences exceeds the maximum mismatch threshold).
+Note that there may be some spillover if non-barcoded reads start with a sequence that falls within the barcode sequence range by chance, or if the differences between barcoded sequences is slightly higher than the maximum mismatch threshold
