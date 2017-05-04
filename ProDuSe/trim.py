@@ -148,8 +148,8 @@ def main(args=None):
         # This is gross, but set the flags to false
         if "v" not in cmdArgs:
             args.v = False
-        if "t" not in cmdArgs:
-            args.t = False
+        if "u" not in cmdArgs:
+            args.u = False
 
     # If input and output files were specified from the command line, ensures that a pair of files were provided
     if not len(args.input) == 2:
@@ -252,7 +252,7 @@ def main(args=None):
             discard += 1
             continue
 
-        if args.t:
+        if args.u:
 
             # Glue back the trimmed sequences and quality scores
             forward_read.prepend(forward_adapter)
