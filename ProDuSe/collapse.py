@@ -4,10 +4,8 @@
 #   See collapse.py -h for details
 #
 # DESCRIPTION:
-#   Using the forward and reverse reads mapped in the BAM file, merges reads with
-#   the most similar adapter sequences down into a consensus sequence. Forward and
-#   reverse reads are treated partially independently, to form a consensus supported
-#   by the forward and reverse reads. See alignment.py for more details
+#   Collapses reads which 1) Start at the same position 2) Are mapped onto the same strand, and
+#   3) Contain the same (or very similar) adapter sequences into a consensus sequenc
 #
 # AUTHORS
 #   Creator: Marco Albuquerque
