@@ -3,6 +3,7 @@ An analysis pipeline, helper scripts and Python classes to **Pro**cess **Du**ple
 
 ## Description
 
+See the full wiki page for more information: http://produse.readthedocs.io/en/latest/
 
 ## Installation 
 
