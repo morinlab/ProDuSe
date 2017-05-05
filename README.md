@@ -13,9 +13,9 @@ You will need to install the following tools before installing the ProDuSe packa
 
 * `python>=2.7`
 * `bwa==0.7.12`
-* `samtools==1.3.1`
+* `samtools>=1.3.1`
 * `Stitcher>=5.1.3` (Can be obtained from https://github.com/Illumina/Pisces.git)
-* `Mono compiler`
+* `Mono>=4.6.2` (Mono Compiler)
 
 ProDuSe will check to ensure that required tools are installed prior to running the pipeline
 
