@@ -1,0 +1,24 @@
+language: python
+python:
+    - "2.7"
+    - "3.2"
+    - "3.3"
+    - "3.4"
+    - "3.5"
+    - "3.6"
+
+before_install:
+    - sudo apt-get install -qq samtools
+    - sudo apt-get install -qq bwa
+
+install: "pip install -r requirements.txt"
+
+script: "ProDuSe/ProdusePipeline.py"
+script: "ProDuSe/configure_produse.py"
+script: "ProDuSe/trim.py"
+script: "ProDuSe/bwa.py"
+script: "ProDuSe/collapse.py"
+script: "ProDuSe/SplitMerge.py"
+script: "ProDuSe/snv.py"
+script: "ProDuSe/filter_produse.py"
+script: "ProDuSe/adapter_predict.py"
