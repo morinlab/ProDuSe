@@ -25,7 +25,7 @@ From the command line::
     cd /path/to/ProDuSe/clone/
     python setup.py install
 
-This will automatically install all python dependencies
+This will automatically install all python dependencies.
 
 Setup ProDuSe configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -37,6 +37,10 @@ To run ProDuSe, you will need the following:
  3. `ProDuse configuration file`_
 
  .. _ProDuse configuration file: https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini
+
+If you are unsure of the barcode sequence, it can be estimated using `adapter_predict`_
+
+.. _adapter_predict: Adapter Predict.rst
 
 To start, modify the ProDuSe configuration file with your sample's information::
 
@@ -68,12 +72,12 @@ To start, modify the ProDuSe configuration file with your sample's information::
 
     [filter_produse]
 
-See the configuration help page for information on what each of these options specify.
+See the help page of each script if you are unsure what a specific parameter does.
 
 Run ProDuSe
 ^^^^^^^^^^^
 
-Finally, run ProDuSe with the specified information
+Finally, run ProDuSe with the specified information.
 
 If you installed ProDuSe::
 
@@ -83,12 +87,12 @@ If you did not install ProDuSe::
 
     /path/to/ProDuSe/ProDuSe/ProdusePipleine.py -x /path/to/Stitcher.exe -r /path/to/reference/genome/build -c /path/to/produse/config/file -f /path/to/fastq.R1 /path/to/fastq.R2
 
-All results will be placed in the current working directory (this can be changed using `-d`), in the folder `produse_analysis_directory`
+All results will be placed in the current working directory (this can be changed using `-d`), under `produse_analysis_directory`.
 
 Running multiple samples at once
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-ProDuSe can process multiple samples sequentially with the same command. You will need a `sample configuration` file to use this feature
+ProDuSe can process multiple samples sequentially with the same command. You will need a `sample configuration` file to use this feature.
 
 .. _sample configuration: https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini
 
@@ -113,11 +117,11 @@ If you would like to specify different parameters for each sample, they can be s
     fastqs=/path/to/Sample2/fastq.R1,/path/to/Sample2/fastq.R2
     max_mismatch=2
 
-These parameters will be used for that sample alone
+These parameters will be used for that sample alone.
 
-.. note:: Parameters specified in the sample configuration file override ProDuSe configuration file paramters for that sample, while ProDuSe configuration file parameters override command line parameters for ALL samples
+.. note:: Parameters specified in the sample configuration file override ProDuSe configuration file parameters for that sample, while ProDuSe configuration file parameters override command line parameters for ALL samples
 
-When running ProDuSe, this sample configuration file can be specified instead of fastq files
+When running ProDuSe, this sample configuration file will be specified instead of fastq files.
 
 If ProDuSe is installed::
 
@@ -127,7 +131,7 @@ If ProDuSe is not installed::
 
     /path/to/ProDuSe/ProDuSe/ProdusePipleine.py -x /path/to/Stitcher.exe -r /path/to/reference/genome/build -c /path/to/produse/config/file *-sc /path/to/sample/configuration/file*
 
-All results will be outputted in individual directories under 'produse_analysis_directory'
+All results will be outputted in individual sample directories under 'produse_analysis_directory'.
 
 
 

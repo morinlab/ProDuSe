@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Config &#8212; ProDuSe 0.2.3 documentation</title>
+    <title>SplitMerge &#8212; ProDuSe 0.2.3 documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -26,8 +26,8 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Trim" href="Trim.html" />
-    <link rel="prev" title="The ProDuSe Pipeline" href="The ProDuSe Pipeline.html" /> 
+    <link rel="next" title="SNV" href="snv.html" />
+    <link rel="prev" title="Collapse" href="Collapse.html" /> 
   </head>
   <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
@@ -37,10 +37,10 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="snv.html" title="SNV"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="The ProDuSe Pipeline.html" title="The ProDuSe Pipeline"
+          <a href="Collapse.html" title="Collapse"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.2.3 documentation</a> &#187;</li> 
       </ul>
@@ -51,33 +51,18 @@
         <div class="bodywrapper">
           <div class="body" role="main">
             
-  <div class="section" id="config">
-<h1>Config<a class="headerlink" href="#config" title="Permalink to this headline">¶</a></h1>
-<p>Configures output directories, input and output file paths for each step of the ProDuSe pipeline, and configuration files for each script.</p>
-<p>produse_config.py performs the following tasks:</p>
-<blockquote>
-<div><ul class="simple">
-<li>Creates a main output directory (produse_analysis_direcetory) in the specified directory</li>
-<li>Creates a log file listing the supplied arguments in the main output directory</li>
-<li>Creates a Makefile in the main output directory (Depreciated, has no purpose)</li>
-<li>(If necessary) Creates normal and bwa indexes for the designated reference genome</li>
-</ul>
-</div></blockquote>
-<p>For each sample supplied:</p>
-<blockquote>
-<div><ul class="simple">
-<li>Creates a sample-specific directory and subdirectories in the main output directory using the sample&#8217;s name</li>
-<li>Symbolically Links input files into this sample-specific directory</li>
-<li>Creates a config file for each step in the ProDuSe pipeline, containing sample-specific parameters</li>
-</ul>
-</div></blockquote>
+  <div class="section" id="splitmerge">
+<h1>SplitMerge<a class="headerlink" href="#splitmerge" title="Permalink to this headline">¶</a></h1>
+<p>Processes each read in the Stitched BAM file. Unstitched reads are simply saved to the output BAM file. If a read was stitched, the bases unique to the original forward and reverse read are
+identified and assigned to a replacement forward and reverse read. Bases shared between the two sequences are assigned to only one of the paired reads, to remove overlap.
+In addition, if Stitcher misaligned a portion of the Stitched sequence, the correct start position of each read is determined, and an INDEL is added as necessary.</p>
 <div class="section" id="run-using">
 <h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">configure_produse</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">split_merge</span>
 </pre></div>
 </div>
 <p>or</p>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">configure_produse</span><span class="o">.</span><span class="n">py</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">SplitMerge</span><span class="o">.</span><span class="n">py</span>
 </pre></div>
 </div>
 </div>
@@ -88,36 +73,28 @@
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-f &#8211;fastqs:</th><td class="field-body"><div class="first last line-block">
-<div class="line">If running a single sample, the fastq files for the sample to be analyzed.</div>
-<div class="line">Two arguments must be supplied.</div>
-<div class="line">A single sample directory names &#8216;Sample&#8217; will be created.</div>
-<div class="line">Mutually exclusive with -sc &#8211;sample_config.</div>
-</div>
-</td>
+<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">An optional configuration file which can provide any of the arguments described below.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-sc &#8211;sample_config:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
-<div class="line">A configuration file listing sample names, fastq locations, and sample-specific parameters.</div>
-<div class="line">A directory will be created for each sample, using the name supplied.</div>
-<div class="line">Mutually exclusive with -f &#8211;fastqs.</div>
-</div>
-</td>
+<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">A BAM file containing reads merged (stitched) by Stitcher. This file must be sorted by read name.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-d &#8211;output_directory:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">The directory to output ProDuSe results. Default is the current working directory.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-u &#8211;unstitched_input:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">A BAM file containing reads immediately before they were merged by stitcher. If running the ProDuSe pipeline, this will be the collapsed BAM file. This file must
+be sorted by read name.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-r &#8211;reference:</th><td class="field-body">Reference genome build, in fasta format.</td>
-</tr>
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file listing parameters to be supplied to each stage of the ProDuSe pipeline.</td>
+<tr class="field-even field"><th class="field-name">-o &#8211;output:</th><td class="field-body">Path and name of the output BAM file.</td>
 </tr>
 </tbody>
 </table>
 </div></blockquote>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Input files must be sorted by read name, not position.</p>
+</div>
 </div>
 <div class="section" id="additional-considerations">
 <h2>Additional Considerations<a class="headerlink" href="#additional-considerations" title="Permalink to this headline">¶</a></h2>
-<p>While indexes will be automatically generated if none are present in the reference genome directory, this make take a significant amount of time.</p>
+<p>While the vast majority (&gt;99.99%) of stitched reads will be successfully separated, some reads with very complicated stitching will be discarded. Note that while this step
+will identify some additional INDELs that bwa did not identify due to their size, ProDuSe does not currently call INDELs.</p>
 </div>
 </div>
 
@@ -129,7 +106,7 @@
         <div class="sphinxsidebarwrapper">
   <h3><a href="index.html">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">Config</a><ul>
+<li><a class="reference internal" href="#">SplitMerge</a><ul>
 <li><a class="reference internal" href="#run-using">Run Using</a></li>
 <li><a class="reference internal" href="#parameters">Parameters</a></li>
 <li><a class="reference internal" href="#additional-considerations">Additional Considerations</a></li>
@@ -138,15 +115,15 @@
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="The ProDuSe Pipeline.html"
-                        title="previous chapter">The ProDuSe Pipeline</a></p>
+  <p class="topless"><a href="Collapse.html"
+                        title="previous chapter">Collapse</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="Trim.html"
-                        title="next chapter">Trim</a></p>
+  <p class="topless"><a href="snv.html"
+                        title="next chapter">SNV</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="_sources/Config.rst.txt"
+      <li><a href="_sources/SplitMerge.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div>
@@ -171,10 +148,10 @@
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="snv.html" title="SNV"
              >next</a> |</li>
         <li class="right" >
-          <a href="The ProDuSe Pipeline.html" title="The ProDuSe Pipeline"
+          <a href="Collapse.html" title="Collapse"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.2.3 documentation</a> &#187;</li> 
       </ul>

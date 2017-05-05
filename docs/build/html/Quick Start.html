@@ -26,7 +26,7 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Running ProDuSe" href="Running ProDuSe.html" />
+    <link rel="next" title="The ProDuSe Pipeline" href="The ProDuSe Pipeline.html" />
     <link rel="prev" title="ProDuSe: Process Duplex Sequence data" href="index.html" /> 
   </head>
   <body role="document">
@@ -37,7 +37,7 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="Running ProDuSe.html" title="Running ProDuSe"
+          <a href="The ProDuSe Pipeline.html" title="The ProDuSe Pipeline"
              accesskey="N">next</a> |</li>
         <li class="right" >
           <a href="index.html" title="ProDuSe: Process Duplex Sequence data"
@@ -73,7 +73,7 @@
 <span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install</span>
 </pre></div>
 </div>
-<p>This will automatically install all python dependencies</p>
+<p>This will automatically install all python dependencies.</p>
 </div>
 <div class="section" id="setup-produse-configuration">
 <h2>Setup ProDuSe configuration<a class="headerlink" href="#setup-produse-configuration" title="Permalink to this headline">¶</a></h2>
@@ -85,6 +85,7 @@
 <li><a class="reference external" href="https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini">ProDuse configuration file</a></li>
 </ol>
 </div></blockquote>
+<p>If you are unsure of the barcode sequence, it can be estimated using <a class="reference external" href="AdapterPredict.rst">adapter_predict</a></p>
 <p>To start, modify the ProDuSe configuration file with your sample&#8217;s information:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">snv</span><span class="p">]</span>
 <span class="n">min_molecules</span> <span class="o">=</span> <span class="mi">2</span>
@@ -115,11 +116,11 @@
 <span class="p">[</span><span class="n">filter_produse</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>See the configuration help page for information on what each of these options specify.</p>
+<p>See the help page of each script if you are unsure what a specific parameter does.</p>
 </div>
 <div class="section" id="run-produse">
 <h2>Run ProDuSe<a class="headerlink" href="#run-produse" title="Permalink to this headline">¶</a></h2>
-<p>Finally, run ProDuSe with the specified information</p>
+<p>Finally, run ProDuSe with the specified information.</p>
 <p>If you installed ProDuSe:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">run_produse</span> <span class="o">-</span><span class="n">x</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Stitcher</span><span class="o">.</span><span class="n">exe</span> <span class="o">-</span><span class="n">r</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">reference</span><span class="o">/</span><span class="n">genome</span><span class="o">/</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">-</span><span class="n">f</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
 </pre></div>
@@ -128,11 +129,11 @@
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProdusePipleine</span><span class="o">.</span><span class="n">py</span> <span class="o">-</span><span class="n">x</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Stitcher</span><span class="o">.</span><span class="n">exe</span> <span class="o">-</span><span class="n">r</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">reference</span><span class="o">/</span><span class="n">genome</span><span class="o">/</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">-</span><span class="n">f</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
 </pre></div>
 </div>
-<p>All results will be placed in the current working directory (this can be changed using <cite>-d</cite>), in the folder <cite>produse_analysis_directory</cite></p>
+<p>All results will be placed in the current working directory (this can be changed using <cite>-d</cite>), under <cite>produse_analysis_directory</cite>.</p>
 </div>
 <div class="section" id="running-multiple-samples-at-once">
 <h2>Running multiple samples at once<a class="headerlink" href="#running-multiple-samples-at-once" title="Permalink to this headline">¶</a></h2>
-<p>ProDuSe can process multiple samples sequentially with the same command. You will need a <cite>sample configuration</cite> file to use this feature</p>
+<p>ProDuSe can process multiple samples sequentially with the same command. You will need a <cite>sample configuration</cite> file to use this feature.</p>
 <p>Specify each sample in this configuration file:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Sample1</span><span class="p">]</span>
 <span class="n">fastqs</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample1</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span><span class="p">,</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample1</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
@@ -156,12 +157,12 @@
 <span class="n">max_mismatch</span><span class="o">=</span><span class="mi">2</span>
 </pre></div>
 </div>
-<p>These parameters will be used for that sample alone</p>
+<p>These parameters will be used for that sample alone.</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p class="last">Parameters specified in the sample configuration file override ProDuSe configuration file paramters for that sample, while ProDuSe configuration file parameters override command line parameters for ALL samples</p>
+<p class="last">Parameters specified in the sample configuration file override ProDuSe configuration file parameters for that sample, while ProDuSe configuration file parameters override command line parameters for ALL samples</p>
 </div>
-<p>When running ProDuSe, this sample configuration file can be specified instead of fastq files</p>
+<p>When running ProDuSe, this sample configuration file will be specified instead of fastq files.</p>
 <p>If ProDuSe is installed:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">run_produse</span> <span class="o">-</span><span class="n">x</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Stitcher</span><span class="o">.</span><span class="n">exe</span> <span class="o">-</span><span class="n">r</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">reference</span><span class="o">/</span><span class="n">genome</span><span class="o">/</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">*-</span><span class="n">sc</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">sample</span><span class="o">/</span><span class="n">configuration</span><span class="o">/</span><span class="n">file</span><span class="o">*</span>
 </pre></div>
@@ -170,7 +171,7 @@
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProdusePipleine</span><span class="o">.</span><span class="n">py</span> <span class="o">-</span><span class="n">x</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Stitcher</span><span class="o">.</span><span class="n">exe</span> <span class="o">-</span><span class="n">r</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">reference</span><span class="o">/</span><span class="n">genome</span><span class="o">/</span><span class="n">build</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">*-</span><span class="n">sc</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">sample</span><span class="o">/</span><span class="n">configuration</span><span class="o">/</span><span class="n">file</span><span class="o">*</span>
 </pre></div>
 </div>
-<p>All results will be outputted in individual directories under &#8216;produse_analysis_directory&#8217;</p>
+<p>All results will be outputted in individual sample directories under &#8216;produse_analysis_directory&#8217;.</p>
 </div>
 </div>
 
@@ -196,8 +197,8 @@
   <p class="topless"><a href="index.html"
                         title="previous chapter">ProDuSe: Process Duplex Sequence data</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="Running ProDuSe.html"
-                        title="next chapter">Running ProDuSe</a></p>
+  <p class="topless"><a href="The ProDuSe Pipeline.html"
+                        title="next chapter">The ProDuSe Pipeline</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
@@ -226,7 +227,7 @@
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="Running ProDuSe.html" title="Running ProDuSe"
+          <a href="The ProDuSe Pipeline.html" title="The ProDuSe Pipeline"
              >next</a> |</li>
         <li class="right" >
           <a href="index.html" title="ProDuSe: Process Duplex Sequence data"
@@ -236,7 +237,7 @@
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright 2017, Christopher Rushton.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.4.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.5.
     </div>
   </body>
 </html>

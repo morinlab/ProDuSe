@@ -12,19 +12,19 @@ ProDuSe: Process Duplex Sequence data
         `GNU General Public License v3.0`_      
 
     .. _Github: https://github.com/morinlab/ProDuSe
-    .. _GNU General Public License v3.0: https://www.gnu.org/licenses/gpl-3.0.en.html#content
+    .. _GNU General Public License v3.0: License.html
 
 ProDuSe is a Python command-line variant caller designed for use on Illumina sequencing data obtained from libraries constructing using barcoded adapters. Using these adapters,
 read duplicates are identified and collapsed into a single consensus sequence, correcting PCR and sequencing errors. In samples with a high duplication rate, this allows extremely rare
 variants be be called confidently.
 
-Quick Links
-===========
+Useful Links
+============
 .. toctree::
    :maxdepth: 1
 
    Quick Start
-   Running ProDuSe
+   The ProDuSe Pipeline
 
 ProDuSe Commands
 ================
@@ -33,4 +33,24 @@ ProDuSe Commands
 
    Config
    Trim
+   bwa
+   Collapse
+   SplitMerge
+   snv
+   Filter
 
+Other Commands
+==============
+
+.. toctree::
+   :maxdepth: 1
+
+   Adapter Predict
+
+Additional Links
+================
+
+.. toctree::
+   :maxdepth: 1
+
+   License

@@ -1,7 +1,7 @@
 Config
 ==============
 
-Configures output directories, input and output file paths for each step of the ProDuSe pipeline, and configuration files for each script
+Configures output directories, input and output file paths for each step of the ProDuSe pipeline, and configuration files for each script.
 
 produse_config.py performs the following tasks:
 
@@ -22,7 +22,12 @@ Run Using
 ::
 
     produse configure_produse
-    /path/to/ProDuSe/ProDuSe/configure_produse.py
+
+or
+
+::
+
+    python /path/to/ProDuSe/ProDuSe/configure_produse.py
 
 Parameters
 ^^^^^^^^^^
@@ -41,9 +46,9 @@ Parameters
     :-r --reference:
         Reference genome build, in fasta format.
     :-c --config:
-        A configuration file listing paramters to be supplied to each stage of the ProDuSe pipeline
+        A configuration file listing parameters to be supplied to each stage of the ProDuSe pipeline.
 
 Additional Considerations
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-While indexes will be automatically generated if none are present in the reference genome directory, this make take a significant amount of time
+While indexes will be automatically generated if none are present in the reference genome directory, this make take a significant amount of time.

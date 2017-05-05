@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Config &#8212; ProDuSe 0.2.3 documentation</title>
+    <title>Filter &#8212; ProDuSe 0.2.3 documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -26,8 +26,8 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Trim" href="Trim.html" />
-    <link rel="prev" title="The ProDuSe Pipeline" href="The ProDuSe Pipeline.html" /> 
+    <link rel="next" title="Adapter Predict" href="Adapter Predict.html" />
+    <link rel="prev" title="SNV" href="snv.html" /> 
   </head>
   <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
@@ -37,10 +37,10 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="Adapter Predict.html" title="Adapter Predict"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="The ProDuSe Pipeline.html" title="The ProDuSe Pipeline"
+          <a href="snv.html" title="SNV"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.2.3 documentation</a> &#187;</li> 
       </ul>
@@ -51,33 +51,23 @@
         <div class="bodywrapper">
           <div class="body" role="main">
             
-  <div class="section" id="config">
-<h1>Config<a class="headerlink" href="#config" title="Permalink to this headline">¶</a></h1>
-<p>Configures output directories, input and output file paths for each step of the ProDuSe pipeline, and configuration files for each script.</p>
-<p>produse_config.py performs the following tasks:</p>
+  <div class="section" id="filter">
+<h1>Filter<a class="headerlink" href="#filter" title="Permalink to this headline">¶</a></h1>
+<p>Filters candidate variants called by ProDuSe based upon the following characteristics:</p>
 <blockquote>
 <div><ul class="simple">
-<li>Creates a main output directory (produse_analysis_direcetory) in the specified directory</li>
-<li>Creates a log file listing the supplied arguments in the main output directory</li>
-<li>Creates a Makefile in the main output directory (Depreciated, has no purpose)</li>
-<li>(If necessary) Creates normal and bwa indexes for the designated reference genome</li>
-</ul>
-</div></blockquote>
-<p>For each sample supplied:</p>
-<blockquote>
-<div><ul class="simple">
-<li>Creates a sample-specific directory and subdirectories in the main output directory using the sample&#8217;s name</li>
-<li>Symbolically Links input files into this sample-specific directory</li>
-<li>Creates a config file for each step in the ProDuSe pipeline, containing sample-specific parameters</li>
+<li>Minimum molecule counts: The number of molecules supporting a variant at a given position must deviate from the number expected from simple noise in order to call a variant.</li>
+<li>Molecule type: Stronger (duplex, strong bases) molecules will be examined for support (or lack of support) for a variant first. If too many strong molecule do not support a variant when support is expected, the variant will be discarded.</li>
+<li>(If designated) Dual strand support: Both the positive and negative strand must support a variant confidently before it is called.</li>
 </ul>
 </div></blockquote>
 <div class="section" id="run-using">
 <h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">configure_produse</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="nb">filter</span>
 </pre></div>
 </div>
 <p>or</p>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">configure_produse</span><span class="o">.</span><span class="n">py</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">filter_produse</span><span class="o">.</span><span class="n">py</span>
 </pre></div>
 </div>
 </div>
@@ -88,28 +78,23 @@
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-f &#8211;fastqs:</th><td class="field-body"><div class="first last line-block">
-<div class="line">If running a single sample, the fastq files for the sample to be analyzed.</div>
-<div class="line">Two arguments must be supplied.</div>
-<div class="line">A single sample directory names &#8216;Sample&#8217; will be created.</div>
-<div class="line">Mutually exclusive with -sc &#8211;sample_config.</div>
-</div>
-</td>
+<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can supply any of the parameters described below.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-sc &#8211;sample_config:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
-<div class="line">A configuration file listing sample names, fastq locations, and sample-specific parameters.</div>
-<div class="line">A directory will be created for each sample, using the name supplied.</div>
-<div class="line">Mutually exclusive with -f &#8211;fastqs.</div>
-</div>
-</td>
+<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">Input VCF file, listing candidate variants and molecule counts.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-d &#8211;output_directory:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">The directory to output ProDuSe results. Default is the current working directory.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-m &#8211;molecule_stats:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">A tab-delineated file listing total depth and different molecule abundances across the entire capture space. Generated by snv.py.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-r &#8211;reference:</th><td class="field-body">Reference genome build, in fasta format.</td>
+<tr class="field-even field"><th class="field-name">-o &#8211;output:</th><td class="field-body">Path and name to use for the output VCF file.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file listing parameters to be supplied to each stage of the ProDuSe pipeline.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-sb &#8211;strand_bias_threshold:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Strand bias p-value threshold. If the strand bias of a variant is below this value, the variant will be discarded.</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-st &#8211;strong_base_threshold:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Minimum number of strong bases required to call a variant. Note that this threshold will increase depending on locus and overall library characteristics for each molecule type.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-wt &#8211;weak_base_threshold:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Minimum number of weak bases required to call a variant. Note that this threshold will increase depending on locus and capture space characteristics for each molecule type.</td>
 </tr>
 </tbody>
 </table>
@@ -117,7 +102,7 @@
 </div>
 <div class="section" id="additional-considerations">
 <h2>Additional Considerations<a class="headerlink" href="#additional-considerations" title="Permalink to this headline">¶</a></h2>
-<p>While indexes will be automatically generated if none are present in the reference genome directory, this make take a significant amount of time.</p>
+<p>If the duplicate rate of a library is extremely low, variants will be called based upon weak bases. Thus, a large number of false positive calls may be generated.</p>
 </div>
 </div>
 
@@ -129,7 +114,7 @@
         <div class="sphinxsidebarwrapper">
   <h3><a href="index.html">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">Config</a><ul>
+<li><a class="reference internal" href="#">Filter</a><ul>
 <li><a class="reference internal" href="#run-using">Run Using</a></li>
 <li><a class="reference internal" href="#parameters">Parameters</a></li>
 <li><a class="reference internal" href="#additional-considerations">Additional Considerations</a></li>
@@ -138,15 +123,15 @@
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="The ProDuSe Pipeline.html"
-                        title="previous chapter">The ProDuSe Pipeline</a></p>
+  <p class="topless"><a href="snv.html"
+                        title="previous chapter">SNV</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="Trim.html"
-                        title="next chapter">Trim</a></p>
+  <p class="topless"><a href="Adapter Predict.html"
+                        title="next chapter">Adapter Predict</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="_sources/Config.rst.txt"
+      <li><a href="_sources/Filter.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div>
@@ -171,10 +156,10 @@
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="Adapter Predict.html" title="Adapter Predict"
              >next</a> |</li>
         <li class="right" >
-          <a href="The ProDuSe Pipeline.html" title="The ProDuSe Pipeline"
+          <a href="snv.html" title="SNV"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.2.3 documentation</a> &#187;</li> 
       </ul>
