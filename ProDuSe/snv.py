@@ -192,7 +192,7 @@ def main(args=None):
     targetbed = None
     statsFile = open(args.molecule_stats, "w")
     if args.target_bed is not None:
-        pysam.index(bamfile)
+        pysam.index(args.input)
         targetbed = bed.BedOpen(args.target_bed, 'r')
 
     printPrefix = "PRODUSE-SNV\t"
