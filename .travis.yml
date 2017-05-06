@@ -9,7 +9,6 @@ python:
 before_install:
     - sudo apt-get install -qq samtools
     - sudo apt-get install -qq bwa
-    - sudo apt-get install -qq mono-comple
 
 install: "pip install -r requirements.txt"
 
