@@ -11,7 +11,7 @@ See the full wiki page for more information: http://produse.readthedocs.io/en/la
 
 You will need to install the following tools before installing the ProDuSe package:
 
-* `python>=2.7`
+* `python>=2.7` (But not 3.2)
 * `bwa==0.7.12`
 * `samtools>=1.3.1`
 * `Stitcher>=5.1.3` (Can be obtained from https://github.com/Illumina/Pisces.git)
