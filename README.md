@@ -31,6 +31,8 @@ All required python dependencies will be installed during this step
 
 ### The Analysis Pipeline
 
+You can view more more detailed instructions on the [wiki](http://produse.readthedocs.io/en/latest/)
+
 You will first need to retrieve two configuration files:
 
 #### `produse_config.ini`

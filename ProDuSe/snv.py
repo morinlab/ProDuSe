@@ -16,6 +16,7 @@ import os
 import sys
 import time
 from collections import OrderedDict
+import subprocess
 
 """
 Processes command line arguments
@@ -187,13 +188,14 @@ def main(args=None):
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param
 
+    if args.target_bed is not None:
+        subprocess.call(["samtools", "index", args.input])
+        targetbed = bed.BedOpen(args.target_bed, 'r')
+
     bamfile = pysam.AlignmentFile(args.input, 'rb')
     fastafile = pysam.FastaFile(args.reference)
     targetbed = None
     statsFile = open(args.molecule_stats, "w")
-    if args.target_bed is not None:
-        pysam.index(args.input)
-        targetbed = bed.BedOpen(args.target_bed, 'r')
 
     printPrefix = "PRODUSE-SNV\t"
     sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
