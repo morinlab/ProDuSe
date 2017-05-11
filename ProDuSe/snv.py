@@ -191,10 +191,11 @@ def main(args=None):
     if args.target_bed is not None:
         subprocess.call(["samtools", "index", args.input])
         targetbed = bed.BedOpen(args.target_bed, 'r')
+    else:
+        targetbed = None
 
     bamfile = pysam.AlignmentFile(args.input, 'rb')
     fastafile = pysam.FastaFile(args.reference)
-    targetbed = None
     statsFile = open(args.molecule_stats, "w")
 
     printPrefix = "PRODUSE-SNV\t"
