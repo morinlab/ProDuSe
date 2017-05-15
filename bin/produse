@@ -26,7 +26,6 @@ parser_configure_produse.set_defaults(
     which="configure_produse"
     )
 
-
 parser_trim = subparsers.add_parser(
     "trim",
     parents=[trim.parser],
@@ -77,7 +76,6 @@ parser_filter = subparsers.add_parser(
     parents=[filter_produse.parser],
     add_help=False
     )
-
 parser_filter.set_defaults(
     which="filter"
     )
@@ -96,15 +94,25 @@ parser_run_pipeline = subparsers.add_parser(
     parents=[ProdusePipeline.parser],
     add_help=False,
     )
-
 parser_run_pipeline.set_defaults(
     which="run_produse"
+    )
+
+parser_version = subparsers.add_parser(
+    "version"
+    )
+parser_version.set_defaults(
+    which="version"
     )
 
 if len(sys.argv[1:]) == 0:
     parser.print_help()
     parser.exit()
 args = parser.parse_args()
+
+if args.which == "version":
+    from ProDuSe.__version import __version__
+    sys.stderr.write("ProDuSe " + __version__ + "\n")
 
 if args.which == "adapter_predict":
     adapter_predict.main(args)
@@ -129,5 +137,7 @@ if args.which == "run_produse":
 
 if args.which == "filter":
     filter_produse.main(args)
+
 if args.which == "split_merge":
     SplitMerge.main(args)
+
