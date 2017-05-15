@@ -183,13 +183,13 @@ def main(args=None):
 
         counter = 0
         # Displays a status update at the command line
+        bwaStdErr = []
         for line in itertools.chain(bwa_iterator, samtools_iterator):
             line = line.decode("utf-8")
+            bwaStdErr.append(line)
             if line.startswith("[M::mem_process_seqs]"):
                 counter += int(line.split(" ")[2])
                 sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Reads Processed:" + str(counter) + "\n"]))
-            elif line.startswith("[E::"):
-                sys.stderr.write(line + "\n")
 
     runBwa.stdout.close()
     runBwa.wait()
@@ -198,6 +198,11 @@ def main(args=None):
 
     # Ensure that BWA completed sucessfully
     if bwaReturnCode != 0:
+        sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "A critical error has occured in BWA, and it was terminated\n"]))
+        sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "BWA standard error stream:\n"]))
+        for line in bwaStdErr:
+            sys.stderr.write(line)
+        sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Terminating...\n"]))
         sys.exit(1)
 
 
