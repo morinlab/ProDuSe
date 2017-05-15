@@ -1,5 +1,4 @@
 import argparse
-import printer
 import fastq
 import nucleotide
 import re

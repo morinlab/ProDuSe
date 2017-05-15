@@ -14,14 +14,10 @@ include ProDuSe/create_test_data.py
 include ProDuSe/fastq.py
 include ProDuSe/nucleotide.py
 include ProDuSe/position.py
-include ProDuSe/printer.py
-include ProDuSe/produse.py
 include ProDuSe/qsub.py
 include ProDuSe/snv.py
 include ProDuSe/trim.py
 include bin/produse
-include ProDuSe/splitmerge.pl
-include ProDuSe/filter_produse.pl
 include ProDuSe/ProdusePipeline.py
 include ProDuSe/filter_produse.py
 include ProDuSe/SplitMerge.py
