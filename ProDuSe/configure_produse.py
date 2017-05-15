@@ -294,7 +294,7 @@ def check_ref(ref_file, produse_path):
     # Lets just symlink them over as well
     # That said, bwa generates everything if you run index, so if any of those are missing, there is no point symlinking them
     if not all_indexes_present:
-        sys.stdout.write(printPrefix + time.strftime('%X') + "\tGenerating Indexes...\n")
+        sys.stdout.write(printPrefix + time.strftime('%X') + "\tGenerating Reference Indexes...\n")
         ref_dir = produse_path + os.sep + "Reference_Genome" + os.sep
         out_ref = ref_dir + os.path.basename(ref_file)
         os.mkdir(ref_dir)

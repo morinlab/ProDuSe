@@ -157,7 +157,7 @@ adapterMismatch = collapseArgs.add_mutually_exclusive_group(required=True)
 adapterMismatch.add(
     "-amm", "--adapter_max_mismatch",
     type=int,
-    help="The maximum number of mismatches allowed between the expected and actual adapter sequences [Default: %(default)s]",
+    help="The maximum number of mismatches allowed between the expected and actual adapter sequences",
     )
 adapterMismatch.add(
     "--strand_max_mismatch",
@@ -302,6 +302,7 @@ def createLogFile(args, logFile="ProDuSe_Task.log", *versionInfo):
 	# Add each argument to the logString
 	for argument, parameter in vars(args).items():
 		logString.extend([" --" + argument + " ", str(parameter)])
+		logString.append("\n")
 
 	# Add the version information for each subprocess
 	for program in versionInfo:
