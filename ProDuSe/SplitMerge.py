@@ -835,8 +835,7 @@ def main(args=None):
 		for option in configOptions:
 			param = config.get("config", option)
 			# Convert arguments that are lists into an actual list
-			if param[0] == "[" and param[-1] == "]":
-				paramString = param[1:-1]
+			if "," in param:
 				param = paramString.split(",")
 
 			# WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS

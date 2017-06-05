@@ -119,11 +119,11 @@ parser.add(
     )
 
 parser.add(
-    "-sf", "--stats_file",
+    "-fp", "--family_plot",
     type=str,
     required=False,
     default=None,
-    help="An optional output file to list stats generated during collapse"
+    help="A histogram to plot molecule counts per read family (i.e. each consensus read)"
     )
 
 
@@ -148,15 +148,33 @@ def is_valid_file(file, parser):
         parser.error("Unable to find %s" % (file))
 
 
+def plot_molecule_families(counts_per_family, plot_file):
+    """
+    Generates a histograph for molecule counts per family
+
+    Args:
+        counts_per_family: A dictionary listing molecule_counts:Abundance
+        plot_file: Output file for the histograph
+    """
+    import matplotlib
+    matplotlib.use('Agg')
+    sys.stderr.write("Plot File: " + plot_file)
+    import matplotlib.pyplot as plt
+
+    plt.hist(counts_per_family)
+    plt.xlabel("Molecules per Read Class")
+    plt.ylabel("Abundance")
+    plt.title("Distribution of molecule families")
+    plt.savefig(plot_file)
+
 def main(args=None):
 
     """
-    Creates consensus sequences using BAM file reads
+    Creates a consensus sequences for duplicate reads
 
-    Using the mapped reads in the supplied BAM file, a consensus sequence,
-    with support from the foward and reverse reads, is created, and these
-    consensus forward and reverse reads are placed into paired fastq files.
-    The original fastq files can also be modified to list read pairing
+    Using the adapter sequences, reads which start at the same position and have very similar adapter
+    sequences are merged into a single consensus sequence. This is performed for both the forward and
+    reverse reads. The original fastq files can also be modified to list read pairing
     information
 
     Args:
@@ -177,9 +195,8 @@ def main(args=None):
         for option in configOptions:
             param = config.get("config", option)
             # Convert arguments that are lists into an actual list
-            if param[0] == "[" and param[-1] == "]":
-                paramString = param[1:-1]
-                param = paramString.split(",")
+            if "," in param:
+                param = param.split(",")
 
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param
@@ -249,20 +266,16 @@ def main(args=None):
     duplex_indexes = list(''.join([args.duplex_position, args.duplex_position]))
     duplex_indexes = [i for i in range(len(duplex_indexes)) if duplex_indexes[i] == "1"]
 
-    # Open output stats file
-    stats_file = None
-    if args.stats_file is not None:
-        stats_file = open(args.stats_file, 'w')
-
     # Loads up reads from the BAM file
     collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=int(args.sequence_max_mismatch))
     counter = 0
     collapsed_reads = 0
+    family_abundances = []
     for collection in collection_creator:
         counter += 1
 
         # All the magic occurs in here.
-        collapsed_reads += collection.adapter_table_average_consensus(
+        molecules_in_family = collection.adapter_table_average_consensus(
             forward_fastq=forward_fastq,
             reverse_fastq=reverse_fastq,
             strand_mismatch=int(args.adapter_max_mismatch),
@@ -270,12 +283,20 @@ def main(args=None):
             duplex_mismatch=int(args.duplex_max_mismatch),
             duplex_indexes=duplex_indexes,
             original_forward_fastq=original_forward_fastq,
-            original_reverse_fastq=original_reverse_fastq,
-            stats_file=stats_file)
+            original_reverse_fastq=original_reverse_fastq)
+
+        collapsed_reads += (molecules_in_family - 1) * 2
+
+        # For generating a histogram of molecule class abundances
+        family_abundances.append(molecules_in_family)
 
         # Prints a status update to the command line
         if counter % 100000 == 0:
             sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Positions Processed:" + str(counter) + "\n"]))
+
+    if args.family_plot:
+        plot_molecule_families(family_abundances, args.family_plot)
+
     sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Positions Processed:" + str(counter) + "\n"]))
     sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Total Reads Collapsed:" + str(collapsed_reads) + "\n"]))
 

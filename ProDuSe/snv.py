@@ -181,9 +181,8 @@ def main(args=None):
         for option in configOptions:
             param = config.get("config", option)
             # Convert arguments that are lists into an actual list
-            if param[0] == "[" and param[-1] == "]":
-                paramString = param[1:-1]
-                param = paramString.split(",")
+            if "," in param:
+                param = param.split(",")
 
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param
@@ -231,8 +230,8 @@ def main(args=None):
     for pos in posCollection:
 
         pos.calc_base_stats(
-            min_reads_per_uid=args.strong_supported_base_threshold,
-            min_base_qual=args.min_qual
+            min_reads_per_uid=int(args.strong_supported_base_threshold),
+            min_base_qual=int(args.min_qual)
             )
         # print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
 
