@@ -185,8 +185,6 @@ def index_max(values):
 
 def consensus(list_of_reads, strand):
 
-    global total_collapsed_reads
-    total_collapsed_reads += len(list_of_reads) - 1
     length = min([len(x.seq) for x in list_of_reads])
     seq = [None] * length
     qual = [None] * length
@@ -631,15 +629,13 @@ class AlignmentCollection:
                         original_forward_fastq.next(original_forward_next)
                         original_reverse_fastq.next(original_reverse_next)
 
+        return len(value)
 
     def adapter_table_average_consensus(
         self, forward_fastq, reverse_fastq, adapter=None, strand_mismatch=3,
         strand_indexes=None, duplex_mismatch=3, duplex_indexes=None,
         original_forward_fastq=None, original_reverse_fastq=None,
         stats_file=None):
-
-        global total_collapsed_reads
-        total_collapsed_reads = 0
 
         adapter_class_to_alignments = self._pair_strand_alignments(
             strand_mismatch, strand_indexes)
@@ -648,11 +644,11 @@ class AlignmentCollection:
             adapter_class_to_alignments,
             duplex_mismatch, duplex_indexes)
 
-        self._write_out_consensus(
+        molecules_in_class = self._write_out_consensus(
             adapter_class_to_alignments, forward_fastq, reverse_fastq,
             original_forward_fastq, original_reverse_fastq)
 
-        return total_collapsed_reads
+        return molecules_in_class
 
 class AlignmentCollectionCreate:
 
