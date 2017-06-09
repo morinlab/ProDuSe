@@ -13,7 +13,7 @@
 # AUTHORS
 # 	Christopher Rushton (ckrushto@sfu.ca)
 
-# Import stanard python modules
+# Import standard python modules
 import configargparse
 import os
 import subprocess
@@ -87,6 +87,26 @@ inputArgs.add_argument(
     help="Config file listing sample names and FASTQ locations (See \'etc/sample_config.ini\' for an example)"
     )
 
+confArgs.add_argument(
+	"-n", "--normal",
+	type=lambda x:isValidFile(x, parser),
+	metavar="BAM/FASTQS",
+	nargs="+",
+	help="A BAM or paired FASTQ files coresponding to a matched normal"
+	)
+confArgs.add_argument(
+	"-ns",
+	"--normal_adapter_sequence",
+	metavar="NNNWSMRWSYWKMWWT",
+	help="The matched normal adapter sequence, if barcoded adapters were used"
+	)
+confArgs.add_argument(
+	"-np",
+	"--normal_adapter_position",
+	metavar="0001111111111111",
+	help="The matched normal adapter position, if barcoded adapters were used"
+	)
+
 # Trim args
 trimArgs = parser.add_argument_group("Trim Arguments")
 trimArgs.add(
@@ -151,6 +171,13 @@ collapseArgs.add(
     required=True,
     help="The positions in the adapter sequence to include in distance calculations between forward and reverse reads, 0 for no, 1 for yes"
     )
+collapseArgs.add(
+    "-fp", "--family_plot",
+    type=str,
+    required=False,
+    default=None,
+    help="A histogram to plot molecule counts per read family (i.e. each consensus read)"
+    )
 
 # Used to maintain backwards compatibility with the poorly-named strand mis-match
 adapterMismatch = collapseArgs.add_mutually_exclusive_group(required=True)
@@ -189,17 +216,8 @@ collapseArgs.add(
     help="A pair of empty fastq files to rewrite original fastqs with duplex information"
     )
 
-collapseArgs.add(
-    "-sf", "--stats_file",
-    type=str,
-    required=False,
-    default=None,
-    help="An optional output file to list stats generated during collapse"
-    )
-
 # SNV arguments
 snvArgs = parser.add_argument_group("SNV Argumentss")
-
 
 snvArgs.add_argument(
     "-tb", "--target_bed",
@@ -251,20 +269,15 @@ snvArgs.add_argument(
 
 # Filter Args
 filterArgs = parser.add_argument_group("Filter Arguments")
-filterArgs.add_argument("-ss", "--allow_single_stranded", action="store_true", default=False, help="Allow variants with only single stranded support [Default: %(default)s]")
+filterArgs.add_argument("-sv", "--allow_single_stranded", action="store_true", default=False, help="Allow variants with only single stranded support [Default: %(default)s]")
 filterArgs.add_argument("-sb", "--strand_bias_threshold", default=0.05, type=float, help="Strand bias p-value threshold, below which vairants will be discarded [Default: %(default)s]")
-filterArgs.add_argument("-st", "--strong_base_threshold", default=1, type=int, help="Strong supported base count threshold [Default: %(default)s]")
-filterArgs.add_argument("-wt", "--weak_base_threshold", default=2, type=int, help="Weak supported base count theshold [Default: %(default)s]")
+filterArgs.add_argument("-ss", "--strong_singleton_threshold", default=1, type=int, help="Base threshold for strong singleton bases (SP, SN) [Default: %(default)s]")
+filterArgs.add_argument("-sd", "--strong_duplex_threshold", default=1, type=int, help="Base threshold for strong duplex bases (DPN, DPn, DpN) [Default: %(default)s]")
+filterArgs.add_argument("-wt", "--weak_base_threshold", default=2, type=int, help="Base threshold for weak supporting bases (Sn, Sp, Dpn) [Default: %(default)s]")
 filterArgs.add_argument("-md", "--min_depth", type=int, default=2, help="Minimum depth threshold [Default: %(default)s]")
-"""
-filterArgs.add_argument("-dsv", "--totalvaf", type=float, default=0.05, help="Dual-strand VAF threshold [Default: %(default)s]")
-filterArgs.add_argument("-md", "--min_duplex", type=int, default=3, help="Minimum duplex support required to call a variant [Default: %(default)s]")
-filterArgs.add_argument("-mp", "--min_pos_strand", type=int, default=1, help="Minimum positive strand support required to call a varaint [Default: %(default)s]")
-filterArgs.add_argument("-mn", "--min_neg_strand", type=int, default=1, help="Minimum negative strand support required to call a variant [Default: %(default)s]")
-filterArgs.add_argument("-ms", "--min_singleton", type=int, default=3, help="Minimum singleton support required to call a variant [Default: %(default)s]")
-filterArgs.add_argument("-ww", "--weak_base_weight", type=lambda x: isValidWeight(x, parser), default=0.1, help="Weight of weak bases, relative to strong supported bases [Default: %(default)s]")
-filterArgs.add_argument("-sb", "--strand_bias", type=float, default=0.05, help="Strand bias p-value threshold, below which variants will be ignored")
-"""
+filterArgs.add_argument("-fl", "--filter_log", metavar="FILE", help="A log file to explain the thresholds used for each variant, and why variants failed filters")
+filterArgs.add_argument("-nv", "--normal_vaf", default=0.05, type=float, metavar="FLOAT", help="VAF threshold for the normal sample, above which variants will be called as germline [Default: %(default)s]")
+filterArgs.add_argument("-g", "--germline_output", metavar="FILE", help="If a matched normal was supplied, an output file for germline variants")
 
 
 def isValidFile(file, parser):
@@ -390,7 +403,8 @@ def getConfig(sampleDir, task):
 	configFile = os.path.join(sampleDir, "config", task + "_task.ini")
 	if not os.path.exists(configFile):
 		sys.stderr.write("ERROR: Unable to locate %s\n" % (configFile))
-		sys.stderr.write("Check to ensure configure_produse completed sucessfully")
+		sys.stderr.write("Check to ensure configure_produse completed sucessfully\n")
+		sys.exit(1)
 	return configFile
 
 
@@ -496,10 +510,24 @@ def runPipeline(args, sampleName, sampleDir):
 	trim.main(args)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Trimming Complete\n"]))
 
+	# If we need to trim the adapters off of a matched normal, then run it
+	if os.path.exists(sampleDir + os.sep + "config" + os.sep + "trim_normal_task.ini"):
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Trimming Normal\n"]))
+		args.config = getConfig(sampleDir, "trim_normal")
+		trim.main(args)
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + "_Normal: Trimming Complete\n"]))
+
 	# Run bwa on the trimmed fastqs
 	args.config = getConfig(sampleDir, "trim_bwa")
 	bwa.main(args)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Alignment Complete\n"]))
+
+        # If fastq files were supplied for the matched normal, run BWA and align it
+	if os.path.exists(sampleDir + os.sep + "config" + os.sep + "bwa_normal_task.ini"):
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Aligning Normal\n"]))
+		args.config = getConfig(sampleDir, "bwa_normal")
+		bwa.main(args)
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + "_Normal: Alignment Complete\n"]))
 
 	# Run collapse on the trimmed BAM file
 	args.config = getConfig(sampleDir, "collapse")
@@ -532,7 +560,7 @@ def runPipeline(args, sampleName, sampleDir):
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": SNV Calling Complete\n"]))
 
 	# Filter variants
-	args.config = getConfig(sampleDir, "filter")
+	args.config = getConfig(sampleDir, "filter_produse")
 	filter_produse.main(args)
 	# runFilter(args.vaf, vcfFile, scriptDir + os.sep + "filter_produse.pl")
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Variant Filtering Complete\n"]))
@@ -552,15 +580,12 @@ def main(args=None):
 
 	if not args:
 		args = parser.parse_args()
-		# Clear these, since they are different for each script
-		args.input = None
-		args.output = None
 
 	# Checks command line arguments
 
 	# First things first, lets make sure that the programs required to run ProDuSe are installed,
 	# and pull out the version number of each
-	check_command("bwa")
+	bwaVer = check_command("bwa")
 	samtoolsVer = check_command("samtools", "--version")
 	monoVer = check_command("mono", "--version")
 	pythonVer = check_command("python", "--version")
@@ -573,7 +598,7 @@ def main(args=None):
 	sampleList = getSampleList(args.output_directory)
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Configuration Complete\n"]))
 
-	createLogFile(args, os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", "ProDuSe_Task.log"), samtoolsVer, monoVer, pythonVer)
+	createLogFile(args, os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", "ProDuSe_Task.log"), samtoolsVer, monoVer, pythonVer, bwaVer)
 
 	# Run the pipeline on each sample
 	for sample in sampleList:
