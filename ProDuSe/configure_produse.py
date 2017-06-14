@@ -19,7 +19,92 @@ import subprocess
 import time
 
 
-def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_name=""):
+def addParam(config, name, param):
+    """
+    Adds the specified paramter to the config file provided
+
+    If the paramter contains multiple options,
+    """
+
+    if isinstance(param, list):
+        if len(param) > 1:
+            config.set("config", name, ','.join(param))
+        elif len(param) == 1:
+            config.set("config", name, param[0])
+    else:
+        config.set("config", name, param)
+
+
+def createConfig(cparser, in_files, out_files, sconfig, task_name, outdir, config_name=None, additional_param={}):
+    """
+    Creates a configuration file, which contains all the necessary arguments to run the
+    some stage of ProDuSe
+
+    Args:
+        cparser: A configparser.RawConfigParser() object loaded with parameters specified
+                in the ProDuSe config file
+        in_files: A list containing strings listing the path and name of an input file(s)
+        out_files: A list containing strings listing the path and name of an output file(s)
+        sconfig: A configparser.RawConfigParser() oject loaded with paramters specified in
+                the ProDuSe config file
+        task_name: The name of the step of ProDuSe to be run with this config file
+        outdir: Output directory for config files
+        config_name: The name of the output config file
+        additional_param: A dictionary listing the name and value of any additional paramters
+    """
+
+    if not config_name:
+        config_name = task_name + "_task.ini"
+
+    new_config = configparser.RawConfigParser()
+    new_config.add_section("config")
+
+    addParam(new_config, "input", in_files)
+    addParam(new_config, "output", out_files)
+
+    argsAlreadyTreated = []
+
+    for param, value in additional_param.items():
+
+        if value is None:
+            continue
+
+        # Strip "normal" off of any arguments
+        if "normal_" in param:
+            param.replace("normal_", "")
+
+        # If we have already treated a paramter with this name, ignore it
+        if param in argsAlreadyTreated:
+            continue
+
+        if param in sconfig:
+            value = sconfig[param]
+        addParam(new_config, param, value)
+
+        argsAlreadyTreated.append(param)
+
+    for (key, val) in cparser.items(task_name):
+
+        # Strip "normal" off of any arguments
+        if "normal_" in key:
+            param.replace("normal_", "")
+
+        # If we have already treated a paramter with this name, ignore it
+        if key in argsAlreadyTreated:
+            continue
+
+        if key in sconfig:
+            val = sconfig[key]
+        new_config.set("config", key, val)
+
+        argsAlreadyTreated.append(key)
+
+    output = open(os.sep.join([outdir, config_name]), 'w')
+    new_config.write(output)
+    output.close()
+
+
+def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_name="", normal=None, normal_adapter=None, normal_position=None):
     """
         Creates subdirectories, symlinks, and config files for ProDuSe
 
@@ -34,8 +119,9 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
             pconfig: Path to ProDuSe configurations file
             reference: Reference genome, in FASTA format
             sample_name: Name of the sample
+            normal: A list containg the path to matched normal BAM or fastq file9s)
 
-
+        TODO: Will break if a comma is provided in the sample name
     """
 
     # Creates ProDuSe subdirectories
@@ -70,6 +156,25 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
         sys.stderr.write("ERROR: Unable to locate %s\n" % (fastqs[1]))
         sys.exit(1)
 
+    # If normal files were provided, determine what file type was provided
+    normal_fastqs = None
+    normal_bam = None
+    if normal:
+        if normal[0].endswith(".fastq") or normal[0].endswith(".fastq.gz"):
+            if len(normal) != 2:
+                sys.stderr.write("ERROR: The matched normal must be specified as either a BAM file, or two fastq files\n")
+                sys.exit(1)           
+            elif normal[1].endswith(".fastq") or normal[1].endswith(".fastq.gz"):
+                normal_fastqs = normal
+            else:
+                sys.stderr.write("ERROR: The matched normal must be specified as either a BAM file, or two fastq files\n")
+                sys.exit(1)               
+        elif normal[0].endswith(".bam"):
+            normal_bam = normal[0]
+        else:
+            sys.stderr.write("ERROR: The matched normal must be specified as either a BAM file, or two fastq files\n")
+            sys.exit(1)
+
     # Sets up fastq files
     raw_fastq1 = os.sep.join([data_dir, sample_name + "raw_R1.fastq"])
     raw_fastq2 = os.sep.join([data_dir, sample_name + "raw_R2.fastq"])
@@ -84,27 +189,44 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     os.symlink(os.path.abspath(fastqs[0]), raw_fastq1)
     os.symlink(os.path.abspath(fastqs[1]), raw_fastq2)
 
-    # Sets up symlinks for intermediate  ProDuSe files
+    # Sets up normal fastq files (if specified)
+    if normal_fastqs:
+
+        norm_raw_fastq1 = os.sep.join([data_dir, sample_name + "normal.raw_R1.fastq"])
+        norm_raw_fastq2 = os.sep.join([data_dir, sample_name + ".normal.raw_R2.fastq"])
+
+        if os.path.splitext(normal_fastqs[0])[1] == ".gz" and os.path.splitext(normal_fastqs[1])[1] == ".gz":
+            norm_raw_fastq1 = '.'.join([norm_raw_fastq1, "gz"])
+            norm_raw_fastq2 = '.'.join([norm_raw_fastq2, "gz"])
+
+        elif os.path.splitext(fastqs[0])[1] == ".gz" or os.path.splitext(fastqs[1])[1] == ".gz":
+            sys.stderr.write("ERROR: Fastq files must be either both gziped or both decompressed\n")
+            sys.exit(1)
+
+        os.symlink(os.path.abspath(normal_fastqs[0]), norm_raw_fastq1)
+        os.symlink(os.path.abspath(normal_fastqs[1]), norm_raw_fastq2)
+
+
+    # Sets up symlinks for intermediate ProDuSe files
     trim_one_tmp = os.sep.join([tmp_dir, sample_name + "trim_R1.fastq.gz"])
     trim_two_tmp = os.sep.join([tmp_dir, sample_name + "trim_R2.fastq.gz"])
     trim_one_data = os.sep.join([data_dir, sample_name + "trim_R1.fastq.gz"])
     trim_two_data = os.sep.join([data_dir, sample_name + "trim_R2.fastq.gz"])
-
     os.symlink(trim_one_tmp, trim_one_data)
     os.symlink(trim_two_tmp, trim_two_data)
 
     # Creates Trim config file
-    new_config = configparser.RawConfigParser()
-    new_config.add_section("config")
-    new_config.set("config", "input", ''.join(["[", ','.join([raw_fastq1, raw_fastq2]), "]"]))
-    new_config.set("config", "output", ''.join(["[", ','.join([trim_one_tmp, trim_two_tmp]), "]"]))
-    for (key, val) in cparser.items("trim"):
-        if key in sampleConfig:
-            val = sampleConfig[key]
-        new_config.set("config", key, val)
-    output = open(os.sep.join([config_dir, "trim_task.ini"]), 'w')
-    new_config.write(output)
-    output.close()
+    createConfig(cparser, [raw_fastq1, raw_fastq2], [trim_one_tmp, trim_two_tmp], sampleConfig, "trim", config_dir)
+
+    # Creates a normal Trim config file
+    if normal_fastqs and normal_adapter and normal_position:
+        trim_norm_one_tmp = os.sep.join([tmp_dir, sample_name + "normal.trim_R1.fastq.gz"])
+        trim_norm_two_tmp = os.sep.join([tmp_dir, sample_name + "normal.trim_R2.fastq.gz"])
+        trim_norm_one_data = os.sep.join([data_dir, sample_name + "normal.trim_R1.fastq.gz"])
+        trim_norm_two_data = os.sep.join([data_dir, sample_name + "normal.trim_R2.fastq.gz"])
+        os.symlink(trim_norm_one_tmp, trim_norm_one_data)
+        os.symlink(trim_norm_two_tmp, trim_norm_two_data)
+        createConfig(cparser, [norm_raw_fastq1, norm_raw_fastq2], [trim_norm_one_tmp, trim_norm_two_tmp], sampleConfig, "trim", config_dir, "trim_normal_task.ini", additional_param={"adapter_sequence": normal_adapter, "adapter_position": normal_position})
 
     # Creates BWA output symlinks
     trim_tmp = os.sep.join([tmp_dir, sample_name + "trim.bam"])
@@ -112,18 +234,17 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     os.symlink(trim_tmp, trim_data)
 
     # Creates BWA trim config file
-    new_config = configparser.RawConfigParser()
-    new_config.add_section("config")
-    new_config.set("config", "input", ''.join(["[", ','.join([trim_one_data, trim_two_data]), "]"]))
-    new_config.set("config", "output", trim_tmp)
-    new_config.set("config", "reference", reference)
-    for (key, val) in cparser.items("trim_bwa"):
-        new_config.set("config", key, val)
-        if key in sampleConfig:
-            val = sampleConfig[key]
-    output = open(os.sep.join([config_dir, "trim_bwa_task.ini"]), 'w')
-    new_config.write(output)
-    output.close()
+    createConfig(cparser, [trim_one_data, trim_two_data], [trim_tmp], sampleConfig, "trim_bwa", config_dir, additional_param={"reference": reference})
+
+    if normal_fastqs:
+        align_norm_tmp = os.sep.join([tmp_dir, sample_name + "normal.bam"])
+        normal_bam = os.sep.join([data_dir, sample_name + "normal.bam"])
+        os.symlink(align_norm_tmp, normal_bam)
+
+        if normal_adapter and normal_position:
+            createConfig(cparser, [trim_norm_one_data, trim_norm_two_data], [align_norm_tmp], sampleConfig, "trim_bwa", config_dir, "bwa_normal_task.ini", additional_param={"reference": reference})
+        else:
+            createConfig(cparser, [norm_raw_fastq1, norm_raw_fastq2], [align_norm_tmp], sampleConfig, "trim_bwa", config_dir, "bwa_normal_task.ini", additional_param={"reference": reference})
 
     # Creates collapse output symlinks
     collapse_one_tmp = os.sep.join([tmp_dir, sample_name + "collapse_R1.fastq.gz"])
@@ -135,17 +256,7 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     os.symlink(collapse_two_tmp, collapse_two_data)
 
     # Creates collapse config file
-    new_config = configparser.RawConfigParser()
-    new_config.add_section("config")
-    new_config.set("config", "input", trim_data)
-    new_config.set("config", "output", ''.join(["[", ','.join([collapse_one_tmp, collapse_two_tmp]), "]"]))
-    for (key, val) in cparser.items("collapse"):
-        new_config.set("config", key, val)
-        if key in sampleConfig:
-            val = sampleConfig[key]
-    output = open(os.sep.join([config_dir, "collapse_task.ini"]), 'w')
-    new_config.write(output)
-    output.close()
+    createConfig(cparser, [trim_data], [collapse_one_tmp, collapse_two_tmp], sampleConfig, "collapse", config_dir, additional_param={})
 
     # Creates bwa collapse output symlinks
     collapse_tmp = os.sep.join([tmp_dir, sample_name + "collapse.bam"])
@@ -154,56 +265,36 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     os.symlink(collapse_tmp, collapse_data)
 
     # Creates bwa collapse config file
-    new_config = configparser.RawConfigParser()
-    new_config.add_section("config")
-    new_config.set("config", "input", ''.join(["[", ','.join([collapse_one_data, collapse_two_data]), "]"]))
-    new_config.set("config", "output", collapse_tmp)
-    new_config.set("config", "reference", reference)
-    for (key, val) in cparser.items("collapse_bwa"):
-        new_config.set("config", key, val)
-        if key in sampleConfig:
-            val = sampleConfig[key]
-    output = open(os.sep.join([config_dir, "collapse_bwa_task.ini"]), 'w')
-    new_config.write(output)
-    output.close()
+    createConfig(cparser, [collapse_one_data, collapse_two_data], [collapse_tmp], sampleConfig, "collapse_bwa", config_dir, additional_param={"reference": reference})
 
     # Splitmerge files
     splitmerge_collapse_tmp = os.sep.join([tmp_dir, sample_name + "collapse.sorted.bam"])
     splitmerge_stit_tmp = os.sep.join([tmp_dir, sample_name + "collapse.stitched.sorted.bam"])
+    splitmerge_data = os.sep.join([results_dir, sample_name + "SplitMerge.bam"])
 
     # Creates SplitMerge config file
-    new_config = configparser.RawConfigParser()
-    new_config.add_section("config")
-    new_config.set("config", "input", splitmerge_stit_tmp)
-    new_config.set("config", "output", os.sep.join([results_dir, sample_name + "SplitMerge.bam"]))
-    new_config.set("config", "unstitched_input", splitmerge_collapse_tmp)
-    output = open(os.sep.join([config_dir, "splitmerge_task.ini"]), 'w')
-    new_config.write(output)
-    output.close()
+    createConfig(cparser, [splitmerge_stit_tmp], [splitmerge_data], sampleConfig, "splitmerge", config_dir, additional_param={"unstitched_input": splitmerge_collapse_tmp})
 
     # SNV files
     snv_vcf_results = results_dir + os.sep + sample_name + "variants.vcf"
     snv_stats_data = data_dir + os.sep + sample_name + "Molecule_Counts.txt"
+    snv_input = os.sep.join([results_dir, sample_name + "SplitMerge.sorted.bam"])
 
     # Creates SNV calling config file
-    new_config = configparser.RawConfigParser()
-    new_config.add_section("config")
-    new_config.set("config", "input", results_dir + os.sep + sample_name + "SplitMerge.sorted.bam")
-    new_config.set("config", "molecule_stats", snv_stats_data)
-    new_config.set("config", "output", snv_vcf_results)
-    new_config.set("config", "reference", reference)
-    for (key, val) in cparser.items("snv"):
-        new_config.set("config", key, val)
-        if key in sampleConfig:
-            val = sampleConfig[key]
-    output = open(os.sep.join([sample_dir, "config", os.sep, "snv_task.ini"]), 'w')
-    new_config.write(output)
+    createConfig(cparser, [snv_input], [snv_vcf_results], sampleConfig, "snv", config_dir, additional_param={"molecule_stats": snv_stats_data, "reference": reference})
+
+    snv_filter_log = data_dir + os.sep + sample_name + "filter.log"
 
     # Creates Filter config file
+    createConfig(cparser, [snv_vcf_results], [snv_vcf_results.replace(".vcf", ".filtered.vcf")], sampleConfig, "filter_produse", config_dir, additional_param={"molecule_stats": snv_stats_data, "filter_log": snv_filter_log, "normal_bam": normal_bam})
+
+    """
     new_config = configparser.RawConfigParser()
     new_config.add_section("config")
     new_config.set("config", "input", snv_vcf_results)
     new_config.set("config", "molecule_stats", snv_stats_data)
+    if normal_bam:
+        new_config.set("config", "normal", normal_bam)
     new_config.set("config", "output", snv_vcf_results.replace(".vcf", ".filtered.vcf"))
     for (key, val) in cparser.items("filter_produse"):
         new_config.set("config", key, val)
@@ -211,55 +302,8 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
             val = sampleConfig[key]
     output = open(os.sep.join([sample_dir, "config", os.sep, "filter_task.ini"]), 'w')
     new_config.write(output)
-
-
-def make_makefile(produse_directory, analysis_dir, samples):
+    
     """
-        Creates a Make file, listing the location of the various scripts that will be run, their order, and parameters
-
-        Args:
-            produse_directory: Directory containing ProDuSe scripts
-            analyis_directory: Output directory for intermediate and final results of the produse pipeline
-            samples: Samples listed in the optional sample_config file
-    """
-    with open(os.sep.join([analysis_dir, "Makefile"]), "w") as make:
-        make.write(''.join(["produse_dir :=", produse_directory, '\n']))
-        make.write(''.join(["analysis_dir :=", analysis_dir, '\n']))
-        make.write("\n")
-        make.write("trim_script := $(produse_dir)/trim.py\n")
-        make.write("bwa_script := $(produse_dir)/bwa.py\n")
-        make.write("collapse_script := $(produse_dir)/collapse.py\n")
-        make.write("adapter_qc_script := $(produse_dir)/adapter_qc.py\n")
-        make.write("snv_script := $(produse_dir)/snv.py\n")
-        make.write("\n")
-        make.write("".join(["SAMPLES = ", " ".join(samples)]))
-        make.write("\n")
-        make.write("SNV_TASK = $(addprefix snv_task-, $(SAMPLES))")
-        make.write("\n\n")
-        make.write("all: $(SNV_TASK)\n")
-        make.write("\n")
-        make.write("snv_task-%: collapse_index_bwa_task-%\n")
-        make.write("\tpython $(snv_script) --config=$(analysis_dir)/$*/config/snv_task.ini && touch $@\n")
-        make.write("\n")
-        make.write("collapse_index_bwa_task-%: collapse_bwa_task-%\n")
-        make.write("\tsamtools index $(analysis_dir)/$*/data/collapse.bam && touch %@\n")
-        make.write("\n")
-        make.write("collapse_bwa_task-%: collapse_task-%\n")
-        make.write("\tpython $(bwa_script) --config=$(analysis_dir)/$*/config/collapse_bwa_task.ini && touch $@\n")
-        make.write("\n")
-        make.write("adapter_qc_task-%: collapse_task-%\n")
-        make.write("\tpython $(adapter_qc_script) --config=$(analysis_dir)/$*/config/adapter_qc_task.ini && touch $@\n")
-        make.write("\n")
-        make.write("collapse_task-%: trim_bwa_task-%\n")
-        make.write("\tpython $(collapse_script) --config=$(analysis_dir)/$*/config/collapse_task.ini && touch $@\n")
-        make.write("\n")
-        make.write("trim_bwa_task-%: trim_task-%\n")
-        make.write("\tpython $(bwa_script) --config=$(analysis_dir)/$*/config/trim_bwa_task.ini && touch $@\n")
-        make.write("\n")
-        make.write("trim_task-%:\n")
-        make.write("\tpython $(trim_script) --config=$(analysis_dir)/$*/config/trim_task.ini && touch $@\n")
-        make.write("\n")
-        make.close()
 
 
 def check_ref(ref_file, produse_path):
@@ -403,6 +447,26 @@ inputArgs.add_argument(
     type=lambda x: is_valid_file(x, parser),
     help="Config file listing sample names and FASTQ locations (See \'etc/sample_config.ini\' for an example)"
     )
+parser.add_argument(
+    "-n", "--normal",
+    metavar="FASTQ/BAM",
+    required=False,
+    type=lambda x: is_valid_file(x, parser),
+    nargs="+",
+    help=" FASTQ or BAM files coresponding to the matched normal. May be specified by --sample_config"
+    )
+parser.add_argument(
+    "-ns",
+    "--normal_adapter_sequence",
+    metavar="NNNWSMRWSYWKMWWT",
+    help="The matched normal adapter sequence, if barcoded adapters were used"
+    )
+parser.add_argument(
+    "-np",
+    "--normal_adapter_position",
+    metavar="0001111111111111",
+    help="The matched normal adapter position, if barcoded adapters were used"
+    )
 
 
 def is_valid_file(file, parser):
@@ -504,6 +568,13 @@ def main(args=None):
     if not args.sample_config and not args.fastqs:
         raise parser.error("Either --fastqs or --sample_config must be provided")
 
+    # Checks to ensure that, if normal fastqs were specified, that exactly two were provided
+    if args.normal and len(args.normal) > 2:
+        raise parser.error("If specifying normal fastq files, exactly two must be provided")
+
+    if (args.normal_adapter_sequence and not args.normal_adapter_position) or (args.normal_adapter_position and not args.normal_adapter_sequence):
+        raise parser.error("If --normal_adapter_sequence is specified, --normal_adapter_position must be specified as well, and vise-versa") 
+
     # Sets up ProDuSe output directory
     output_directory = os.path.abspath(os.sep.join([args.output_directory, "produse_analysis_directory"]))
     produse_directory = os.path.dirname(os.path.realpath(__file__))
@@ -522,9 +593,6 @@ def main(args=None):
         # Reads sections and key-value pairs from config file
         sample_config = configparser.RawConfigParser()
         sample_config.read(args.sample_config)
-
-        # Creates a MakeFile
-        make_makefile(produse_directory, output_directory, sample_config.sections())
 
         # Create a sample direectory and config files for each sample listed i the sample config file
         for sample in sample_config.sections():
@@ -547,15 +615,25 @@ def main(args=None):
                 sys.stderr.write("ERROR: \'fastqs\' are not specified in %s, nor were they provided in the arguments\n" % (args.sample_config))
                 sys.stderr.write("Fastqs can be specified using \'-f\'\n")
                 exit(1)
+
+            # Obtains a BAM or fastq files coresponding to the matched normal, if provided
+            if "normal" in sampleDict:
+                if "," in sampleDict["normal"]:
+                    matchedNormal = sampleDict["normal"].split(",")
+
+                else:
+                    matchedNormal = [sampleDict["normal"]]
+            else:
+                matchedNormal = None
+
             # Setup sample directory
-            make_directory(sample_dir, fastqs, sampleDict, args.config, ref_file, sample + ".")
+            make_directory(sample_dir, fastqs, sampleDict, args.config, ref_file, sample + ".", matchedNormal, args.normal_adapter_sequence, args.normal_adapter_position)
     else:
         fastqs = args.fastqs
         sample_dir = os.path.join(output_directory, "Sample")
-        # Creates a MakeFile
-        make_makefile(produse_directory, output_directory, fastqs)
+
         # Setup sample directory
-        make_directory(sample_dir, fastqs, {}, args.config, ref_file, "Sample" + ".")
+        make_directory(sample_dir, fastqs, {}, args.config, ref_file, "Sample" + ".", args.normal, args.normal_adapter_sequence, args.normal_adapter_position)
 
 
 if __name__ == '__main__':
