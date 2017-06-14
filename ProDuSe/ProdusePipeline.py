@@ -515,7 +515,7 @@ def runPipeline(args, sampleName, sampleDir):
 		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Trimming Normal\n"]))
 		args.config = getConfig(sampleDir, "trim_normal")
 		trim.main(args)
-		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + "_Normal: Trimming Complete\n"]))
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Normal Trimming Complete\n"]))
 
 	# Run bwa on the trimmed fastqs
 	args.config = getConfig(sampleDir, "trim_bwa")
@@ -527,7 +527,7 @@ def runPipeline(args, sampleName, sampleDir):
 		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Aligning Normal\n"]))
 		args.config = getConfig(sampleDir, "bwa_normal")
 		bwa.main(args)
-		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + "_Normal: Alignment Complete\n"]))
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), sampleName + ": Normal Alignment Complete\n"]))
 
 	# Run collapse on the trimmed BAM file
 	args.config = getConfig(sampleDir, "collapse")
