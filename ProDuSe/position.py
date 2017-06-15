@@ -479,10 +479,15 @@ class PosCollection:
         file_handler.write('##INFO=<ID=Sp,Number=R,Type=Integer,Description="Singleton Support with Weak Positive Consensus">\n')
         file_handler.write('##INFO=<ID=SN,Number=R,Type=Integer,Description="Singleton Support with Strong Negative Consensus">\n')
         file_handler.write('##INFO=<ID=Sn,Number=R,Type=Integer,Description="Singleton Support with Weak Negative Consensus">\n')
-        file_handler.write('##INFO=<ID=MC,Number=R,Type=Integer,Description="Molecule Counts">\n')
-        file_handler.write('##INFO=<ID=PC,Number=R,Type=Integer,Description="Molecule Count in Positive Strand Including Bases of Disagreeance\n')
-        file_handler.write('##INFO=<ID=NC,Number=R,Type=Integer,Description="Molecule Count in Negative Strand Including Bases of Disagreeance\n')
-        file_handler.write('##INFO=<ID=VAF,Number=R,Type=Integer,Description="Variant allele fraction of alternate allele(s) at this locus\n')
+        file_handler.write('##INFO=<ID=StP,Number=R,Type=Integer,Description="Strong Alleles whose reads map to the Positive Strand">\n')
+        file_handler.write('##INFO=<ID=Stp,Number=R,Type=Integer,Description="Weak Alleles whose reads map to the Positive Strand">\n')
+        file_handler.write('##INFO=<ID=StN,Number=R,Type=Integer,Description="Strong Alleles whose reads map to the Negative Strand">\n')
+        file_handler.write('##INFO=<ID=Stn,Number=R,Type=Integer,Description="Weak Alleles whose reads map to the Negative Strand">\n')
+        file_handler.write('##INFO=<ID=MC,Number=R,Type=Integer,Description="Total Allele counts for Each Allele">\n')
+        file_handler.write('##INFO=<ID=StrandBiasP,Number=R,Type=Float,Description="Probability of Strand Bias during sequencing for each Allele">\n')
+        file_handler.write('##INFO=<ID=PC,Number=R,Type=Integer,Description="Positive Strand Allele Counts Including Bases of Disagreeance">\n')
+        file_handler.write('##INFO=<ID=NC,Number=R,Type=Integer,Description="Negative Strand Allele Counts Including Bases of Disagreeance">\n')
+        file_handler.write('##INFO=<ID=VAF,Number=R,Type=Float,Description="Variant allele fraction of alternate allele(s) at this locus">\n')
         file_handler.write('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n')
 
     def write_variant(self, file_handler):
@@ -500,7 +505,6 @@ class PosCollection:
 
         info_column = ';'.join([info_column, '='.join(["MC", ','.join([str(molecule_counts[base]) for base in bases])])])
         info_column = ';'.join([info_column, '='.join(["PC", ','.join([str(self.pos_counts[base]) for base in bases])])])
-        info_column = ';'.join([info_column, '='.join(["NC", ','.join([str(self.neg_counts[base]) for base in bases])])])
         info_column = ';'.join([info_column, '='.join(["NC", ','.join([str(self.neg_counts[base]) for base in bases])])])
         sr_detail = "SR=" + str(self.skipped_reads)
         info_column = ';'.join([info_column, sr_detail])
@@ -606,6 +610,7 @@ class PosCollectionCreate:
 
             qname = Qname(read)
 
+            # Ignore consensus reads generated from less than this number of original reads
             if qname.support < self.min_reads_per_uid:
                 continue
 
