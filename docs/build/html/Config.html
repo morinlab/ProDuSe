@@ -1,6 +1,6 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
@@ -29,7 +29,7 @@
     <link rel="next" title="Trim" href="Trim.html" />
     <link rel="prev" title="The ProDuSe Pipeline" href="The ProDuSe Pipeline.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -66,7 +66,7 @@
 <p>For each sample supplied:</p>
 <blockquote>
 <div><ul class="simple">
-<li>Creates a sample-specific directory and subdirectories in the main output directory using the sample&#8217;s name</li>
+<li>Creates a sample-specific directory and subdirectories in the main output directory using the sample’s name</li>
 <li>Symbolically Links input files into this sample-specific directory</li>
 <li>Creates a config file for each step in the ProDuSe pipeline, containing sample-specific parameters</li>
 </ul>
@@ -88,28 +88,28 @@
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-f &#8211;fastqs:</th><td class="field-body"><div class="first last line-block">
+<tr class="field-odd field"><th class="field-name">-f –fastqs:</th><td class="field-body"><div class="first last line-block">
 <div class="line">If running a single sample, the fastq files for the sample to be analyzed.</div>
 <div class="line">Two arguments must be supplied.</div>
-<div class="line">A single sample directory names &#8216;Sample&#8217; will be created.</div>
-<div class="line">Mutually exclusive with -sc &#8211;sample_config.</div>
+<div class="line">A single sample directory names ‘Sample’ will be created.</div>
+<div class="line">Mutually exclusive with -sc –sample_config.</div>
 </div>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-sc &#8211;sample_config:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-sc –sample_config:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
 <div class="line">A configuration file listing sample names, fastq locations, and sample-specific parameters.</div>
 <div class="line">A directory will be created for each sample, using the name supplied.</div>
-<div class="line">Mutually exclusive with -f &#8211;fastqs.</div>
+<div class="line">Mutually exclusive with -f –fastqs.</div>
 </div>
 </td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-d &#8211;output_directory:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-d –output_directory:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">The directory to output ProDuSe results. Default is the current working directory.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-r &#8211;reference:</th><td class="field-body">Reference genome build, in fasta format.</td>
+<tr class="field-even field"><th class="field-name">-r –reference:</th><td class="field-body">Reference genome build, in fasta format.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file listing parameters to be supplied to each stage of the ProDuSe pipeline.</td>
+<tr class="field-odd field"><th class="field-name">-c –config:</th><td class="field-body">A configuration file listing parameters to be supplied to each stage of the ProDuSe pipeline.</td>
 </tr>
 </tbody>
 </table>
@@ -181,7 +181,7 @@
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright 2017, Christopher Rushton.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.5.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.2.
     </div>
   </body>
 </html>

@@ -1,6 +1,6 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
@@ -29,7 +29,7 @@
     <link rel="next" title="SplitMerge" href="SplitMerge.html" />
     <link rel="prev" title="bwa" href="bwa.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -72,35 +72,35 @@ If there is a mismatch at a given position, the most common base is used as a co
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can provide any of the parameters below</td>
+<tr class="field-odd field"><th class="field-name">-c –config:</th><td class="field-body">A configuration file which can provide any of the parameters below</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">Input BAM file. The name of each read must contain the adapter sequence.</td>
+<tr class="field-even field"><th class="field-name">-i –input:</th><td class="field-body">Input BAM file. The name of each read must contain the adapter sequence.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body">Path and name of output collapsed fastq files. This parameter must be specified exactly twice.
-The output fastqs can be gzipped automatically by appending &#8221;.gz&#8221; to the output name.</td>
+<tr class="field-odd field"><th class="field-name">-o –output:</th><td class="field-body">Path and name of output collapsed fastq files. This parameter must be specified exactly twice.
+The output fastqs can be gzipped automatically by appending “.gz” to the output name.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-sp &#8211;strand_position:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-sp –strand_position:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The positions in the adapter sequence to use when comparison adapter  sequences for reads of the same type (i.e. between forward reads, or between reverse reads).
 1=Use this position, 0=Do not use this position.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-dp &#8211;duplex_position:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dp –duplex_position:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">The positions in the adapter sequence to use when comparing adapter sequences for reads of opposing types (i.e. forward vs reverse reads).
 1=Use this position, 0=Do not use this position.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-amm &#8211;adapter_max_mismatch:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-amm –adapter_max_mismatch:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the expected and actual adapter sequences when comparing reads of the same type (See -sp).</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-dmm &#8211;duplex_max_mismatch:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dmm –duplex_max_mismatch:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the expected and actual adapter sequences when comparing molecules of different types (See -dp).</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-smm &#8211;sequence_max_mismatch:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-smm –sequence_max_mismatch:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed in an individual read before it is discarded. This threshold should be adjusted based upon read length.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-oo &#8211;original_output:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-oo –original_output:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">Path and name of fastq files to write original (i.e. pre-collapse) reads. Reads exceeding mismatch thresholds will still be discarded.
-This option must be be specified exactly twice, or not at all. These fastqs can be gzipped automatically by appending &#8221;.gz&#8221; to the output name.</td>
+This option must be be specified exactly twice, or not at all. These fastqs can be gzipped automatically by appending “.gz” to the output name.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-sf &#8211;stats_file:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-sf –stats_file:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">Path and name of a text file to store collapsing statistics.</td>
 </tr>
 </tbody>
@@ -173,7 +173,7 @@ This option must be be specified exactly twice, or not at all. These fastqs can 
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright 2017, Christopher Rushton.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.5.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.2.
     </div>
   </body>
 </html>

@@ -6,6 +6,7 @@ Filters candidate variants called by ProDuSe based upon the following characteri
     - Minimum molecule counts: The number of molecules supporting a variant at a given position must deviate from the number expected from simple noise in order to call a variant.
     - Molecule type: Stronger (duplex, strong bases) molecules will be examined for support (or lack of support) for a variant first. If too many strong molecule do not support a variant when support is expected, the variant will be discarded.
     - (If designated) Dual strand support: Both the positive and negative strand must support a variant confidently before it is called.
+    - (If provided) Somatic Status: Variants present in the matched normal are discared
 
 Run Using
 ^^^^^^^^^
@@ -34,10 +35,20 @@ Parameters
         Path and name to use for the output VCF file.
     :-sb --strand_bias_threshold:
         Strand bias p-value threshold. If the strand bias of a variant is below this value, the variant will be discarded.
-    :-st --strong_base_threshold:
-        Minimum number of strong bases required to call a variant. Note that this threshold will increase depending on locus and overall library characteristics for each molecule type.
+    :-ss --strong_singleton_threshold:
+        Minimum number of strong singleton bases (SN, SP) required to call a variant. Note that this threshold will increase depending on locus and overall library characteristics for each molecule type.
+    :-sd --strong_duplex_threshold:
+        Minimum number of strong duplex bases (DPN, DPn, DpN) required to call a variant. Note that this threshold will increase depending on locus and overall library characteristics for each molecule type.
     :-wt --weak_base_threshold:
         Minimum number of weak bases required to call a variant. Note that this threshold will increase depending on locus and capture space characteristics for each molecule type.
+    :-nb --normal_bam:
+        A BAM file coresponding to a matched normal. Used to filter out germline variants
+    :-nv --notmal_vaf:
+        Variants present in the matched normal above this VAF threshold will be considered germlne
+    :-fl --filter_log:
+        A log file which explains the thresholds used and the reasons why each variant passed or failed filters
+    :-g --germline_output:
+        A file to write germline variants
 
 Additional Considerations
 ^^^^^^^^^^^^^^^^^^^^^^^^^
