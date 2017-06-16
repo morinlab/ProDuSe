@@ -696,12 +696,8 @@ def processRead(read, origReads, counter):
 	# Both reads overlap completely. In this case, just duplicate the read, and set the flags apropriately
 	elif not sepReads["fCigarList"] and not sepReads["rCigarList"]:
 		oRead = copy.deepcopy(read)
-		if counter % 2 == 0:
-			oRead.flag = origReads[0].flag
-			oRead.template_length = origReads[0].template_length
-		else:
-			oRead.flag = origReads[1].flag
-			oRead.template_length = origReads[1].template_length
+		oRead.flag = 67 # Reads are paired, first in pair, but no strand info
+		oRead.template_length = origReads[0].template_length
 		oRead.next_reference_id = read.reference_id
 		oRead.next_reference_start = read.reference_start
 		return [oRead]
