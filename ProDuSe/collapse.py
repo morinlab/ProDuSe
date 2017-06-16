@@ -158,14 +158,15 @@ def plot_molecule_families(counts_per_family, plot_file):
     """
     import matplotlib
     matplotlib.use('Agg')
-    sys.stderr.write("Plot File: " + plot_file)
     import matplotlib.pyplot as plt
+    from astropy.visualization import hist
 
-    plt.hist(counts_per_family)
+    hist(counts_per_family, bins="scott")
     plt.xlabel("Molecules per Read Class")
     plt.ylabel("Abundance")
     plt.title("Distribution of molecule families")
     plt.savefig(plot_file)
+    plt.close()
 
 def main(args=None):
 
