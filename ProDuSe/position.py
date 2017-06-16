@@ -67,6 +67,9 @@ class Qname:
 
         if pysam_read.is_reverse:
             self.mapstrand = "-"
+        # Added by Chris: If this read is not associated with either strand, do not assign it a mapstrand
+        elif pysam_read.flag == 67:
+            self.mapstrand = "="
         else:
             self.mapstrand = "+"
         #override strand using map information for FLASH pairs (for this to work, the negative FLASH reads need to be rev-complemented before aligning
@@ -122,11 +125,13 @@ class Pos:
         self.qname = qname
 
     def is_positive(self):
-        #return self.qname.strand == "+"
+        return self.qname.strand == "+"
+        """
         if self.is_paired:
             return self.qname.strand == "+"
         else:
             return self.qname.mapstrand == "+" #added by Ryan. Now that Flash is being used, the strand is consistent with the mapped strand for collapsed reads
+        """
     def __eq__(self, other):
         return self.qname.duplex_id == qname.other.duplex_id
 
@@ -203,14 +208,15 @@ class PosCollection:
         for duplex_id in self.bases:
 
             column = ""
-            colnew = ""
+            mapstrand = []
             if len(self.bases[duplex_id]) == 1:
 
                 passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
                 too_many_mismatches = self.bases[duplex_id][0].qname.mismatches > max_mismatch_per_aligned_read
                 is_positive = self.bases[duplex_id][0].qname.strand == "+"
 
-                is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
+                is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+" or self.bases[duplex_id][0].qname.mapstrand == "="
+                is_negative_strand = self.bases[duplex_id][0].qname.mapstrand == "-" or self.bases[duplex_id][0].qname.mapstrand == "="
                 is_paired = self.bases[duplex_id][0].qname.is_paired
                 if too_many_mismatches:
                     skipped += 1
@@ -248,22 +254,24 @@ class PosCollection:
                             self.weak_quality.append(quality)
 
                 self.base_array[column][self.bases[duplex_id][0].base] += 1
-                if passes_filter and is_positive_strand:
-                    colnew = "StP"
-                elif passes_filter and not is_positive_strand:
-
-                    colnew = "StN"
-
-                elif not passes_filter and is_positive_strand:
-                    colnew = "Stp"
+                if passes_filter:
+                    if is_positive_strand:
+                        mapstrand.append("StP")
+                    if is_negative_strand:
+                        mapstrand.append("StN")
 
                 else:
-                    colnew = "Stn"
+                    if is_positive_strand:
+                        mapstrand.append("Stp")
 
-                self.base_array[colnew][self.bases[duplex_id][0].base] += 1
+                    if is_negative_strand:
+                        mapstrand.append("Stn")
+
+                for x in mapstrand:
+                    self.base_array[x][self.bases[duplex_id][0].base] += 1
                 if is_positive_strand:
                     self.pos_strand_counts[self.bases[duplex_id][0].base] += 1
-                else:
+                elif is_negative_strand:
                     self.neg_strand_counts[self.bases[duplex_id][0].base] += 1
                 #the above few lines were added by Ryan to compensate for an issue that led to variants being called with almost exclusively collapsed reads mapped only to one strand
                 if is_positive:
@@ -274,7 +282,9 @@ class PosCollection:
             elif len(self.bases[duplex_id]) == 2:
                 too_many_mismatches1 = self.bases[duplex_id][0].qname.mismatches > max_mismatch_per_aligned_read
                 too_many_mismatches2 = self.bases[duplex_id][1].qname.mismatches > max_mismatch_per_aligned_read
-                is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+"
+                is_positive_strand = self.bases[duplex_id][0].qname.mapstrand == "+" or self.bases[duplex_id][0].qname.mapstrand == "="
+                is_negative_strand = self.bases[duplex_id][0].qname.mapstrand == "-" or self.bases[duplex_id][0].qname.mapstrand == "="
+
                 if too_many_mismatches1:
                     #print "skipping DS %s because %i mismatchess" % (self.bases[duplex_id][0].qname.qname,self.bases[duplex_id][0].qname.mismatches)
                     skipped += 1
@@ -294,13 +304,14 @@ class PosCollection:
                         pos_passes_filter = self.bases[duplex_id][1].qname.support >= min_reads_per_uid
                         neg_passes_filter = self.bases[duplex_id][0].qname.support >= min_reads_per_uid
                     if is_positive_strand:
-                        colnew = "StP"
+                        mapstrand.append("StP")
                         self.pos_strand_counts[self.bases[duplex_id][0].base] += 1
-                    else:
+                    if is_negative_strand:
                         self.neg_strand_counts[self.bases[duplex_id][0].base] += 1
-                        colnew = "StN"  #count all duplex by the mapstrand (consider them all high-conf)
+                        mapstrand.append("StN")  #count all duplex by the mapstrand (consider them all high-conf)
 
-                    self.base_array[colnew][self.bases[duplex_id][0].base] += 1
+                    for x in mapstrand:
+                        self.base_array[x][self.bases[duplex_id][0].base] += 1
                     if pos_passes_filter and neg_passes_filter:
                         #if self.bases[duplex_id][0].base == "C":
                             #print "DPN"
