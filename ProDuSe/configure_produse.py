@@ -251,12 +251,13 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
     collapse_two_tmp = os.sep.join([tmp_dir, sample_name + "collapse_R2.fastq.gz"])
     collapse_one_data = os.sep.join([data_dir, sample_name + "collapse_R1.fastq.gz"])
     collapse_two_data = os.sep.join([data_dir, sample_name + "collapse_R2.fastq.gz"])
+    collapse_family_plot = os.sep.join([figures_dir, sample_name + "Family_Distribution.png"])
 
     os.symlink(collapse_one_tmp, collapse_one_data)
     os.symlink(collapse_two_tmp, collapse_two_data)
 
     # Creates collapse config file
-    createConfig(cparser, [trim_data], [collapse_one_tmp, collapse_two_tmp], sampleConfig, "collapse", config_dir, additional_param={})
+    createConfig(cparser, [trim_data], [collapse_one_tmp, collapse_two_tmp], sampleConfig, "collapse", config_dir, additional_param={"family_plot": collapse_family_plot})
 
     # Creates bwa collapse output symlinks
     collapse_tmp = os.sep.join([tmp_dir, sample_name + "collapse.bam"])
