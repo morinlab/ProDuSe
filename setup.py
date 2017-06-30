@@ -34,7 +34,8 @@ setup(
         "configargparse",
         "pysam",
         "numpy",
-        "astropy"
+        "astropy",
+	"matplotlib"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.4.tar.gz",
     license="GNU GPLv3",
