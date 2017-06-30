@@ -89,6 +89,11 @@ parser.add(
     action="store_true",
     help="Instead, output entries without trimming the adapter sequence"
     )
+parser.add(
+    "--discard_adapter",
+    action="store_true",
+    help="Do not save the adapter sequence in the read name"
+    )
 
 
 def is_valid_file(file, parser):
@@ -149,6 +154,7 @@ def main(args=None):
             args.v = False
         if "u" not in cmdArgs:
             args.u = False
+        args.discard_adapter = False
 
     # If input and output files were specified from the command line, ensures that a pair of files were provided
     if not len(args.input) == 2:
@@ -177,7 +183,7 @@ def main(args=None):
         sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exist, overwriting\n" % args.output[0]]))
         os.remove(args.output[0])
     if os.path.isfile(args.output[1]):
-        sys.stdout.write("\t",join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exist, overwriting\n" % args.output[1]]))
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exist, overwriting\n" % args.output[1]]))
         os.remove(args.output[1])
 
     # Determine Possible Adapters
@@ -259,9 +265,10 @@ def main(args=None):
 
         else:
 
-            # Update read names to include adapter sequence prefixes
-            forward_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', forward_read.id[1:]])
-            reverse_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', reverse_read.id[1:]])
+            # If specified Update read names to include adapter sequence prefixes
+            if not args.discard_adapter:
+                forward_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', forward_read.id[1:]])
+                reverse_read.id = ''.join(['@', forward_adapter.seq, reverse_adapter.seq, ':', reverse_read.id[1:]])
 
         # Write entries to fastq outputs
         forward_output.next(forward_read)
