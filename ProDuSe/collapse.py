@@ -276,7 +276,7 @@ def main(args=None):
         counter += 1
 
         # All the magic occurs in here.
-        molecules_in_family = collection.adapter_table_average_consensus(
+        collection.adapter_table_average_consensus(
             forward_fastq=forward_fastq,
             reverse_fastq=reverse_fastq,
             strand_mismatch=int(args.adapter_max_mismatch),
@@ -286,10 +286,10 @@ def main(args=None):
             original_forward_fastq=original_forward_fastq,
             original_reverse_fastq=original_reverse_fastq)
 
-        collapsed_reads += (molecules_in_family - 1) * 2
+        collapsed_reads += (collection.length - 1) * 2
 
         # For generating a histogram of molecule class abundances
-        family_abundances.append(molecules_in_family)
+        family_abundances.append(collection.length)
 
         # Prints a status update to the command line
         if counter % 100000 == 0:
