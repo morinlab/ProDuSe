@@ -729,7 +729,7 @@ class AlignmentCollectionCreate:
                 self.qname_to_read[read.qname] = read
                 continue
 
-            # Form and Alignment on the read and mate
+            # Form an Alignment on the read and mate
             align = Alignment(self.qname_to_read[read.qname], read)
 
             # Delete the read from the qname to read hash
