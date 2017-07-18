@@ -30,6 +30,7 @@ try:
 	import snv
 	import filter_produse
 	import SplitMerge
+	import __version as ProDuSeVer
 
 # If installed and running in python3
 except ImportError:
@@ -40,7 +41,7 @@ except ImportError:
 	from ProDuSe import snv
 	from ProDuSe import filter_produse
 	from ProDuSe import SplitMerge
-
+	from ProDuSe import __version as ProDuSeVer
 """
 Processes command line arguments
 
@@ -370,37 +371,6 @@ def check_command(command, versionStr=None):
 		sys.stderr.write("Please ensure it is installed, and try again\n")
 		sys.exit(1)
 
-def getSampleList(outDir):
-	"""
-	List all samples to be processed by ProDuSe
-
-	Parse the names of the sample subdirectories created by configure_produse
-
-
-	Args:
-		outdir: ProDuSe output directory
-
-	Returns:
-		sampleList: A list of strings, containing sample names
-	"""
-
-	# Sanity Check: Ensure produse_analysis_directory actually exists
-	if not os.path.exists(os.path.join(outDir, "produse_analysis_directory")):
-		sys.stderr.write("ERROR: Unable to find " + os.path.join([outDir, "produse_analysis_directory"]) + "\n")
-		sys.stderr.write("Check to ensure configure_produse completed sucessfully")
-		exit(1)
-
-	# Generates a list of samples by listing all directories created in 'produce_analysis_directory'
-	sampleList = next(os.walk(os.path.join(outDir, "produse_analysis_directory")))[1]
-
-	# If configure_produse.py created a reference folder, ignore that directory
-	try:
-		sampleList.remove("Reference_Genome")
-	except ValueError:
-		pass
-
-	return sampleList
-
 
 def getConfig(sampleDir, task):
 	"""
@@ -457,50 +427,6 @@ def runSort(bamFile, byName=False):
 		samtoolsArgs.append("-n")
 	subprocess.check_call(samtoolsArgs)
 	return outFile
-
-
-def runSplitMerge(inputBam, outputBam, scriptPath):
-	"""
-	Runs splitmerge.pl on the supplied BAM file
-
-	Args:
-		inputBam: Path to BAM file to be split
-		outputBam: Path to output BAM file
-		sciptPath: Path to splitmerge.pl
-	"""
-
-	# Sanity check. Ensure the script exists in that directory
-	if not os.path.exists(scriptPath):
-		sys.stderr.write("ERROR: Unable to locate \'splitmerge.pl\' in %s\n" % scriptDir)
-		sys.stderr.write("Please ensure the script exists\n")
-
-	preSMViewArgs = ["samtools", "view", "-h", inputBam]
-	postSMViewArgs = ["samtools", "view", "-b"]
-
-	# Runs splitmerge
-	with open(outputBam, "w") as o:
-		preSMView = subprocess.Popen(preSMViewArgs, stdout=subprocess.PIPE)
-		exSM = subprocess.Popen(scriptPath, stdin=preSMView.stdout, stdout=subprocess.PIPE)
-
-		subprocess.check_call(postSMViewArgs, stdin=exSM.stdout, stdout=o)
-
-
-def runFilter(vaf, inputFile, scriptPath):
-	"""
-	Runs filter_produse.pl
-
-	Filters variants called by snv.py using the specified VAF threshold
-
-	Args:
-		vaf: Minimum VAF threshold. Variants below this threshold will be discarded
-		vcfFile: Path to input VCF file
-		scriptPath: Path to filter_produse.pl
-	"""
-	filterArgs = ["perl", scriptPath, str(vaf)]
-	outFile = inputFile.replace(".vcf", ".filtered.vcf")
-
-	with open(inputFile) as f, open(outFile, "w") as o:
-		subprocess.Popen(filterArgs, stdin=f, stdout=o)
 
 
 def runPipeline(args, sampleName, sampleDir):
@@ -609,7 +535,7 @@ def main(args=None):
 	outDir = configure_produse.output_directory
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Configuration Complete\n"]))
 
-	createLogFile(args, os.path.join(outDir, "ProDuSe_Task.log"), samtoolsVer, monoVer, pythonVer, bwaVer)
+	createLogFile(args, os.path.join(outDir, "ProDuSe_Task.log"),["ProDuSe Version " + ProDuSeVer.__version__ + "\n"], samtoolsVer, monoVer, pythonVer, bwaVer)
 
 	# Run the pipeline on each sample
 	for sample in sampleList:
