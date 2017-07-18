@@ -35,9 +35,10 @@ parser.add_argument("-sv", "--allow_single_stranded", action="store_true", defau
 parser.add_argument("-md", "--min_depth", type=int, default=2, help="Minimum depth threshold [Default: %(default)s]")
 parser.add_argument("-nb", "--normal_bam", type=lambda x: isValidFile(x, parser), default=None, metavar="BAM", help="A BAM file coresponding to a matched normal sample")
 parser.add_argument("-nv", "--normal_vaf", default=0.05, type=float, metavar="FLOAT", help="VAF threshold for the normal sample, above which variants will be called as germline [Default: %(default)s]")
-parser.add_argument("-r", "--reference", type=lambda x:isValidFile(x, parser), metavar="FASTA", help="Reference genome, in FASTA format. Required if a normal BAM file is supplied")
+parser.add_argument("-r", "--reference", type=lambda x: isValidFile(x, parser), metavar="FASTA", help="Reference genome, in FASTA format. Required if a normal BAM file is supplied")
 parser.add_argument("-fl", "--filter_log", metavar="FILE", help="A log file to explain the thresholds used for each variant, and why variants failed filters")
 parser.add_argument("-g", "--germline_output", metavar="FILE", help="If a matched normal was supplied, an output file for germline variants")
+
 
 def isValidFile(file, parser):
     """
@@ -171,6 +172,7 @@ def processFields(line):
         fieldDict[fieldName] = elementList
     return fieldDict
 
+
 def vafFromPileup(chrom, locus, bamFile, refAllele, altAlleles):
     """
     Calculates the VAF at a given locus
@@ -247,7 +249,7 @@ def vafFromPileup(chrom, locus, bamFile, refAllele, altAlleles):
     return vafs
 
 
-def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, allowSingle=False, logFile=None, matchedNormal=None, vafThreshold=0.05, germOut=None):
+def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, allowSingle=False, logFile=None, matchedNormal=None, vafThreshold=0.05, germOut=None, noReformat=False):
     """
     Filters variants at each locus based upon molecule counts at that locus
 
@@ -264,11 +266,18 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
         matchedNormal: A filepath string to a BAM file coresponding to the matched normal
         vafThresold: A float indicating the germline VAF threshold, above which variants called in the matched normal will be considered germline
         germOut: A string to a filepath for germline variants
+        noReformat: Boolean indicating if the output VCF format should be identical to the input VCF format
     """
+
+    printPrefix = "PRODUSE-FILTER\t"
 
     # Don't create a germline vcf file if no matched normal was supplied
     if not matchedNormal:
         germOut = None
+
+    # Counters for the number of alternate alleles passing and failing filters
+    passedVar = 0
+    failedVar = 0
 
     baseToIndex = {"A": 0, "C": 1, "G": 2, "T": 3}
     molTypes = ["DPN", "DPn", "DpN", "SN", "SP", "Dpn", "Sn", "Sp"]
@@ -384,7 +393,6 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
                     else:
                         log.write("\n")
 
-
                 if len(passingPosAlleles) == 0 and len(passingNegAlleles) == 0:
                     log.write("Alternate Allele \'%s\': FAILED\n" % (altAllele))
                     log.write("Cause: No base types passed filters\n")
@@ -419,7 +427,27 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
                 origAltAlleles = line.split()[4]
                 newAltAlleles = ",".join(passingAltAlleles)
                 outLine = outLine.replace(origAltAlleles, newAltAlleles)
+
+                passedVar += 1
+
                 o.write(outLine)
+            else:
+                failedVar += 1
+
+        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Filtering Complete\n"]))
+
+        # Correct Plurals!
+        if passedVar == 1:
+            passedStatusLine = "1 variant passed filters"
+        else:
+            passedStatusLine = "\f variants passed filters" % (passedVar)
+        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), passedStatusLine + "\n"]))
+
+        if failedVar == 1:
+            failedStatusLine = "1 variant failed filters"
+        else:
+            failedStatusLine = "\f variants failed filters" % (failedVar)
+        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), failedStatusLine + "\n"]))
 
 
 def checkRef(bamFile, vcfFile):
@@ -477,8 +505,8 @@ def main(args=None):
         for option in configOptions:
             param = config.get("config", option)
             # Convert arguments that are lists into an actual list
-            if "," in param:
-                param = param.split(",")
+            if param[0] == "[" and param[-1] == "]":
+                param = param[1:-1].split(",")
 
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param
@@ -503,7 +531,8 @@ def main(args=None):
             sys.exit(1)
 
     thresholds = setThresholds(args.molecule_stats, args.strong_singleton_threshold, args.strong_duplex_threshold, args.weak_base_threshold)
-    runFilter(args.input, thresholds, args.output, int(args.min_depth), float(args.strand_bias_threshold), args.allow_single_stranded, args.filter_log, args.normal_bam, float(args.normal_vaf), args.germline_output)
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Thresholds Set\n"]))
+    runFilter(args.input, thresholds, args.output, int(args.min_depth), float(args.strand_bias_threshold), args.allow_single_stranded, args.filter_log, args.normal_bam, float(args.normal_vaf), args.germline_output, args.no_reformat)
 
 
 if __name__ == "__main__":
