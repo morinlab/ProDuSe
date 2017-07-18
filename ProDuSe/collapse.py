@@ -196,8 +196,8 @@ def main(args=None):
         for option in configOptions:
             param = config.get("config", option)
             # Convert arguments that are lists into an actual list
-            if "," in param:
-                param = param.split(",")
+            if param[0] == "[" and param[-1] == "]":
+                param = param[1:-1].split(",")
 
             # WARNING: Command line arguments will be SUPERSCEEDED BY CONFIG FILE ARGUMENTS
             cmdArgs[option] = param

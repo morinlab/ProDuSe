@@ -28,7 +28,7 @@ def addParam(config, name, param):
 
     if isinstance(param, list):
         if len(param) > 1:
-            config.set("config", name, ','.join(param))
+            config.set("config", name, "[" + ','.join(param) + "]")
         elif len(param) == 1:
             config.set("config", name, param[0])
     else:
