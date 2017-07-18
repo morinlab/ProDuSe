@@ -19,6 +19,9 @@ import subprocess
 import time
 
 
+samples = []
+output_directory = ""
+
 def addParam(config, name, param):
     """
     Adds the specified paramter to the config file provided
@@ -163,12 +166,12 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
         if normal[0].endswith(".fastq") or normal[0].endswith(".fastq.gz"):
             if len(normal) != 2:
                 sys.stderr.write("ERROR: The matched normal must be specified as either a BAM file, or two fastq files\n")
-                sys.exit(1)           
+                sys.exit(1)
             elif normal[1].endswith(".fastq") or normal[1].endswith(".fastq.gz"):
                 normal_fastqs = normal
             else:
                 sys.stderr.write("ERROR: The matched normal must be specified as either a BAM file, or two fastq files\n")
-                sys.exit(1)               
+                sys.exit(1)
         elif normal[0].endswith(".bam"):
             normal_bam = normal[0]
         else:
@@ -303,7 +306,7 @@ def make_directory(sample_dir, fastqs, sampleConfig, pconfig, reference, sample_
             val = sampleConfig[key]
     output = open(os.sep.join([sample_dir, "config", os.sep, "filter_task.ini"]), 'w')
     new_config.write(output)
-    
+ 
     """
 
 
@@ -468,7 +471,11 @@ parser.add_argument(
     metavar="0001111111111111",
     help="The matched normal adapter position, if barcoded adapters were used"
     )
-
+parser.add_argument(
+    "--append_to_directory",
+    action="store_true",
+    help="Place results into an existing \'produse_analysis_directory\'. Note that samples with conflicting names will be skipped"
+)
 
 def is_valid_file(file, parser):
     """
@@ -562,10 +569,15 @@ def main(args=None):
 
     """
 
+    global samples
+    global output_directory
+
     if args is None:
         args = parser.parse_args()
 
-    # If neither -f nor -sc was specified, throw an error
+    printPrefix = "PRODUSE-CONFIG\t"
+
+    # If no sample was specified, throw an error
     if not args.sample_config and not args.fastqs:
         raise parser.error("Either --fastqs or --sample_config must be provided")
 
@@ -576,15 +588,20 @@ def main(args=None):
     if (args.normal_adapter_sequence and not args.normal_adapter_position) or (args.normal_adapter_position and not args.normal_adapter_sequence):
         raise parser.error("If --normal_adapter_sequence is specified, --normal_adapter_position must be specified as well, and vise-versa") 
 
-    # Sets up ProDuSe output directory
-    output_directory = os.path.abspath(os.sep.join([args.output_directory, "produse_analysis_directory"]))
+    # Sets up output directory
+    # If the user has pointed to an existing produse_analysis_directory, don't create a sub-produse_analysis_directory inside the produse_analysis_directory
+    if args.output_directory.split(os.sep)[0] == "produse_analysis_directory":
+        output_directory = os.path.abspath(args.output_directory)
+    else:
+        output_directory = os.path.abspath(os.sep.join([args.output_directory, "produse_analysis_directory"]))
     produse_directory = os.path.dirname(os.path.realpath(__file__))
 
-    # If the output directory already exists, throw an error
-    if os.path.isdir(output_directory):
+    # Don't overwrite the existing output directory, unless requested by the user
+    if os.path.isdir(output_directory) and not args.append_to_directory:
         sys.stderr.write("ERROR: %s already exists\n" % output_directory)
+        sys.stderr.write("Use --append_to_directory to append analyses to an existing directory\n")
         sys.exit(1)
-    else:
+    elif not os.path.isdir(output_directory):
         os.makedirs(output_directory)
 
     # Checks for the necessary index files, and generates them if they do not exist
@@ -599,7 +616,12 @@ def main(args=None):
         for sample in sample_config.sections():
 
             sample_dir = os.sep.join([output_directory, sample])
+            # If we are appending to an existing produse_analysis_directory, do not process this sample if a sample with an identical name has already been run
+            if os.path.isdir(sample_dir):
+                sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "WARNING: A sample named %s has already been processed. Skipping...\n" % (sample)]))
+                continue
             os.makedirs(sample_dir)
+            samples.append(sample)
 
             sampleDict = dict(sample_config.items(sample))
 
@@ -631,11 +653,14 @@ def main(args=None):
             make_directory(sample_dir, fastqs, sampleDict, args.config, ref_file, sample + ".", matchedNormal, args.normal_adapter_sequence, args.normal_adapter_position)
     else:
         fastqs = args.fastqs
-        sample_dir = os.path.join(output_directory, "Sample")
-
-        # Setup sample directory
-        make_directory(sample_dir, fastqs, {}, args.config, ref_file, "Sample" + ".", args.normal, args.normal_adapter_sequence, args.normal_adapter_position)
-
+        sample_name = fastqs[0].split(".")[0]  # It's the best I can do.
+        sample_dir = os.path.join(output_directory, sample_name)
+        if os.path.isdir(sample_dir):
+            sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "ERROR: A sample named %s has already been processed.\n" % (sample_name)]))
+        else:
+            os.mkdir(sample_dir)
+            # Setup sample directory
+            make_directory(sample_dir, fastqs, {}, args.config, ref_file, sample_name + ".", args.normal, args.normal_adapter_sequence, args.normal_adapter_position)
 
 if __name__ == '__main__':
 

@@ -106,7 +106,11 @@ confArgs.add_argument(
 	metavar="0001111111111111",
 	help="The matched normal adapter position, if barcoded adapters were used"
 	)
-
+confArgs.add_argument(
+	"--append_to_directory",
+	action="store_true",
+	help="Place results into an existing \'produse_analysis_directory\'. Note that samples with conflicting names will be skipped"
+)
 # Trim args
 trimArgs = parser.add_argument_group("Trim Arguments")
 trimArgs.add(
@@ -302,7 +306,9 @@ def isValidFile(file, parser):
 
 def createLogFile(args, logFile="ProDuSe_Task.log", *versionInfo):
 	"""
-	Creates a log file in the cwd specifying the arguments that ProDuSe was run with
+	Creates a log file in the output directory specifying the arguments that ProDuSe was run with
+
+	If a log file already exists, it is simply appended with the new log
 
 	Input:
 		args: A namespace object listing ProDuSe arguments
@@ -310,21 +316,25 @@ def createLogFile(args, logFile="ProDuSe_Task.log", *versionInfo):
 		versionInfo: A list of lists containing version information
 	"""
 
-	logString = ["python ", sys.argv[0]]
+	log = []
+
+	# Timestamp this
+	log.append("ProDuSe initialized at %s %s" % (time.strftime('%x'), time.strftime('%X')))
+
+	log.append("python " + sys.argv[0])
 
 	# Add each argument to the logString
 	for argument, parameter in vars(args).items():
-		logString.extend([" --" + argument + " ", str(parameter)])
-		logString.append("\n")
+		log.append(" --" + argument + " " + str(parameter))
+
+	logString = "\n".join(log) + "\n"
 
 	# Add the version information for each subprocess
 	for program in versionInfo:
-		logString.append("\n")
-		logString.extend(program)
+		logString += "\n" + "".join(program)
 
-	with open(logFile, "w") as o:
-		for item in logString:
-			o.write(item)
+	with open(logFile, "a") as o:
+		o.write(logString)
 		o.write("\n")
 
 
@@ -595,16 +605,17 @@ def main(args=None):
 
 	# Setup ProDuSe using configure_produse
 	configure_produse.main(args)
-	sampleList = getSampleList(args.output_directory)
+	sampleList = configure_produse.samples
+	outDir = configure_produse.output_directory
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Configuration Complete\n"]))
 
-	createLogFile(args, os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", "ProDuSe_Task.log"), samtoolsVer, monoVer, pythonVer, bwaVer)
+	createLogFile(args, os.path.join(outDir, "ProDuSe_Task.log"), samtoolsVer, monoVer, pythonVer, bwaVer)
 
 	# Run the pipeline on each sample
 	for sample in sampleList:
 
 		sys.stderr.write("\t".join(["\n" + printPrefix, time.strftime('%X'), "Processing sample " + sample + "\n"]))
-		sampleDir = os.path.join(os.path.abspath(args.output_directory), "produse_analysis_directory", sample)
+		sampleDir = os.path.join(outDir, sample)
 		runPipeline(args, sample, sampleDir)
 	sys.stderr.write("\t".join(["\n" + printPrefix, time.strftime('%X'), "All Samples Processed" + "\n"]))
 
