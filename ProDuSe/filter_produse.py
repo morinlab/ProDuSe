@@ -249,7 +249,7 @@ def vafFromPileup(chrom, locus, bamFile, refAllele, altAlleles):
     return vafs
 
 
-def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, allowSingle=False, logFile=None, matchedNormal=None, vafThreshold=0.05, germOut=None, noReformat=False):
+def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, allowSingle=False, logFile=None, matchedNormal=None, vafThreshold=0.05, germOut=None):
     """
     Filters variants at each locus based upon molecule counts at that locus
 
@@ -266,8 +266,7 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
         matchedNormal: A filepath string to a BAM file coresponding to the matched normal
         vafThresold: A float indicating the germline VAF threshold, above which variants called in the matched normal will be considered germline
         germOut: A string to a filepath for germline variants
-        noReformat: Boolean indicating if the output VCF format should be identical to the input VCF format
-    """
+        """
 
     printPrefix = "PRODUSE-FILTER\t"
 
@@ -440,13 +439,13 @@ def runFilter(vcfFile, thresholds, outFile, minDepth=0, strandBiasThresh=0.05, a
         if passedVar == 1:
             passedStatusLine = "1 variant passed filters"
         else:
-            passedStatusLine = "\f variants passed filters" % (passedVar)
+            passedStatusLine = "%i variants passed filters" % (passedVar)
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), passedStatusLine + "\n"]))
 
         if failedVar == 1:
             failedStatusLine = "1 variant failed filters"
         else:
-            failedStatusLine = "\f variants failed filters" % (failedVar)
+            failedStatusLine = "%i variants failed filters" % (failedVar)
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), failedStatusLine + "\n"]))
 
 
@@ -532,7 +531,7 @@ def main(args=None):
 
     thresholds = setThresholds(args.molecule_stats, args.strong_singleton_threshold, args.strong_duplex_threshold, args.weak_base_threshold)
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Thresholds Set\n"]))
-    runFilter(args.input, thresholds, args.output, int(args.min_depth), float(args.strand_bias_threshold), args.allow_single_stranded, args.filter_log, args.normal_bam, float(args.normal_vaf), args.germline_output, args.no_reformat)
+    runFilter(args.input, thresholds, args.output, int(args.min_depth), float(args.strand_bias_threshold), args.allow_single_stranded, args.filter_log, args.normal_bam, float(args.normal_vaf), args.germline_output)
 
 
 if __name__ == "__main__":
