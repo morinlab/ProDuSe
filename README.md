@@ -16,7 +16,6 @@ You will need to install the following tools before installing the ProDuSe packa
 * `samtools>=1.3.1`
 * `Stitcher>=5.1.3` (Can be downloaded from https://github.com/Illumina/Pisces.git)
 * `Mono>=4.6.2` (Mono Compiler)
-* `astropy`
 
 ProDuSe will check to ensure that required tools are installed prior to running the pipeline
 
