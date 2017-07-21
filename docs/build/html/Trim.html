@@ -1,6 +1,6 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
@@ -29,7 +29,7 @@
     <link rel="next" title="bwa" href="bwa.html" />
     <link rel="prev" title="Config" href="Config.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -75,21 +75,21 @@ Reads which do not fall within barcode range and mismatch threshold are discarde
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c, &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments</td>
+<tr class="field-odd field"><th class="field-name">-c, –config:</th><td class="field-body">A configuration file which can provide any of the following arguments</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">A fastq file to be trimmed. This argument must be specified twice. This file may be gzipped.</td>
+<tr class="field-even field"><th class="field-name">-i –input:</th><td class="field-body">A fastq file to be trimmed. This argument must be specified twice. This file may be gzipped.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body"><div class="first last line-block">
+<tr class="field-odd field"><th class="field-name">-o –output:</th><td class="field-body"><div class="first last line-block">
 <div class="line">An output file for writing trimmed reads. This argument must be specified exactly twice.</div>
-<div class="line">These files can automatically be gzipped by appending &#8216;.gz&#8217; to the output file name.</div>
+<div class="line">These files can automatically be gzipped by appending ‘.gz’ to the output file name.</div>
 <div class="line">The output file order corresponds with the input file order.</div>
 </div>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-as &#8211;adapter_sequence:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-as –adapter_sequence:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The barcode sequence range, described using IUPAC bases.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-ap &#8211;adapter_position:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-ap –adapter_position:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
 <div class="line">The positions in the adapter sequence to consider when comparing reference (i.e. -as) and actual adapter sequences</div>
 <div class="line">0 = Do not consider this position</div>
@@ -98,7 +98,7 @@ Reads which do not fall within barcode range and mismatch threshold are discarde
 </div>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">&#8211;mm &#8211;max_mismatch:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">–mm –max_mismatch:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the reference and actual adapter sequences.</td>
 </tr>
 <tr class="field-odd field"><th class="field-name">-v:</th><td class="field-body"><div class="first last line-block">
@@ -109,7 +109,7 @@ Reads which do not fall within barcode range and mismatch threshold are discarde
 </tr>
 <tr class="field-even field"><th class="field-name">-u:</th><td class="field-body">Do not trim the adapter sequence. Only store the adapter sequence in the read name.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">&#8211;discard_adapter:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">–discard_adapter:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">Trim the adapter sequence, but do not modify the read name.</td>
 </tr>
 </tbody>
@@ -117,7 +117,7 @@ Reads which do not fall within barcode range and mismatch threshold are discarde
 </div></blockquote>
 <div class="admonition warning">
 <p class="first admonition-title">Warning</p>
-<p class="last">If &#8211;discard_adapter is specified, the resulting FASTQ files can not be used in the ProDuSE Pipeline (except <a class="reference external" href="bwa.html">bwa.py</a>).</p>
+<p class="last">If –discard_adapter is specified, the resulting FASTQ files can not be used in the ProDuSE Pipeline (except <a class="reference external" href="bwa.html">bwa.py</a>).</p>
 </div>
 </div>
 <div class="section" id="helpful-tips">
@@ -128,7 +128,7 @@ Reads which do not fall within barcode range and mismatch threshold are discarde
 <h2>Additional Notes<a class="headerlink" href="#additional-notes" title="Permalink to this headline">¶</a></h2>
 <p>If the supplied fastqs are multiplexed, a single sample can be extracted if no other samples use barcoded adapters, or if the barcoded adapter sequences between are distinct enough (i.e. the difference between the two barcode sequences exceeds the maximum mismatch threshold).
 Note that there may be some spillover if non-barcoded reads start with a sequence that falls within the barcode sequence range by chance, or if the differences between barcoded sequences is only slightly higher than the maximum mismatch threshold.</p>
-<p>Certain external tools use the read names for various purposes (such as Picard&#8217;s MarkDuplicates, to identify optical duplicates). As trim stores the barcode sequence in the read name, these tools may not behave correctly. In this case, create a new set of trimmed fastq files, and specify &#8211;discard_adapter to leave the read name unmodified</p>
+<p>Certain external tools use the read names for various purposes (such as Picard’s MarkDuplicates, to identify optical duplicates). As trim stores the barcode sequence in the read name, these tools may not behave correctly. In this case, create a new set of trimmed fastq files, and specify –discard_adapter to leave the read name unmodified</p>
 </div>
 </div>
 
@@ -194,7 +194,7 @@ Note that there may be some spillover if non-barcoded reads start with a sequenc
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright 2017, Christopher Rushton.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.2.
     </div>
   </body>
 </html>
