@@ -28,7 +28,7 @@ Parameters
 Additional Considerations
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. warning:: Ensure your samples are de-multiplexed prior to running Adapter Predict. The adapter sequence is estimated from ALL reads in the fastq files.
+.. warning:: Ensure your samples are de-multiplexed prior to running Adapter Predict. The adapter sequence is predicted from ALL reads in the fastq files.
 
 
 

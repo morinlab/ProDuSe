@@ -18,7 +18,7 @@ ProDuSe is a Python command-line variant caller designed for use on Illumina seq
 read duplicates are identified and collapsed into a single consensus sequence, correcting PCR and sequencing errors. In samples with a high duplication rate, this allows extremely rare
 variants be be called confidently.
 
-Useful Links
+Quick Links
 ============
 .. toctree::
    :maxdepth: 1

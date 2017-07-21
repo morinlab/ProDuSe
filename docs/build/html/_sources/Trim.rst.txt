@@ -44,10 +44,15 @@ Parameters
         | Instead of discarding reads with mismatching adapter sequences and saving all other read, do the opposite (save mismatching reads, discard all others).
         | Useful for debugging.
     :-u:
-        Do not trim the adapter sequence.
+        Do not trim the adapter sequence. Only store the adapter sequence in the read name.
+    :--discard_adapter:
+        Trim the adapter sequence, but do not modify the read name.
 
+.. warning:: If --discard_adapter is specified, the resulting FASTQ files can not be used in the ProDuSE Pipeline (except bwa.py_).
+    
+    .. _bwa.py: bwa.html
 
-Helpful tips
+Helpful Tips
 ^^^^^^^^^^^^
 
 If the read discard rate is extremely high, check the supplied adapter sequence.
@@ -57,3 +62,5 @@ Additional Notes
 
 If the supplied fastqs are multiplexed, a single sample can be extracted if no other samples use barcoded adapters, or if the barcoded adapter sequences between are distinct enough (i.e. the difference between the two barcode sequences exceeds the maximum mismatch threshold).
 Note that there may be some spillover if non-barcoded reads start with a sequence that falls within the barcode sequence range by chance, or if the differences between barcoded sequences is only slightly higher than the maximum mismatch threshold.
+
+Certain external tools use the read names for various purposes (such as Picard's MarkDuplicates, to identify optical duplicates). As trim stores the barcode sequence in the read name, these tools may not behave correctly. In this case, create a new set of trimmed fastq files, and specify --discard_adapter to leave the read name unmodified
