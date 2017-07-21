@@ -5,7 +5,7 @@ Configures output directories, input and output file paths for each step of the 
 
 produse_config.py performs the following tasks:
 
-    - Creates a main output directory (produse_analysis_direcetory) in the specified directory
+    - Creates a main output directory (produse_analysis_directory) in the specified directory
         - If a directory named 'produse_analysis_directory' is specified as the base output directory, it will be used directly as the main output directory
     - Creates a log file listing the supplied arguments in the main output directory
     - Creates a Makefile in the main output directory (Depreciated, has no purpose)
