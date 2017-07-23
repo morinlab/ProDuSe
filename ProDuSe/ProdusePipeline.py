@@ -183,6 +183,12 @@ collapseArgs.add(
     default=None,
     help="A histogram to plot molecule counts per read family (i.e. each consensus read)"
     )
+collapseArgs.add(
+    "--discard_chimeric_sequences",
+    action="store_true",
+    default=False,
+    help="Discard chimeric reads"
+)
 
 # Used to maintain backwards compatibility with the poorly-named strand mis-match
 adapterMismatch = collapseArgs.add_mutually_exclusive_group(required=True)
