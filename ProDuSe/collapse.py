@@ -109,6 +109,19 @@ parser.add(
     )
 
 parser.add(
+    "-as", "--adapter_sequence",
+    type=str,
+    required=False,
+    help="The semi-degenerate adapter sequence, described using IUPAC bases. Used to identify chimeric adapters"
+)
+
+parser.add(
+    "--discard_chimeric_sequences",
+    action="store_true",
+    default=False,
+    help="Discard chimeric reads")
+
+parser.add(
     "-oo", "--original_output",
     type=str,
     required=False,
@@ -264,11 +277,14 @@ def main(args=None):
     # Sets positions for foward and reverse reads
     strand_indexes = list(''.join([args.strand_position, args.strand_position]))
     strand_indexes = [i for i in range(len(strand_indexes)) if strand_indexes[i] == "1"]
+    adapter_sequence = "".join([args.adapter_sequence,args.adapter_sequence])
     duplex_indexes = list(''.join([args.duplex_position, args.duplex_position]))
     duplex_indexes = [i for i in range(len(duplex_indexes)) if duplex_indexes[i] == "1"]
 
-    # Loads up reads from the BAM file
-    collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=int(args.sequence_max_mismatch))
+    # Loads up reads from the BAM file, and group them based upon start position
+    collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=int(args.sequence_max_mismatch),
+                                                            adapter_sequence=adapter_sequence, adapter_position=strand_indexes,
+                                                            discard_chimers=args.discard_chimeric_sequences)
     counter = 0
     collapsed_reads = 0
     family_abundances = []
