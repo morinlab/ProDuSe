@@ -283,8 +283,9 @@ def main(args=None):
 
     # Loads up reads from the BAM file, and group them based upon start position
     collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=int(args.sequence_max_mismatch),
-                                                            adapter_sequence=adapter_sequence, adapter_position=strand_indexes,
-                                                            discard_chimers=args.discard_chimeric_sequences)
+                                                            adapter_sequence=args.adapter_sequence,
+                                                            adapter_position=[i for i in range(len(args.strand_position)) if strand_indexes[i] == "1"],
+                                                            discard_chimers=args.discard_chimeric_sequences, adapter_max_mismatch=int(args.adapter_max_mismatch))
     counter = 0
     collapsed_reads = 0
     family_abundances = []
