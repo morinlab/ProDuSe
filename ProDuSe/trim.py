@@ -62,18 +62,21 @@ parser.add(
     help="Output file names"
     )
 parser.add(
+    "-as",
     "--adapter_sequence",
     type=str,
     required=True,
     help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
     )
 parser.add(
+    "-ap",
     "--adapter_position",
     type=str,
     required=True,
     help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
     )
 parser.add(
+    "-mm",
     "--max_mismatch",
     type=int,
     required=True,
@@ -180,10 +183,10 @@ def main(args=None):
         sys.exit(1)
 
     if os.path.isfile(args.output[0]):
-        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exist, overwriting\n" % args.output[0]]))
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exists, overwriting\n" % args.output[0]]))
         os.remove(args.output[0])
     if os.path.isfile(args.output[1]):
-        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exist, overwriting\n" % args.output[1]]))
+        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "WARNING: Output file %s already exists, overwriting\n" % args.output[1]]))
         os.remove(args.output[1])
 
     # Determine Possible Adapters

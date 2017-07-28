@@ -115,18 +115,21 @@ confArgs.add_argument(
 # Trim args
 trimArgs = parser.add_argument_group("Trim Arguments")
 trimArgs.add(
+    "-as",
     "--adapter_sequence",
     type=str,
     required=True,
     help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
     )
 trimArgs.add(
+    "-ap",
     "--adapter_position",
     type=str,
     required=True,
     help="The positions in the adapter sequence to include in distance calculations, 0 for no, 1 for yes"
     )
 trimArgs.add(
+    "-mm",
     "--max_mismatch",
     type=int,
     required=True,
