@@ -238,6 +238,9 @@ def main(args=None):
         if os.path.isfile(args.original_output[1]):
             parser.error("Original output file %s already exist" % args.original_output[1])
 
+    if args.discard_chimeric_sequences and not args.adapter_sequence:
+        parser.error("If --disarc_chimeric_sequences is specified, an --adapter_sequence must also be provided")
+
     # Sets output file types for the standard output fastqs
     outOneType = 'w'
     outTwoType = "w"
