@@ -1,3 +1,4 @@
+
 from scipy.stats import fisher_exact
 
 # If not installed, or running in python2, this works fine
@@ -11,7 +12,6 @@ import bisect
 import sys
 import itertools
 import numpy
-
 
 class ID:
 
@@ -568,6 +568,7 @@ class PosCollectionCreate:
         self.target_bed = target_bed
         self.pysam_alignment_generator = None
         self.min_base_qual = min_base_qual
+        self.target_pos = {}
 
         # READS WHICH OVERLAP TWO REGIONS MAY BE COUNTED TWICE (VERY VERY VERY VERY RARE, will fix later).
         if self.target_bed is not None:
@@ -576,6 +577,20 @@ class PosCollectionCreate:
                     self.pysam_alignment_generator = self.pysam_alignment_file.fetch(region=region)
                 else:
                     self.pysam_alignment_generator = itertools.chain(self.pysam_alignment_generator, self.pysam_alignment_file.fetch(region=region))
+
+                chrom, positions = region.split(":")
+                # Deal with the "chr" prefix stuff
+                try:
+                    if chrom[0:3] == "chr":
+                        chrom = chrom[3:]
+                except IndexError:
+                    pass
+
+                start, end = positions.split("-")
+                if chrom not in self.target_pos:
+                    self.target_pos[chrom] = [int(start), int(end)]
+                else:
+                    self.target_pos[chrom].extend([int(start), int(end)])
 
     def __iter__(self):
         return self.next()
@@ -640,6 +655,17 @@ class PosCollectionCreate:
                 reads_visited+=1
                 order = Order(read.reference_id, pairs[1])
 
+                # If this position falls outside the target range, skip it
+                if self.target_bed:
+                    chrom = order.chrom
+                    if isinstance(chrom, int):
+                        chrom = str(chrom + 1)
+                    if chrom not in self.target_pos:
+                        continue
+                    # The order of the list is [start, end, start, end, start, end]
+                    # If the bisection point is odd, then the position falls within this range
+                    if bisect.bisect(self.target_pos[chrom], order.start) % 2 == 0:
+                        continue
                 base = read.seq[pairs[0]]
                 qual = read.qual[pairs[0]]
 
