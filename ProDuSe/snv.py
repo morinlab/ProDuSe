@@ -234,15 +234,15 @@ def main(args=None):
             )
         # print "done %s  positions in for pos in posCollection at %s" % (m,pos.coords())
 
+        if first:
+            # Parses contig names and lengths from the fasta index file
+            fastaIndex = args.reference + ".fai"
+            contigs = parseContigs(fastaIndex)
+            pos.write_header(output, contigs, args.reference)
+            first = False
+
         counter += 1
         if pos.is_variant(float(args.variant_allele_fraction_threshold), int(args.min_molecules), args.enforce_dual_strand, int(args.mutant_molecules)):
-
-            if first:
-                # Parses contig names and lengths from the fasta index file
-                fastaIndex = args.reference + ".fai"
-                contigs = parseContigs(fastaIndex)
-                pos.write_header(output, contigs, args.reference)
-                first = False
 
             pos.write_variant(output)
             # output.write(pos.coords() + "\n")
