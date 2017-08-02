@@ -66,7 +66,7 @@ parser.add(
     "--adapter_sequence",
     type=str,
     required=True,
-    help="The randomized adapter sequence flanked in input fastq files described using IUPAC bases"
+    help="The semi-degenerate adapter sequence, described using IUPAC bases"
     )
 parser.add(
     "-ap",

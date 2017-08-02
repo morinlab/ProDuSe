@@ -173,7 +173,6 @@ class Alignment:
     def too_many_mismatches(self, threshold):
         return self.r1.mismatches > threshold or self.r2.mismatches > threshold
 
-
 duplex_ids = {"+": {}, "-": {}}
 duplex_stats = collections.OrderedDict()
 duplex_uid = 0
@@ -629,7 +628,6 @@ class AlignmentCollection:
                         original_forward_fastq.next(original_forward_next)
                         original_reverse_fastq.next(original_reverse_next)
 
-        return len(value)
 
     def adapter_table_average_consensus(
         self, forward_fastq, reverse_fastq, adapter=None, strand_mismatch=3,
@@ -644,15 +642,15 @@ class AlignmentCollection:
             adapter_class_to_alignments,
             duplex_mismatch, duplex_indexes)
 
-        molecules_in_class = self._write_out_consensus(
+        self._write_out_consensus(
             adapter_class_to_alignments, forward_fastq, reverse_fastq,
             original_forward_fastq, original_reverse_fastq)
 
-        return molecules_in_class
 
 class AlignmentCollectionCreate:
 
-    def __init__(self, pysam_alignment_file, sense_matters=True, verbose=None, max_alignment_mismatch_threshold=5):
+    def __init__(self, pysam_alignment_file, sense_matters=True, verbose=None, max_alignment_mismatch_threshold=5,
+                adapter_sequence=None, adapter_position=None, discard_chimers=False, adapter_max_mismatch=3):
         self.pysam_alignment_file = pysam_alignment_file
         self.sense_matters = sense_matters
         self.qname_to_read = {}
@@ -665,6 +663,10 @@ class AlignmentCollectionCreate:
         self.id = None
         self.base_buffer = 5000
         self.max_alignment_mismatch_threshold = max_alignment_mismatch_threshold
+        self.adapter_sequence = adapter_sequence
+        self.adapter_position = adapter_position
+        self.adapter_max_mismatch = adapter_max_mismatch
+        self.discard_chimers = discard_chimers
         self.too_many_mismatches = {}
 
     def __iter__(self):
@@ -672,6 +674,32 @@ class AlignmentCollectionCreate:
 
     def __next__(self):
         return self.next()
+
+    def _has_chimeric_adapters(self, read):
+        # Determines if the sequence encodes an additional adapters
+
+        # Is this read mapped? Can the cigar be used to identify candidate adapter sequences?
+        if not read.is_unmapped:
+            # Are the first few bases of the alignment soft-clipped?
+            if ((not read.is_reverse and read.cigartuples[0][0] != 4) or (read.is_reverse and read.cigartuples[-1][0] != 4)):
+                # The first few bases are mapped: This is likely not an adapter sequence.
+                return False
+        # Compare the adapter sequence to the start of the seqeunce for each read
+        # Is the sequence long enough to actually do this?
+        if len(read.query_sequence) < len(self.adapter_sequence):
+            return False
+
+        if not read.is_reverse:
+            examinedSeq = read.query_sequence[:len(self.adapter_sequence)]
+        else:
+            examinedSeq = nucleotide.reverseComplement(read.query_sequence[-1 * len(self.adapter_sequence):])
+
+        distance = nucleotide.distance(examinedSeq, self.adapter_sequence, self.adapter_position)
+        if distance > int(self.adapter_max_mismatch/2):
+            return False
+
+        return True
+
 
     def next(self):
 
@@ -728,6 +756,12 @@ class AlignmentCollectionCreate:
                 # If we haven't we should add this to the "qname to read" hash
                 self.qname_to_read[read.qname] = read
                 continue
+
+            # Added by Chris: Check to ensure there are no additional adapters at the start of each read
+            if self.discard_chimers:
+                if self._has_chimeric_adapters(self.qname_to_read[read.qname]) or self._has_chimeric_adapters(read):
+                    del self.qname_to_read[read.qname]
+                    continue
 
             # Form an Alignment on the read and mate
             align = Alignment(self.qname_to_read[read.qname], read)
