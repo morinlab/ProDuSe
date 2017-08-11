@@ -8,6 +8,7 @@ except ImportError:
 
 import operator
 import collections
+import indel
 
 NUC_TO_INDEX = {
     'A': 0,
@@ -184,6 +185,8 @@ def index_max(values):
 
 def consensus(list_of_reads, strand):
 
+    # Added by Chris: Use this version of the variant caller, which deals with INDELs
+
     length = min([len(x.seq) for x in list_of_reads])
     seq = [None] * length
     qual = [None] * length
@@ -217,11 +220,12 @@ class AlignmentCollection:
 
 
     def __init__(
-        self, list_of_alignments, collection_type='', collection_id=''):
+        self, list_of_alignments, collection_type='', collection_id='', ref_seq=""):
         self.data = list_of_alignments
         self.collection_type = collection_type
         self.collection_id = collection_id
         self.length = len(list_of_alignments)
+        self.ref_seq = ref_seq
 
 
     def __len__(self):
@@ -556,7 +560,6 @@ class AlignmentCollection:
                 str(duplex_ids[self.collection_type][pos_id][adapter])
                 ])
 
-            #
             forward_consensus = consensus([x.r1 for x in value], 'first')
             reverse_consensus = consensus([x.r2 for x in value], 'second')
 
@@ -630,10 +633,10 @@ class AlignmentCollection:
 
 
     def adapter_table_average_consensus(
-        self, forward_fastq, reverse_fastq, adapter=None, strand_mismatch=3,
-        strand_indexes=None, duplex_mismatch=3, duplex_indexes=None,
-        original_forward_fastq=None, original_reverse_fastq=None,
-        stats_file=None):
+        self, forward_fastq, reverse_fastq, adapter=None,
+        strand_mismatch=3, strand_indexes=None, duplex_mismatch=3,
+        duplex_indexes=None, original_forward_fastq=None,
+        original_reverse_fastq=None, stats_file=None):
 
         adapter_class_to_alignments = self._pair_strand_alignments(
             strand_mismatch, strand_indexes)
@@ -649,9 +652,10 @@ class AlignmentCollection:
 
 class AlignmentCollectionCreate:
 
-    def __init__(self, pysam_alignment_file, sense_matters=True, verbose=None, max_alignment_mismatch_threshold=5,
-                adapter_sequence=None, adapter_position=None, discard_chimers=False, adapter_max_mismatch=3):
+    def __init__(self, pysam_alignment_file, pysam_fasta_file, sense_matters=True, verbose=None, max_alignment_mismatch_threshold=5,
+                adapter_sequence=None, adapter_position=None, discard_chimers=False, adapter_max_mismatch=3, ref_window=100):
         self.pysam_alignment_file = pysam_alignment_file
+        self.pysam_fasta_file = pysam_fasta_file
         self.sense_matters = sense_matters
         self.qname_to_read = {}
         self.misformed = {}
@@ -668,6 +672,10 @@ class AlignmentCollectionCreate:
         self.adapter_max_mismatch = adapter_max_mismatch
         self.discard_chimers = discard_chimers
         self.too_many_mismatches = {}
+        self.ref_seq = ""
+        self.ref_window = ref_window
+        self.ref_template = ""
+        self.template_pos = 0
 
     def __iter__(self):
         return self.next()
@@ -771,7 +779,6 @@ class AlignmentCollectionCreate:
 
             # Create the alignment ID
             id = align.id
-
             # Ignore misformed Alignments
             if align.is_misformed():
                 self.misformed[id] = align
@@ -792,17 +799,39 @@ class AlignmentCollectionCreate:
                 continue
 
             # Mismatch on Reference and Sequence
-            if align.too_many_mismatches( self.max_alignment_mismatch_threshold ):
-                self.too_many_mismatches[id] = align
-                continue
+            # Removed by Chris: Hopefully INDEL realignment fixes these
+            #if align.too_many_mismatches( self.max_alignment_mismatch_threshold ):
+            #    self.too_many_mismatches[id] = align
+            #    continue
 
             # If this ID is new, push it to process
             if not id in self.tmp_collections:
                 self.next_id.append(id)
 
-            # Process the first alignment if never done before
+            # Process the first alignment, and create a fasta buffer, if this has not been done before
             if self.id == None:
                 self.id = self.next_id.pop(0)
+
+                # To reduce memory, don't load the entire FASTA sequence. Instead, just load a few kb at a time
+                self.ref_name = read.reference_name
+                self.ref_start = read.reference_start - self.ref_window
+                if self.ref_start < 0:
+                    self.ref_start = 0
+                self.ref_end = read.reference_end + self.base_buffer
+                if self.ref_end > self.pysam_fasta_file.get_reference_length(read.reference_name):
+                    self.ref_end = self.pysam_fasta_file.get_reference_length(read.reference_name)
+
+                self.ref_seq = self.pysam_fasta_file.fetch(reference=self.ref_name, start=self.ref_start, end=self.ref_end)
+
+                # Create a reference sequence window for this tread
+                window_start = read.reference_start - self.ref_window - self.ref_start
+                if window_start < 0:
+                    window_start = 0
+                window_end = read.reference_end + self.ref_window - self.ref_start
+                if window_end > len(self.ref_seq):
+                    window_end = len(self.ref_seq)
+                self.ref_template = self.ref_seq[window_start: window_end]
+                self.template_pos = read.reference_start
 
             # Enter this loop where we will begin processing alignments
             while self.id.lessthan(self.base_buffer, id):
@@ -812,6 +841,29 @@ class AlignmentCollectionCreate:
                 list_of_negative_alignments = []
 
                 collection_id = self.id
+
+                # Update the read ref template, if the start position has changed
+                if id.ref_name_one != self.ref_name or id.start >= self.template_pos + 5 or id.end > self.template_pos + len(self.ref_template) - self.ref_window * 0.8:  # Just so we don't need to update the window every time the read changes start position
+
+                    # Does this new window fall within the range of the existing buffer?
+                    window_start = id.start - self.ref_window
+                    window_end = id.end + self.ref_window
+
+                    # No problem here, just update the window
+                    if window_end >= self.ref_end:
+                        if window_start < self.ref_start:
+                            window_start = self.ref_start
+                        self.ref_template = self.ref_seq[window_start - self.ref_start: window_end - self.ref_start]
+                    # Otherwise, we need to move the buffer
+                    else:
+                        self.ref_name = id.ref_name_one
+                        if window_start < 0:
+                            window_start = 0
+                        self.ref_start = window_start
+                        self.ref_end = id.end + self.base_buffer
+                        self.ref_seq = self.pysam_alignment_file.fetch(reference=self.ref_name, start=self.ref_start, end=self.ref_end)
+                        self.ref_template = self.ref_seq[window_start - self.ref_start: window_end - self.ref_start]
+                    self.template_pos = id.start
 
                 # for each alignment in the collection, determine the sense
                 for qname in self.tmp_collections[collection_id]:
@@ -831,13 +883,13 @@ class AlignmentCollectionCreate:
                 del self.tmp_collections[collection_id]
 
                 if not list_of_alignments == []:
-                    yield AlignmentCollection(list_of_alignments, collection_type="?", collection_id=collection_id)
+                    yield AlignmentCollection(list_of_alignments, collection_type="?", collection_id=collection_id, ref_seq=self.ref_template)
 
                 if not list_of_positive_alignments == []:
-                    yield AlignmentCollection(list_of_positive_alignments, collection_type='+', collection_id=collection_id)
+                    yield AlignmentCollection(list_of_positive_alignments, collection_type='+', collection_id=collection_id, ref_seq=self.ref_template)
 
                 if not list_of_negative_alignments == []:
-                    yield AlignmentCollection(list_of_negative_alignments, collection_type='-', collection_id=collection_id)
+                    yield AlignmentCollection(list_of_negative_alignments, collection_type='-', collection_id=collection_id, ref_seq=self.ref_template)
 
                 self.id = self.next_id.pop(0)
 

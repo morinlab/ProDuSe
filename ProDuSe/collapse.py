@@ -57,6 +57,14 @@ parser.add(
     )
 
 parser.add(
+    "-r", "--reference",
+    metavar="FASTA",
+    type=lambda x: is_valid_file(x, parser),
+    required=True,
+    help="Reference genome, in FASTA format"
+    )
+
+parser.add(
     "-o", "--output",
     metavar="FASTQ",
     required=True,
@@ -274,8 +282,9 @@ def main(args=None):
     print_prefix = "PRODUSE-COLLAPSE"
     sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
 
-    # Load up BAM file
+    # Load up BAM file and Ref Genome
     bamfile = pysam.AlignmentFile(args.input, 'rb')
+    fasta_file = pysam.FastaFile(args.reference)
 
     # Sets positions for foward and reverse reads
     strand_indexes = list(''.join([args.strand_position, args.strand_position]))
@@ -285,7 +294,8 @@ def main(args=None):
     duplex_indexes = [i for i in range(len(duplex_indexes)) if duplex_indexes[i] == "1"]
 
     # Loads up reads from the BAM file, and group them based upon start position
-    collection_creator = alignment.AlignmentCollectionCreate(bamfile, max_alignment_mismatch_threshold=int(args.sequence_max_mismatch),
+    collection_creator = alignment.AlignmentCollectionCreate(bamfile, ref_genome=fasta_file,
+                                                            max_alignment_mismatch_threshold=int(args.sequence_max_mismatch),
                                                             adapter_sequence=args.adapter_sequence,
                                                             adapter_position=[i for i in range(len(args.strand_position)) if strand_indexes[i] == "1"],
                                                             discard_chimers=args.discard_chimeric_sequences, adapter_max_mismatch=int(args.adapter_max_mismatch))
