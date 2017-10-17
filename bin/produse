@@ -1,143 +1,45 @@
-#!/usr/bin/env python
+#! /usr/bin/env python
 
-import configargparse
 import sys
-from ProDuSe import adapter_predict
-from ProDuSe import configure_produse
-from ProDuSe import collapse
-from ProDuSe import trim
-from ProDuSe import snv
-from ProDuSe import bwa
-from ProDuSe import ProdusePipeline
-from ProDuSe import filter_produse
-from ProDuSe import SplitMerge
+from ProDuSe import ProdusePipeline, trim, collapse
 
-parser = configargparse.ArgParser()
+def usage():
+    """
+    Prints ProDuSe's usage information to stdout
+    """
 
-subparsers = parser.add_subparsers()
-
-parser_configure_produse = subparsers.add_parser(
-    "configure_produse",
-    parents=[configure_produse.parser],
-    add_help=False,
-    usage=""
-    )
-parser_configure_produse.set_defaults(
-    which="configure_produse"
-    )
-
-parser_trim = subparsers.add_parser(
-    "trim",
-    parents=[trim.parser],
-    add_help=False
-    )
-parser_trim.set_defaults(
-    which="trim"
-    )
-
-parser_align = subparsers.add_parser(
-    "align",
-    parents=[bwa.parser],
-    add_help=False
-    )
-parser_align.set_defaults(
-    which="align"
-    )
-
-parser_splitmerge = subparsers.add_parser(
-    "split_merge",
-    parents=[SplitMerge.parser],
-    add_help=False
-    )
-parser_splitmerge.set_defaults(
-    which="split_merge"
-    )
-
-parser_collapse = subparsers.add_parser(
-    "collapse",
-    parents=[collapse.parser],
-    add_help=False
-    )
-parser_collapse.set_defaults(
-    which="collapse"
-    )
-
-parser_variants = subparsers.add_parser(
-    "snv",
-    parents=[snv.parser],
-    add_help=False
-    )
-parser_variants.set_defaults(
-    which="snv"
-    )
-
-parser_filter = subparsers.add_parser(
-    "filter",
-    parents=[filter_produse.parser],
-    add_help=False
-    )
-parser_filter.set_defaults(
-    which="filter"
-    )
-
-parser_barcode = subparsers.add_parser(
-    "adapter_predict",
-    parents=[adapter_predict.parser],
-    add_help=False
-    )
-parser_barcode.set_defaults(
-    which="adapter_predict"
-    )
-
-parser_run_pipeline = subparsers.add_parser(
-    "run_produse",
-    parents=[ProdusePipeline.parser],
-    add_help=False,
-    )
-parser_run_pipeline.set_defaults(
-    which="run_produse"
-    )
-
-parser_version = subparsers.add_parser(
-    "version"
-    )
-parser_version.set_defaults(
-    which="version"
-    )
-
-if len(sys.argv[1:]) == 0:
-    parser.print_help()
-    parser.exit()
-args = parser.parse_args()
-
-if args.which == "version":
     from ProDuSe.__version import __version__
-    sys.stderr.write("ProDuSe " + __version__ + "\n")
+    sys.stdout.write("\nProDuSe: Variant Caller for semi-degenerate barcoded adapter libraries\n")
+    sys.stdout.write("Version: " + __version__ + "\n")
+    sys.stdout.write("\n")
+    sys.stdout.write("Usage:\tproduse <command> [options]\n")
+    sys.stdout.write("\n")
+    sys.stdout.write("Commands:\n")
+    sys.stdout.write("adapter_predict\tIdentifies the degerate barcode used in a set of FASTQ files\n")
+    sys.stdout.write("run_produse\tRuns all steps of the ProDuSe pipeline listed below\n")
+    sys.stdout.write("trim\t\tRemoves barcodes from FASTQ files\n")
+    sys.stdout.write("clip\t\tClips bases which overlap in both the forward and reverse reads in paired-end sequencing\n")
+    sys.stdout.write("collapse\tIdentifies duplicates,and merges duplicates into a consensus\n")
+    sys.stdout.write("call\t\tIdentifies variants\n")
+    sys.stdout.write("\n")
+    exit(1)
 
-if args.which == "adapter_predict":
-    adapter_predict.main(args)
 
-if args.which == "collapse":
-    collapse.main(args)
+def main(args):
 
-if args.which == "snv":
-    snv.main(args)
+    # Print out a usage message
+    if len(args) == 1:
+        usage()
+        return
 
-if args.which == "trim":
-    trim.main(args)
+    command = args[1]
 
-if args.which == "configure_produse":
-    configure_produse.main(args)
+    if command == "run_produse":
+        ProdusePipeline.main(sysStdin=args[2:])
+    elif command == "trim":
+        trim.main(sysStdin=args[2:])
+    elif command == "collapse":
+        collapse.main(sysStdin=args[2:])
 
-if args.which == "align":
-    bwa.main(args)
-
-if args.which == "run_produse":
-    ProdusePipeline.main(args)
-
-if args.which == "filter":
-    filter_produse.main(args)
-
-if args.which == "split_merge":
-    SplitMerge.main(args)
-
+if __name__ == "__main__":
+    main(sys.argv)
