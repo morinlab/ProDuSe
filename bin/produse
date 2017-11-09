@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 import sys
-from ProDuSe import ProdusePipeline, trim, collapse
+from ProDuSe import ProdusePipeline, trim, collapse, adapter_predict
 
 def usage():
     """
@@ -34,7 +34,9 @@ def main(args):
 
     command = args[1]
 
-    if command == "run_produse":
+    if command == "adapter_predict":
+         adapter_predict.main(sysStdin=args[1:])
+    elif command == "run_produse":
         ProdusePipeline.main(sysStdin=args[2:])
     elif command == "trim":
         trim.main(sysStdin=args[2:])
