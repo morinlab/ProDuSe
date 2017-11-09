@@ -29,13 +29,11 @@ setup(
        ],
     setup_requires=["numpy"],
     install_requires=[
-        "scipy",
-        "configparser",
-        "configargparse",
-        "pysam",
-        "numpy",
-        "astropy",
-	"matplotlib"
+	"sortedcontainers",
+        "configobj",
+	"scikit-bio",
+        "pyfaidx",
+        "pysam"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.4.tar.gz",
     license="GNU GPLv3",
