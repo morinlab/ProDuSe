@@ -23,20 +23,6 @@ def isValidFile(file, parser):
 	else:
 		raise parser.error("Unable to locate %s. Please ensure the file exists, and try again." % (file))
 
-
-def openInput(filepath, gzMagicNumber):
-
-	f = open(filepath, "rb")
-	# Read the file's magic number
-	magicNum = f.read(2)
-	f.close()
-	if magicNum == gzMagicNumber:
-		f = gzip.open(filepath, "rt")
-	else:
-		f = open(filepath)
-
-	return f
-
 def validateArgs(args):
 	"""
 	Validates that the specified set of arguments are valid
@@ -66,7 +52,6 @@ def validateArgs(args):
 	parser.add_argument("-mm", "--max_mismatch", metavar="INT", required=True, type=int, help="Maximum mismatch allowed between expected and actual adapter sequences")
 	parser.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", required=True, type=str, help="Degenerate barcode sequence, represented in IUPAC bases")
 	parser.add_argument("-p", "--barcode_position", metavar="0001111111111110", required=True, type=str, help="Positions to consider when comparing expected and actual barcode sequences (1=Yes, 0=No)")
-	parser.add_argument("--gzip_magic_number", metavar="BYTES", default=b'\x1f\x8b', help="Magic number representing a gzipped file")
 	parser.add_argument("-v", action="store_true", help="Instead, output reads which fall outside the mismatch threshold")
 	parser.add_argument("-u", action="store_true", help="Instead, output entries without trimming the adapter sequence")
 	validatedargs = parser.parse_args(listArgs)
@@ -80,7 +65,6 @@ parser.add_argument("-o", "--output", metavar="FASTQ", nargs=2, help="A pair of 
 parser.add_argument("-mm", "--max_mismatch", metavar="INT", type=int, help="Maximum mismatch allowed between expected and actual adapter sequences")
 parser.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str, help="Degenerate barcode sequence, represented in IUPAC bases")
 parser.add_argument("-p", "--barcode_position", metavar="0001111111111110", type=str, help="Positions to consider when comparing expected and actual barcode sequences (1=Yes, 0=No)")
-parser.add_argument("--gzip_magic_number", metavar="BYTES", default=b'\x1f\x8b', help="Magic number representing a gzipped file")
 parser.add_argument("-v", action="store_true", help="Instead, output reads which fall outside the mismatch threshold")
 parser.add_argument("-u", action="store_true", help="Instead, output entries without trimming the adapter sequence")
 
@@ -121,7 +105,7 @@ def main(args=None, sysStdin=None):
 	if args["config"] is not None:
 		config = ConfigObj(args["config"])
 		try:
-			for argument, parameter in config["trim"].items():
+			for argument, parameter in config["Trim"].items():
 				if argument in args and args[argument] is None:  # Aka this argument is used by trim, and a parameter was not provided at the command line
 					args[argument] = parameter
 		except KeyError:  # i.e. there is no section named "trim" in the config file
@@ -130,6 +114,10 @@ def main(args=None, sysStdin=None):
 
 	# Finally, re-parse the arguments to ensure are required arguments are specified
 	args = validateArgs(args)
+
+	# Sanity check to ensure that the input FASTQ files are not the same
+	if os.path.realpath(args["input"][0]) == os.path.realpath(args["input"][1]):
+		parser.error("The input files specified are the same file!")
 
 	# Perform some basic sanity checks
 	if len(args["barcode_sequence"]) != len(args["barcode_position"]):
@@ -142,10 +130,22 @@ def main(args=None, sysStdin=None):
 	barcodeIndexes = tuple(i for i in range(0, barcodeLength) if args["barcode_position"][i] == "1")
 	barcodeBases = tuple(args["barcode_sequence"][i] for i in barcodeIndexes)
 
+	# Check to ensure that the user actually provided positions to be compared
+	if len(barcodeIndexes) == 0:
+		parser.error("The barcode mask \'%s\' was provided, and no positions were specified to be compared")
+
 	# Open the input and output fastq files for reading/writing
-	# Determine if the input files are gzipped
-	f1in = openInput(args["input"][0], args["gzip_magic_number"])
-	f2in = openInput(args["input"][1], args["gzip_magic_number"])
+	# Determine if the input files are gzipped, and open appropriately
+	if args["input"][0].split(".")[-1] == "gz":
+		f1in = gzip.open(args["input"][0], "rt")
+	else:
+		f1in = open(args["input"][0])
+
+	if args["input"][1].split(".")[-1] == "gz":
+		f2in = gzip.open(args["input"][1], "rt")
+	else:
+		f2in = open(args["input"][1])
+
 	# Open outputs
 	if args["output"][0].endswith(".gz"):
 		f1out = gzip.open(args["output"][0], "wt")
@@ -198,8 +198,11 @@ def main(args=None, sysStdin=None):
 			# Append the family barcode to the read name
 			# We will specify to BWA that this is a tag later
 			familyBarcode = barcode1 + barcode2
-			r1name = r1name.rstrip() + "\tBC:Z:" + familyBarcode + os.linesep
-			r2name = r2name.rstrip() + "\tBC:Z:" + familyBarcode + os.linesep
+
+			# Remove the Illumina tag from the reads, since BWA's -C option will add that tag to the BAM file as well
+			# which will corrupt the output SAM
+			r1name = r1name.split(" ")[0].rstrip() + "\tBC:Z:" + familyBarcode + os.linesep
+			r2name = r2name.split(" ")[0].rstrip() + "\tBC:Z:" + familyBarcode + os.linesep
 
 			# Second, determine if the barcode sequences fall within the mismatch theshold
 			# Obtain the positions that will actually be compared

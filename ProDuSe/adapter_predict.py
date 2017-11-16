@@ -42,10 +42,13 @@ parser.add_argument(
     )
 
 
-def main(args=None):
+def main(args=None, sysStdin=None):
 
     if args is None:
-        args = parser.parse_args()
+        if sysStdin is None:
+            args = parser.parse_args()
+        else:
+            args = parser.parse_args(sysStdin)
 
     # Check If Input is Gzip and call appropariate FastqOpen
     read = 'r'

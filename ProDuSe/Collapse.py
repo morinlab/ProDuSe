@@ -1,0 +1,1143 @@
+#!/usr/bin/env python
+
+import argparse
+import pysam
+import os
+import sys
+import sortedcontainers
+import collections
+import time
+import bisect
+from skbio import alignment
+from pyfaidx import Fasta
+from configobj import ConfigObj
+
+
+class Family:
+    """
+    Stores various statistics relating to a given read pair
+    """
+
+    def __init__(self, R1, R2, barcodeLength):
+
+        # The first time this initated, this "family" will have a size of 1, since only a single
+        # read pair is stored here.
+        # The basis for this family will be represented by the first read pair used to represent it
+        self.size = 1
+        self.members = [R1.query_name]
+
+        # Set counters which will store the number of sequences which contain elements (indels,
+        # soft-clipping) that could mask INDELs
+        self.R1abnormal = 0
+        self.R2abnormal = 0
+
+        #  Identify which read is actually read 1 and which is read2
+        if not R1.is_read1:
+            tmp = R1
+            R1 = R2
+            R2 = tmp
+
+        # Identify the parental strand
+        if R1.is_reverse:
+            self.posParent = False
+        else:
+            self.posParent = True
+
+        # Obtain the family name for this read pair (from the barcode)
+        self.invalidBarcode = False
+        try:
+            self.familyName = R1.get_tag("BC")
+            if len(self.familyName) != barcodeLength:
+                self.invalidBarcode = True
+        except KeyError:
+            self.familyName = None
+            self.invalidBarcode = True
+
+        self.R1sequence = [R1.query_sequence]
+        self.R1qual = [R1.query_qualities]
+
+        # We need to reverse the sequence of read 2, due to the read orientation
+        self.R2sequence = [R2.query_sequence[::-1]]
+        self.R2qual = [R2.query_qualities[::-1]]
+
+        # Do these families map to different chromosomes?
+        self.isSplit = R1.reference_name != R2.reference_name
+
+        R1LeadingSoftClipping = 0
+        R1startOffset = 0
+        R2LeadingSoftClipping = 0
+        R2startOffset = 0
+        try:
+            self.R1cigar = [self.cigarToList(R1.cigartuples, True)]
+            self.R2cigar = [self.cigarToList(R2.cigartuples, False)]
+            # If a read is soft-clipped, we need to locate the "actual" start position of the read
+            # The simplist way to do this is through local realignment
+            if R1.cigartuples[0][0] == 4:
+                startCigar, R1startOffset, R1LeadingSoftClipping = self._realign(R1, 5)
+                for i in range(0, len(startCigar)):
+                    self.R1cigar[0][i] = startCigar[i]
+
+            if R2.cigartuples[0][0] == 4:
+                startCigar, R2startOffset, R2LeadingSoftClipping = self._realign(R2, 5)
+                for i in range(0, len(startCigar)):
+                    self.R2cigar[0][i] = startCigar[i]
+
+            self.R2cigar = self.R2cigar[::-1]
+            self.malformed = False
+        except IndexError:
+            self.malformed = True
+            self.R1cigar = [None]
+            self.R2cigar = [None]
+        except TypeError:
+            self.malformed = True
+            self.R1cigar = [None]
+            self.R2cigar = [None]
+
+        self.R1startOffset = R1LeadingSoftClipping
+        self.R2startOffset = R2LeadingSoftClipping
+
+        # Next, identify the start position of this read pair, and determine if it is soft-clipped at the start
+        R1effectiveStart = R1.reference_start + R1startOffset
+        self.R1start = [R1effectiveStart]
+        R2effectiveStart = R2.reference_start + R2startOffset
+        self.R2start = [R2effectiveStart]
+        if R1effectiveStart < R2effectiveStart:
+            self.pos = R1effectiveStart - R1LeadingSoftClipping
+            if R1effectiveStart != 0:
+                self.softClipped = True
+            else:
+                self.softClipped = False
+        else:
+            self.pos = R2effectiveStart - R2LeadingSoftClipping
+            if R2LeadingSoftClipping != 0:
+                self.softClipped = True
+            else:
+                self.softClipped = False
+
+        try:
+            self.end = max(R1.reference_end, R2.reference_end)
+        except TypeError:  # One read is unmapped
+            if R1.reference_end is not None:
+                self.end = R1.reference_end
+            else:
+                self.end = R2.reference_end
+
+        # These are statistics which will be used after all reads are collapsed into a consensus
+        self.collapseSize = []
+
+        # These are used to create output reads
+        self.R1 = R1
+        self.R2 = R2
+        self.name = R1.query_name
+
+    def _realign(self, read, cigarOffset, windowBuffer=200):
+        """
+        Aligns a fragment of a sequence to the reference using Smith-Waterman alignment
+        """
+
+        # Load the current reference window and it's position
+        global refWindow
+        global refStart
+        global refEnd
+        global refName
+
+        # If we have switched contigs, or moved outside the window that is currently buffered,
+        # we need to re-buffer
+        readWindowStart = read.reference_start - windowBuffer
+        if readWindowStart < 0:
+            readWindowStart = 0
+        readWindowEnd = read.reference_start + windowBuffer
+        if read.reference_name != refName or readWindowStart < refStart or readWindowEnd > refEnd:
+            global refGenome
+            # To reduce the number of times this needs to be performed, obtain a pretty large buffer
+            refStart = readWindowStart - 500
+            if refStart < 0:
+                refStart = 0
+            refEnd = readWindowStart + 4500
+            refName = read.reference_name
+            refWindow = refGenome[refName][refStart:refEnd].seq.upper()
+        refAlignment = alignment.StripedSmithWaterman(query_sequence=refWindow, gap_extend_penalty=2,
+                                                      gap_open_penalty=5, match_score=3, mismatch_score=-4)
+
+        # Create a reference alignment object
+        mapping = refAlignment(read.query_sequence)
+        expectedStart = read.reference_start - refStart
+
+        # If the start location of the read has changed (because of realignment), identify any difference
+        startOffset = mapping.query_begin - expectedStart
+        # Create a new cigar sequence based upon the alignment
+        # Since we are only interested in realigning the start of the read, just obtain the cigar from
+        # the existing soft-clipped region, plus a few extra bases
+        newCigarLength = read.cigartuples[0][1] + cigarOffset
+        newCigar = []
+        newCigar.extend([4] * mapping.target_begin)
+        for b1, b2 in zip(mapping.aligned_query_sequence, mapping.aligned_target_sequence):
+            if b1 == "-":
+                newCigar.append(1)
+            elif b2 == "-":
+                newCigar.append(2)
+            else:
+                newCigar.append(0)
+            if len(newCigar) >= newCigarLength:
+                break
+
+        return newCigar, startOffset, mapping.target_begin
+
+    def cigarToList(self, cigarTuples, isRead1, counterIncremeneted=False):
+        """
+        Convert a pysam-style cigar sequence (A list of tuples) into a list
+
+        In addition, if this read contains leading or trailing soft clipping, or
+        INDELs, increment the abnormal read counter, so we can realign any INDELs later on
+        """
+        cigarList = []
+        for cigarElement in cigarTuples:
+            cigOp = cigarElement[0]
+            cigarList.extend([cigOp] * cigarElement[1])
+            if not counterIncremeneted and (cigOp == 4 or cigOp == 1 or cigOp == 2):
+                counterIncremeneted = True
+                if isRead1:
+                    self.R1abnormal += 1
+                else:
+                    self.R2abnormal += 1
+
+        return tuple(cigarList)
+
+    def add(self, family, mismatchThreshold=8):
+        """
+        Combines another family into this family
+        """
+
+        assert family.pos == self.pos
+        self.R1sequence.extend(family.R1sequence)
+        self.R1qual.extend(family.R1qual)
+        self.R1cigar.extend(family.R1cigar)
+        self.R1start.extend(family.R1start)
+
+        self.R2sequence.extend(family.R2sequence)
+        self.R2qual.extend(family.R2qual)
+        self.R2cigar.extend(family.R2cigar)
+        self.R2start.extend(family.R2start)
+
+        self.size += family.size
+        self.members.extend(family.members)
+
+    def consensus(self, abnormalityThresold=0.4):
+        """
+        Merge all sequences and quality scores stored in this read pair into a consensus
+        """
+
+        # Ok, I have a confession to make
+        # This "Family" object can store more than one read pair
+        # And I think it's about time we fixed that
+
+        # First, because of some cigar sequence BS, we need to account for the fact that
+        # some of these families may have some leading soft clipping
+        # The easiest way to account for this is to simply figure out what the offset of each
+        # sequence is
+
+        R1consensus, R1qual, R1cigar, R1softClip = self._consensusByRead(self.R1sequence, self.R1qual, self.R1cigar)
+        R2consensus, R2qual, R2cigar, R2softClip = self._consensusByRead(self.R2sequence, self.R2qual, self.R2cigar)
+        self.R1sequence = [R1consensus]
+        self.R2sequence = [R2consensus]
+        self.R1qual = [R1qual]
+        self.R2qual = [R2qual]
+        self.R1cigar = [R1cigar]
+        self.R2cigar = [R2cigar]
+        self.R1start = [self.R1start[0] + R1softClip - self.R1startOffset]
+        self.R2start = [
+            self.R2start[0] + R2softClip - self.R2startOffset]  # Compensate for any changes in soft-clipping
+
+    def _consensusByRead(self, sequences, qualities, cigars):
+
+        # In this case, we can simply collapse the sequences without performing any sort of
+        # realignment
+
+        consensusSeq = []
+        consensusQual = []
+        consensusCigar = []
+        # First, shift all the sequences over to account for any leading soft-clipping
+        # and differences in start position
+        # The end goal of this is to have the bases of all sequences line up properly
+        baseIndex = [0] * len(sequences)
+        cigarIndex = [0] * len(sequences)
+        seqLengths = tuple(len(x) for x in sequences)
+        # Lets start processing the sequence
+        while True:
+            qualSum = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0}
+            qualMax = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0}
+            insertion = []  # This data structure will store {Base: (count, maxqual, qualSum)}
+            baseCount = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0}
+            cigarOp = {"A": {0: 0, 3: 0, 4: 0, 5: 0}, "C": {0: 0, 3: 0, 4: 0, 5: 0}, "G": {0: 0, 3: 0, 4: 0, 5: 0},
+                       "T": {0: 0, 3: 0, 4: 0, 5: 0}}
+
+            seqCollapsed = 0
+            for i in range(0, len(sequences)):
+                if cigarIndex[i] < seqLengths[i]:
+
+                    seqCollapsed += 1
+                    # Here we have to account for the cigar operator
+                    # If this sequence has an insertion at this position,
+                    # We need to account for it, and store it seperatly for comparison
+                    cigar = cigars[i][cigarIndex[i]]
+                    if cigar == 1:
+
+                        j = 0
+                        while cigarIndex[i] < len(sequences[i]) and cigars[i][cigarIndex[i]] == 1:
+                            base = sequences[i][cigarIndex[i]]
+                            qual = qualities[i][cigarIndex[i]]
+
+                            if j >= len(insertion):
+                                insertion.append({base: [1, qual, qual]})
+                            elif base not in insertion[j]:
+                                insertion[j][base] = [1, qual, qual]
+                            else:
+                                insertion[j][base][0] += 1  # Base count
+                                insertion[j][base][2] += qual  # Qual sum
+                                if insertion[j][base][1] < qual:  # Max qual
+                                    insertion[j][base][1] = qual
+                            cigarIndex[i] += 1
+                            j += 1
+                            baseIndex[i] += 1
+
+                    # In the case of a deletion, all we need to do is indicate that there is
+                    # a deletion at this position
+                    elif cigar == 2:
+                        baseCount["-"] += 1
+                        cigarIndex[i] += 1
+                    # Otherwise, save the base and associated quality score
+                    else:
+                        base = sequences[i][baseIndex[i]]
+                        qual = qualities[i][baseIndex[i]]
+
+                        baseCount[base] += 1
+                        qualSum[base] += qual
+                        cigarOp[base][cigar] += 1
+                        if qualMax[base] < qual:
+                            qualMax[base] = qual
+                        cigarIndex[i] += 1
+                        baseIndex[i] += 1
+                else:
+                    baseCount["-"] += 1
+
+            if seqCollapsed == 0:
+                break
+
+            # Identify the consensus base/sequence at this position
+            # The base which is most frequent is used as the consensus
+
+            maxBase = None
+            maxBaseCount = -1
+            maxQual = 0
+            for base, count in baseCount.items():
+                if count > maxBaseCount:
+                    maxBase = base
+                    maxBaseCount = count
+                    maxQual = qualSum[base]
+                # If there is a tie, use the base with the highest aggregate quality score
+                elif count == maxBaseCount and maxQual < qualSum[base]:
+                    maxBase = base
+                    maxBaseCount = count
+                    maxQual = qualSum[base]
+
+            # Next, determine if the insertion is actually more common than the current base
+            insertionWeight = sum(insertion[0][x][0] for x in insertion[0]) if len(insertion) != 0 else -1
+            if insertionWeight > maxBaseCount:
+                # If so, we will simply use the consensus of the insertion
+                bases = []
+                qual = []
+                for position in insertion:
+                    posWeight = sum(position[x][0] for x in position)
+                    if posWeight < insertionWeight / 2:
+                        break
+
+                    maxPosBase = None
+                    maxPosCount = 0
+                    maxPosQual = 0
+                    for base, elements in position.items():
+                        if elements[0] > maxPosCount:
+                            maxPosBase = base
+                            maxPosCount = elements[0]
+                            maxPosQual = elements[2]
+                        # If there is a tie, use the base with the highest aggregate quality score
+                        elif elements[0] == maxPosCount and maxPosQual < qualSum[base]:
+                            maxPosBase = base
+                            maxPosCount = elements[0]
+                            maxPosQual = elements[2]
+
+                    bases.append(maxPosBase)
+                    qual.append(position[maxPosBase][1])
+
+                # Add these bases, quality scores, and the appropriate cigar operator
+                # into the consensus sequence
+                consensusSeq.extend(bases)
+                consensusQual.extend(qual)
+                consensusCigar.extend([1] * len(bases))
+
+            else:
+                # Otherwise, just add this base, quality score, and cigar operator into the consensus
+                if maxBase != "-":
+                    consensusSeq.append(maxBase)
+                    consensusQual.append(qualMax[maxBase])
+                    badOperator = max(cigarOp[maxBase], key=lambda x: cigarOp[maxBase][x])
+                    consensusCigar.append(badOperator)
+                else:
+                    consensusCigar.append(2)
+
+        # Finally, to ensure the output read is valid and aligned properly,
+        # strip any leading and trailing deletions
+        i = 0
+        while consensusCigar[i] == 2 and i < len(consensusSeq):
+            i += 1
+        j = len(consensusCigar) - 1
+        while consensusCigar[j] == 2 and j >= 0:
+            j -= 1
+        # Remove trailing deletions
+        j += 1
+        if i < j:
+            consensusCigar = consensusCigar[i:j]
+
+        # Finally, calculate the length of the resulting soft-clipping
+        k = 0
+        while consensusCigar[k] == 4 and k < len(consensusCigar):
+            k += 1
+
+        return "".join(consensusSeq), consensusQual, consensusCigar, k
+
+    def listToCigar(self, cigar):
+        """
+        Converts a list of cigar operators into a pysam-style cigar sequence
+        """
+
+        cigarTuples = []
+        currentOp = cigar[0]
+        opLength = 0
+        for op in cigar:
+            # If this is a new cigar operator, we need to add the previous operator to the output
+            # tuple
+            if op != currentOp:
+                cigarTuples.append((currentOp, opLength))
+                currentOp = op
+                opLength = 1
+            else:
+                opLength += 1
+
+        cigarTuples.append((currentOp, opLength))
+
+        return cigarTuples
+
+    def toPysam(self, tagOrig):
+        """
+        Convers this read pair into two pysam.AlignedSegments
+        """
+
+        self.R1.query_name = self.name
+        self.R1.query_sequence = self.R1sequence[0]
+        self.R1.query_qualities = self.R1qual[0]
+        self.R1.cigartuples = self.listToCigar(self.R1cigar[0])
+        self.R1.reference_start = self.R1start[0]
+        if tagOrig:
+            self.R1.set_tag("Zm", ",".join(self.members))
+
+        self.R2.query_name = self.name
+        self.R2.query_sequence = self.R2sequence[0][::-1]  # Un-reverse the sequence of read 2, so the sequences will be in the expected format
+        self.R2.query_qualities = self.R2qual[0][::-1]
+        self.R2.cigartuples = self.listToCigar(self.R2cigar[0][::-1])
+        self.R2.reference_start = self.R2start[0]
+        if tagOrig:
+            self.R2.set_tag("Zm", ",".join(self.members))
+
+        self.R1.next_reference_start = self.R2.reference_start
+        self.R2.next_reference_start = self.R1.reference_start
+
+
+class Position:
+    """
+    A data structure which contains all the read pairs which start at a given position
+    """
+
+    def __init__(self):
+        # A dictionary for each parental strand
+        self.plusFamilies = {}
+        self.negFamilies = {}
+
+    def add(self, readPair):
+        """
+        Store the specified read pair at this position
+
+        This read pair will be stored in a dictionary containing barcode: readPair,
+        which coresponds to the mapping strand
+        """
+
+        if readPair.posParent:  # i.e. it originated from a "+" strand family
+
+            # If an identical barcode is already stored in the dictionary, then we can
+            # be sure that the existing read pair and the new read pair originate from the same
+            # family
+            # In this case, simply aggregate them
+            if readPair.familyName in self.plusFamilies:
+                self.plusFamilies[readPair.familyName].add(readPair)
+            else:
+                self.plusFamilies[readPair.familyName] = readPair
+
+        else:
+            # If an identical barcode is already stored in the dictionary, then we can
+            # be sure that the existing read pair and the new read pair originate from the same
+            # family
+            # In this case, simply aggregate them
+            if readPair.familyName in self.negFamilies:
+                self.negFamilies[readPair.familyName].add(readPair)
+            else:
+                self.negFamilies[readPair.familyName] = readPair
+
+    def addPosition(self, otherPosition):
+        """
+        Merges the read pairs stored at two positions
+
+        In addition, keeps track of which read pairs have been merged
+        """
+
+        for familyName, readPair in otherPosition.plusFamilies.items():
+
+            # If an identical barcode is already stored in the dictionary, then we can
+            # be sure that the existing read pair and the new read pair originate from the same
+            # family
+            # In this case, simply aggregate them
+            if familyName in self.plusFamilies:
+                self.plusFamilies[familyName].add(readPair)
+            else:
+                self.plusFamilies[familyName] = readPair
+
+        for familyName, readPair in otherPosition.negFamilies.items():
+            # If an identical barcode is already stored in the dictionary, then we can
+            # be sure that the existing read pair and the new read pair originate from the same
+            # family
+            # In this case, simply aggregate them
+            if familyName in self.negFamilies:
+                self.negFamilies[familyName].add(readPair)
+            else:
+                self.negFamilies[familyName] = readPair
+
+    def collapse(self, collapseIndices, collapseThreshold=3):
+        """
+        Identify read pairs which are duplicates, and merge them into a consensus
+        """
+
+        # Alright ladies and gentlemen, now that we have done all the boring organizing tasks, it's
+        # time to do what we all came here to do
+
+        # Lets, collapse the (+) strand families first
+        # Obtain a list of all adapter sequences which occur at this position, along with how frequently that
+        # barcode occurs
+
+        barcodesInFamilies = collections.OrderedDict()  # Store the base barcode of the family, as well as all barcodes which should be collapsed into that family
+        barcodesByFrequency = sortedcontainers.SortedListWithKey(list(self.plusFamilies.keys()),
+                                                                 key=lambda x: self.plusFamilies[x].size)
+        for barcode in reversed(barcodesByFrequency):
+
+            # If adaptersInFamily is empty, then no barcodes have been processed as of yet
+            # Since the first barcode returned is the largest, we'll consider that the name of the first family
+            # Since it almost certain that it would end up as the family name anyways
+            if len(barcodesInFamilies) == 0:
+                barcodesInFamilies[barcode] = [barcode]
+                continue
+
+            # Consider only the specified indexes
+            cBarcode = list(barcode[x] for x in collapseIndices)
+            # Next, calculate the distance between the current barcode and any existing barcode family
+            minBarcode = None
+            minDistance = 10000
+            for familyName in barcodesInFamilies.keys():
+                distance = 0
+                cFamilyName = list(familyName[x] for x in collapseIndices)
+                for b1, b2 in zip(cFamilyName, cBarcode):
+                    if b1 != b2:
+                        distance += 1
+                if distance < minDistance:
+                    # In the case of a tie, the most largest family will be taken
+                    minDistance = distance
+                    minBarcode = familyName
+
+            # Next, check if the distance between this barcode and the nearest barcode is within threshold
+            # If so, we can consider them as derrived from the same parental molecule, and group them
+            if minDistance <= collapseThreshold:
+                barcodesInFamilies[minBarcode].append(barcode)
+            # Otherwise, a new family needs to be constructed for this barcode, as it is too distant from any existing
+            # barcodes
+            else:
+                barcodesInFamilies[barcode] = [barcode]
+
+        # Now that each barcode has been assigned to a family, we need to actually
+        # do the deed, and collapse all read pairs in a given family
+        tmpPlusFamilies = {}
+        for familyName, members in barcodesInFamilies.items():
+            # Choose the first read pair encounter as the "template", to which all
+            # other read pairs that need to be collapsed will be added
+            consensusPair = None
+            for member in members:
+
+                if consensusPair is None:
+                    consensusPair = self.plusFamilies[member]
+                    continue
+                consensusPair.add(self.plusFamilies[member])
+
+            # Finally, collapse the consensus read into an actual consensus
+            consensusPair.consensus()
+            tmpPlusFamilies[familyName] = consensusPair
+
+        # Finally, to save memory, delete families which were collapsed into the consensus families
+        self.plusFamilies = tmpPlusFamilies
+
+        # Now repeat everything for (-) strand families
+        # Obtain a list of all adapter sequences which occur at this position, along with how frequently that
+        # barcode occurs
+        barcodesInFamilies = collections.OrderedDict()  # Store the base barcode of the family, as well as all barcodes which should be collapsed into that family
+        barcodesByFrequency = sortedcontainers.SortedListWithKey(list(self.negFamilies.keys()),
+                                                                 key=lambda x: self.negFamilies[x].size)
+        for barcode in reversed(barcodesByFrequency):
+
+            # If adaptersInFamily is empty, then no barcodes have been processed as of yet
+            # Since the first barcode returned is the largest, we'll consider thta the name of the first family
+            # Since it almost certain that it would end up as the family name anyways
+            if len(barcodesInFamilies) == 0:
+                barcodesInFamilies[barcode] = [barcode]
+                continue
+
+            # Next, calculate the distance between the current barcode and any existing barcode family
+            minBarcode = None
+            minDistance = 10000
+            for familyName in barcodesInFamilies.keys():
+                distance = 0
+                for b1, b2 in zip(familyName, barcode):
+                    if b1 != b2:
+                        distance += 1
+                if distance < minDistance:
+                    # In the case of a tie, the most largest family will be taken
+                    minDistance = distance
+                    minBarcode = familyName
+
+            # Next, check if the distance between this barcode and the nearest barcode is within threshold
+            # If so, we can consider them as derrived from the same parental molecule, and group them
+            if minDistance <= collapseThreshold:
+                barcodesInFamilies[minBarcode].append(barcode)
+            # Otherwise, a new family needs to be constructed for this barcode, as it is too distant from any existing
+            # barcodes
+            else:
+                barcodesInFamilies[barcode] = [barcode]
+
+        # Now that each barcode has been assigned to a family, we need to actually
+        # do the deed, and collapse all read pairs in a given family
+        tmpNegFamilies = {}
+        for familyName, members in barcodesInFamilies.items():
+            # Choose the first read pair encounter as the "template", to which all
+            # other read pairs that need to be collapsed will be added
+            consensusPair = None
+            for member in members:
+
+                if consensusPair is None:
+                    consensusPair = self.negFamilies[member]
+                    continue
+                consensusPair.add(self.negFamilies[member])
+
+            # Finally, collapse the consensus read into an actual consensus
+            consensusPair.consensus()
+            tmpNegFamilies[familyName] = consensusPair
+        self.negFamilies = tmpNegFamilies
+
+    def markDuplexes(self, duplexIndices, duplexDistance=2):
+        """
+        Identify families which exist in a duplex
+
+        """
+
+        global counter
+        # Here we are simply going to examine each family which originates from a (-) strand molecule
+        # and try to find a coresponding (+) strand family
+        processedPlusFamilies = {}
+        for key, readPair in self.negFamilies.items():
+
+            # Since these collections are negative, we need to flip the adapter sequences, as they are currently reversed.
+            # This was not necessary for collapsing, since all molecules derrived from the same parental strand had the adapter
+            # Sequences in the same orientation, but since we are now comparing between (+) and (-) strand families, this
+            # will need to occur
+            lKey = len(key)
+            adapter = key[int(lKey / 2):] + key[:int(lKey / 2)]
+
+            # Assign this family a unique name. If a (+) strand family is in duplex, it will be assigned a complementary name later
+            name = adapter + ":-:" + str(readPair.size) + ":" + str(counter)
+            readPair.name = name
+
+            # If there are no families which originate from the (+) parental strand, just assign the current (-) strand families
+            # a unique name
+            if len(self.plusFamilies) == 0:
+                counter += 1
+                continue
+
+            # Otherwise, we need to determine if any of families which originate from the parental (+) strand could originate from the
+            # same parental molecule, using the adapter sequence
+            # First, calculate the distance between the (-) strand family, and all possible (+) strand families, and find the (+) strand family
+            # which is closest
+            dKey = tuple(key[x] for x in duplexIndices)
+            minDist = 100000
+            minAdapter = None
+            minSize = 0
+            for familyName in self.plusFamilies:
+                # Calculate the distance between these two family names
+                dFamilyName = tuple(familyName[x] for x in duplexIndices)
+                distance = 0
+                for base1, base2 in zip(dKey, dFamilyName):
+                    if base1 != base2:
+                        distance += 1
+
+                # If this family is closer than the current closest family, replace it
+                # If there is a tie, use the largest family size (and if that is a tie, take the first one that is encountered)
+                if distance < minDist or (distance == minDist and self.plusFamilies[familyName].size > minSize):
+                    minDist = distance
+                    minAdapter = familyName
+                    minSize = self.plusFamilies[familyName].size
+
+            # If the (-) strand family and closest (+) strand family are within the specified mismatch threshold, they are considered to be
+            # in duplex
+            if minDist <= duplexDistance:
+                # In this case, ensure that the names of the families are given a complimentary names
+                # so they can be identified as in duplex
+                duplexPair = self.plusFamilies.pop(minAdapter)
+                duplexPair.name = adapter + ":+:" + str(duplexPair.size) + ":" + str(counter)
+                processedPlusFamilies[minAdapter] = duplexPair
+
+            counter += 1
+
+        # We have finished processing all the families which originate from the (+) parental strand
+        # Any (+) families remaining must be derrived from unique molecules, as they were not paired with a (-) family
+        # while processing those
+        # In this case, just assign each an apropriate name
+        for adapter in list(self.plusFamilies.keys()):
+            readPair = self.plusFamilies.pop(adapter)
+            readPair.name = adapter + ":+:" + str(readPair.size) + ":" + str(counter)
+            processedPlusFamilies[adapter] = readPair
+            counter += 1
+        self.plusFamilies = processedPlusFamilies
+
+
+class FamilyCoordinator:
+    """
+    Processes reads from a given BAM file, identifies duplicates, and collapses duplicates into families
+    """
+
+    def __init__(self, inputFile, reference, familyIndices, familyThreshold, duplexIndices, duplexThreshold,
+                 barcodeLength, targets=None, tagOrig = False, baseBuffer=400, padding=10):
+        self.inFile = inputFile
+        self.tagOrig = tagOrig
+
+        self.readCounter = 0
+        self.pairCounter = 0
+        self.familyCounter = 0
+        self.malformedCigar = 0
+        self.failedQC = 0
+        self.missingBarcode = 0
+        self.outsideCaptureSpace = 0
+
+        # Post-collapse stats
+        self.familyDistribution = {}
+        self.duplexDistribution = {}
+        self.depthDistribution = {}
+        global refGenome
+        refGenome = self._loadContigs(reference)
+        global refWindow
+        refWindow = None
+        global refStart
+        refStart = None
+        global refEnd
+        refEnd = None
+        global refName
+        refName = None
+        self.targets = self._loadTargets(targets, padding)
+
+        self.familyIndices = familyIndices
+        self.familyThreshold = familyThreshold
+        self.duplexIndices = duplexIndices
+        self.duplexThreshold = duplexThreshold
+        self.barcodeLength = barcodeLength
+
+        self._waitingForMate = {}
+        self._pairsAtPositions = sortedcontainers.SortedDict()
+
+        self._previousPos = -1000
+        self._previousChr = None
+        self._baseBuffer = baseBuffer
+        global counter
+        counter = 0
+
+    def _loadTargets(self, targetFile, padding):
+        """
+        Loads BED intervals from the specified file into a dictionary
+
+        :param targetFile: A string representing a filepath to a BED file
+        """
+
+        targets = {}
+
+        # If no file was specified, return an empty dictionary
+        if targetFile is None:
+            return targets
+
+        try:
+            with open(targetFile) as f:
+                for line in f:
+                    elements = line.split("\t")
+                    chrom = elements[0]
+                    start = int(elements[1]) - padding
+                    end = int(elements[2]) + padding
+                    if chrom not in targets:
+                        targets[chrom] = []
+                    targets[chrom].extend([start, end])
+                    # Ensure that the BED interval is actually valid
+                    if start > end:
+                        sys.stderr.write(
+                            "ERROR: The start position \'%s\' is greater than the end position \'%s\'\n" % (start, end))
+                        exit(1)
+
+        except IndexError:
+            sys.stderr.write("ERROR: Unable to parse BED interval \'%s\'\n" % (line.strip("\n").strip("\r")))
+            sys.stderr.write("Ensure the file is a valid BED file, and try again\n")
+            exit(1)
+        except ValueError:
+            sys.stderr.write("ERROR: Unable to parse BED interval \'%s\'\n" % (line.strip("\n").strip("\r")))
+            sys.stderr.write("Ensure the file is a valid BED file, and try again\n")
+            exit(1)
+
+        # Finally, to speed up access, convert each list into a set
+        for chrom, locations in targets.items():
+            targets[chrom] = tuple(locations)
+        return targets
+
+    def _loadContigs(self, refGenome):
+        """
+        Prepares contigs from the specified file
+
+        :args refGenome: A string containing a filepath to the reference FASTA file
+
+        :returns:
+        """
+        return Fasta(refGenome, one_based_attributes=False, rebuild=False)
+
+    def _withinCaptureSpace(self, readPair):
+        """
+        Determines if a read pair overlaps the capture space
+
+        :param readPair: A Family() object
+        :return: If at least one read falls within the capture space
+        """
+
+        if readPair.R1.reference_name in self.targets:
+            if bisect.bisect_left(self.targets[readPair.R1.reference_name], readPair.R1.reference_start) % 2 == 1 \
+                    or bisect.bisect_left(self.targets[readPair.R1.reference_name], readPair.R1.reference_end) % 2 == 1:
+                return True
+
+        if readPair.R2.reference_name in self.targets:
+            if bisect.bisect_left(self.targets[readPair.R2.reference_name], readPair.R2.reference_start) % 2 == 1 \
+                    or bisect.bisect_left(self.targets[readPair.R2.reference_name], readPair.R2.reference_end) % 2 == 1:
+                return True
+
+        return False
+
+    def __next__(self):
+        return self.__iter__()
+
+    def __iter__(self):
+
+        print_prefix = "PRODUSE-COLLAPSE"
+        sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
+
+        try:
+            while True:
+                read = next(self.inFile)
+                self.readCounter += 1
+
+                # If this read and it's mate are unmapped, ignore it
+                try:
+                    currentPos = read.reference_start
+                    currentChrom = read.reference_name
+                except ValueError:
+                    continue
+
+                if self.readCounter % 100000 == 0:
+                    sys.stderr.write(
+                        "\t".join(
+                            [print_prefix, time.strftime('%X'), "Reads Processed: " + str(self.readCounter) + "\n"]))
+                # If the start position of this read is not the same as the start position of the
+                # previous read, and assuming the input BAM file is sorted, then we can assume that
+                # no additional reads exists which start at the previous position
+                # Thus, let's process the previous position
+                #
+                # To account for soft-clipped reads (where the start position may not be accurate),
+                # include a reasonable offset before we attempt to collapse
+                if currentChrom != self._previousChr or currentPos != self._previousPos + self._baseBuffer:
+                    # As a sanity check, ensure that the new position is greater than the previous position
+                    # (unless we have switched chromosomes)
+                    # If it's not, then the input BAM file is unsorted
+                    assert self._previousPos + self._baseBuffer < currentPos or currentChrom != self._previousChr
+
+                    # Identify all previous positions that are to be processed
+                    # If we have switched chromosomes, purge everything, as no more reads are coming which map to the
+                    # previous chromosome. Thus, all families are complete
+                    if currentChrom != self._previousChr:
+                        i = len(self._pairsAtPositions) - 1
+                    else:
+                        # Otherwise, we need to determine which positions are safe to process
+                        i = self._pairsAtPositions.bisect(currentPos - self._baseBuffer) - 1
+                    while i >= 0:
+                        posKey = self._pairsAtPositions.iloc[i]
+                        posToProcess = self._pairsAtPositions.pop(posKey)
+
+                        # Now, it's time to do all the magic
+                        # Identify any reads which could originate from the same family, and collapse them into a consensus
+                        posToProcess.collapse(self.familyIndices, self.familyThreshold)
+
+                        posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
+
+                        # Return all families stored at this position
+                        for readPair in posToProcess.plusFamilies.values():
+                            readPair.toPysam(self.tagOrig)
+                            yield readPair.R1
+                            yield readPair.R2
+                        for readPair in posToProcess.negFamilies.values():
+                            readPair.toPysam(self.tagOrig)
+                            yield readPair.R1
+                            yield readPair.R2
+                        i -= 1
+
+                    self._previousChr = currentChrom
+                    self._previousPos = currentPos - self._baseBuffer
+
+                # Have we seen this read's mate?
+                if read.query_name not in self._waitingForMate:
+                    # If not, lets buffer this read until we encounter it's mate
+                    self._waitingForMate[read.query_name] = read
+                    continue
+
+                # First, create an object representing this read pair
+                pair = Family(read, self._waitingForMate[read.query_name], self.barcodeLength)
+                self.pairCounter += 1
+                # Delete the mate from the dictionary to free up space
+                del self._waitingForMate[read.query_name]
+
+                # Perform some basic QC
+                # Is this read pair missing a cigar string? If so, don't process it
+                if pair.malformed:
+                    self.malformedCigar += 1
+                    continue
+
+                # Is this read pair missing a barcode tag? If so, we can't process it, as we
+                # won't be able to find out which family it belongs to
+                if pair.invalidBarcode:
+                    self.missingBarcode += 1
+                    continue
+
+                # If this read pair is split(i.e. the reads map to different chromosomes), then it's very likely that
+                # one of the existing read's positions was processed a long time ago. In which case, we can no longer
+                # collapse it
+                if pair.isSplit:
+                    continue
+
+                # if this read paif falls outside the capture space completely, don't process it
+                if self.targets:
+                    withinCapture = self._withinCaptureSpace(pair)
+                    if not withinCapture:
+                        self.outsideCaptureSpace += 1
+                        continue
+
+                # If this read pair contains leading soft clipping, then the start position of
+                # this read pair may not be accurate (due to possible leading insertions or deletions)
+                # We need to set it aside for now, and try to identify any families which it
+                # originates from which do not contain soft clipping when we are collapsing
+                # if pair.softClipped:
+                # 	continue
+
+                # Store this read pair until we obtain all read pairs that overlap this position
+                # If this is the first time we are seeing a read pair at this position,
+                # we need to create the data structure which will hold all the read pairs
+                if pair.pos not in self._pairsAtPositions:
+                    self._pairsAtPositions[pair.pos] = Position()
+                self._pairsAtPositions[pair.pos].add(pair)
+
+        except StopIteration:
+
+            # We have run out of reads. Thus, finalize and collapse any remaining positions
+            for posKey, posToProcess in self._pairsAtPositions.items():
+
+                # Now, it's time to do all the magic
+                # Identify any reads which could originate from the same family, and collapse them into a consensus
+                posToProcess.collapse(self.familyIndices, self.familyThreshold)
+                posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
+
+                # Return all remaining families
+                for readPair in posToProcess.plusFamilies.values():
+                    readPair.toPysam()
+                    yield readPair.R1
+                    yield readPair.R2
+                for readPair in posToProcess.negFamilies.values():
+                    readPair.toPysam()
+                    yield readPair.R1
+                    yield readPair.R2
+
+            # Print out a status (or error) message, briefly summarizing the overall collapse
+            if self.readCounter == 0:
+                sys.stderr.write("\t".join([print_prefix, time.strftime('%X'),
+                                            "The input BAM file was empty!\n"]))
+            else:
+                sys.stderr.write(
+                    "\t".join([print_prefix, time.strftime('%X'), "Reads Processed: " + str(self.readCounter) + "\n"]))
+                sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Collapse Complete\n"]))
+
+
+def validateArgs(args):
+    """
+    Validates that the specified set of arguments are valid
+    :param args: A dictionary listing {argument: parameter}
+    :return: A dictionary listing {argument: parameter} that have been validatd
+    """
+
+    # Convert the dictionary into a list, to allow the arguments to be re-parsed
+    listArgs = []
+    for argument, parameter in args.items():
+
+        if parameter is None or parameter is False or parameter == "None" or parameter == "False":
+            continue
+        # Something was provided as an argument
+        listArgs.append("--" + argument)
+        # If the parameter is a list, we need to add each element seperately
+        if isinstance(parameter, list):
+            for p in parameter:
+                listArgs.append(str(p))
+        else:
+            listArgs.append(str(parameter))
+
+    parser = argparse.ArgumentParser(description="Collapsed duplicate sequences into a consensus")
+    parser.add_argument("-c", "--config", type=lambda x: isValidFile(x, parser),
+                        help="An optional configuration file, which can provide one or more arguments")
+    parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser, True), required=True,
+                        help="Input sorted BAM file (use \"-\" to read from stdin [use control + d to stop reading])")
+    parser.add_argument("-o", "--output", required=True,
+                        help="Output BAM file (use \"-\" to write to stdout). Will be unsorted")
+    parser.add_argument("-fm", "--family_mask", required=True, type=str,
+                        help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
+    parser.add_argument("-dm", "--duplex_mask", required=True, type=str,
+                        help="Positions in the barcode to consider when determining if two families are in duplex (1=Consider, 0=Ignore)")
+    parser.add_argument("-fmm", "--family_mismatch", required=True, type=int,
+                        help="Maximum number of mismatches permitted when collapsing reads into a family")
+    parser.add_argument("-dmm", "--duplex_mismatch", required=True, type=int,
+                        help="Maximum number of mismatches permitted when identifying of two families are in duplex")
+    parser.add_argument("--tag_family_members", action="store_true",
+                        help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
+    parser.add_argument("-r", "--reference", required=True, type=lambda x: isValidFile(x, parser),
+                        help="Reference genome, in FASTA format")
+    parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
+                        help="A BED file listing targets of interest")
+    validatedArgs = parser.parse_args(listArgs)
+    return vars(validatedArgs)
+
+
+def isValidFile(file, parser, allowStream=False):
+    """
+    Checks to ensure the provided file is exists, and throws an error if it is not.
+
+    A UNIX pipe ("-") is also considered valid
+
+    :param file: A string containing a filepath to the file of interest (or a pipe symbol)
+    :param parser: An argparse.ArgumentParser() object.
+    :param allowStream: If a UNIX PIPE symbol ("-"), is permitted
+
+    :returns: The "file" variable, if the file is valid
+    :raises parser.error: If the file is not valid
+    """
+
+    if file == "-" and allowStream:  # i.e. they are specifying a pipe
+        return file
+    elif os.path.exists(file):
+        return file
+    else:
+        raise parser.error("Unable to locate %s. Please ensure the file exists, and try again." % (file))
+
+
+# Process command line arguments
+parser = argparse.ArgumentParser(description="Collapsed duplicate sequences into a consensus")
+parser.add_argument("-c", "--config", type=lambda x: isValidFile(x, parser),
+                    help="An optional configuration file, which can provide one or more arguments")
+parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser, True),
+                    help="Input sorted BAM file (use \"-\" to read from stdin [use control + d to stop reading])")
+parser.add_argument("-o", "--output", help="Output BAM file (use \"-\" to write to stdout). Will be unsorted")
+parser.add_argument("-fm", "--family_mask", type=str,
+                    help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
+parser.add_argument("-dm", "--duplex_mask", type=str,
+                    help="Positions in the barcode to consider when determining if two families are in duplex (1=Consider, 0=Ignore)")
+parser.add_argument("-fmm", "--family_mismatch", type=int,
+                    help="Maximum number of mismatches permitted when collapsing reads into a family")
+parser.add_argument("-dmm", "--duplex_mismatch", type=int,
+                    help="Maximum number of mismatches permitted when identifying of two families are in duplex")
+parser.add_argument("--tag_family_members", action="store_true", help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
+parser.add_argument("-r", "--reference", type=lambda x: isValidFile(x, parser),
+                    help="Reference genome, in FASTA format")
+parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
+                    help="A BED file listing targets of interest")
+
+
+def main(args=None, sysStdin=None):
+    if args is None:
+        if sysStdin is None:
+            args = parser.parse_args()
+        else:
+            args = parser.parse_args(sysStdin)
+        args = vars(args)
+
+    # If a config file was specified, parse the arguments from
+    if args["config"] is not None:
+        config = ConfigObj(args["config"])
+        try:
+            for argument, parameter in config["collapse"].items():
+                if argument in args and args[
+                    argument] is None:  # Aka this argument is used by collapse, and a parameter was not provided at the command line
+                    args[argument] = parameter
+        except KeyError:  # i.e. there is no section named "collapse" in the config file
+            sys.stderr.write(
+                "ERROR: Unable to locate a section named \'collapse\' in the config file \'%s\'\n" % (args["config"]))
+            exit(1)
+
+    # Re-parse and to validate the inputs
+    # This is done here, as we can't check ahead of time what is in the config file
+    args = validateArgs(args)
+
+    # If the input or output is a pipe, prepare to open that
+    if args["input"] == "-":
+        args["input"] = sys.stdin
+    if args["output"] == "-":
+        args["output"] = sys.stdout
+
+    # Sanity check some paramters
+    if args["family_mismatch"] < 0:
+        raise parser.error("\'-fmm/--family_mismatch\' threshold must be greater or equal to 0")
+    elif args["duplex_mismatch"] < 0:
+        raise parser.error("\'-dmm/--duplex_mismatch\' threshold must be greater or equal to 0")
+    elif len(args["family_mask"]) != len(args["duplex_mask"]):
+        raise parser.error(
+            "The lengths of \'-fm\--family_mask\' and \'-dm\--duplex_mask\' must be the same, because the barcode size is the same!")
+
+    # Convert the user-specified barcode sequences into a list of barcode indices
+    # Double these, since the barcode from both the forward and reverse read will be considered
+    familyMask = args["family_mask"] * 2
+    duplexMask = args["duplex_mask"] * 2
+    familyIndices = list(i for i in range(0, len(familyMask)) if familyMask[i] == "1")
+    duplexIndices = list(i for i in range(0, len(duplexMask)) if duplexMask[i] == "1")
+    inBAM = pysam.AlignmentFile(args["input"], "rb")
+    outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM)
+
+    readProcessor = FamilyCoordinator(inBAM, args["reference"], familyIndices, args["family_mismatch"],
+                                      duplexIndices, args["duplex_mismatch"], len(args["duplex_mask"]) * 2,
+                                      args["targets"], args["tag_family_members"])
+
+    for read in readProcessor:
+        outBAM.write(read)
+
+
+if __name__ == "__main__":
+    main()
