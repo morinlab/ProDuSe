@@ -20,9 +20,9 @@ class Family:
 
     def __init__(self, R1, R2, barcodeLength):
 
-        # The first time this initated, this "family" will have a size of 1, since only a single
+        # The first time this is initiated, this "family" will have a size of 1, since only a single
         # read pair is stored here.
-        # The basis for this family will be represented by the first read pair used to represent it
+        # The basis for this family is this initial read pair
         self.size = 1
         self.members = [R1.query_name]
 
@@ -68,21 +68,19 @@ class Family:
         R2LeadingSoftClipping = 0
         R2startOffset = 0
         try:
-            self.R1cigar = [self.cigarToList(R1.cigartuples, True)]
-            self.R2cigar = [self.cigarToList(R2.cigartuples, False)]
+            self.R1cigar = self.cigarToList(R1.cigartuples, True)
+            self.R2cigar = self.cigarToList(R2.cigartuples, False)
             # If a read is soft-clipped, we need to locate the "actual" start position of the read
             # The simplist way to do this is through local realignment
             if R1.cigartuples[0][0] == 4:
-                startCigar, R1startOffset, R1LeadingSoftClipping = self._realign(R1, 5)
-                for i in range(0, len(startCigar)):
-                    self.R1cigar[0][i] = startCigar[i]
+                self.R1cigar, R1startOffset, R1LeadingSoftClipping = self._realign(R1, 5, self.R1cigar)
+
 
             if R2.cigartuples[0][0] == 4:
-                startCigar, R2startOffset, R2LeadingSoftClipping = self._realign(R2, 5)
-                for i in range(0, len(startCigar)):
-                    self.R2cigar[0][i] = startCigar[i]
+                self.R2cigar, R2startOffset, R2LeadingSoftClipping = self._realign(R2, 5, self.R2cigar)
 
-            self.R2cigar = self.R2cigar[::-1]
+            self.R2cigar = [self.R2cigar[::-1]]
+            self.R1cigar = [self.R1cigar]
             self.malformed = False
         except IndexError:
             self.malformed = True
@@ -130,7 +128,7 @@ class Family:
         self.R2 = R2
         self.name = R1.query_name
 
-    def _realign(self, read, cigarOffset, windowBuffer=200):
+    def _realign(self, read, cigarOffset, oldCigar, windowBuffer=200):
         """
         Aligns a fragment of a sequence to the reference using Smith-Waterman alignment
         """
@@ -140,6 +138,7 @@ class Family:
         global refStart
         global refEnd
         global refName
+        global refAlignment
 
         # If we have switched contigs, or moved outside the window that is currently buffered,
         # we need to re-buffer
@@ -156,8 +155,7 @@ class Family:
             refEnd = readWindowStart + 4500
             refName = read.reference_name
             refWindow = refGenome[refName][refStart:refEnd].seq.upper()
-        refAlignment = alignment.StripedSmithWaterman(query_sequence=refWindow, gap_extend_penalty=2,
-                                                      gap_open_penalty=5, match_score=3, mismatch_score=-4)
+            refAlignment = alignment.StripedSmithWaterman(query_sequence=refWindow)
 
         # Create a reference alignment object
         mapping = refAlignment(read.query_sequence)
@@ -165,23 +163,32 @@ class Family:
 
         # If the start location of the read has changed (because of realignment), identify any difference
         startOffset = mapping.query_begin - expectedStart
-        # Create a new cigar sequence based upon the alignment
-        # Since we are only interested in realigning the start of the read, just obtain the cigar from
-        # the existing soft-clipped region, plus a few extra bases
+
+        # Replace the start of the old cigar sequence with the start of this new alignment
+        # This is more likely to correspond to the correct alignment
         newCigarLength = read.cigartuples[0][1] + cigarOffset
-        newCigar = []
-        newCigar.extend([4] * mapping.target_begin)
+
+        i = -1
+        for i in range(0, mapping.target_begin):
+            oldCigar[i] = 4
+
+        newLength = i
         for b1, b2 in zip(mapping.aligned_query_sequence, mapping.aligned_target_sequence):
+
+            i += 1
             if b1 == "-":
-                newCigar.append(1)
+                oldCigar[i] = 1
+                newLength += 1
             elif b2 == "-":
-                newCigar.append(2)
+                oldCigar.insert(i, 2)
+                # Since deletions do not consume a base, we do not include this in the length
             else:
-                newCigar.append(0)
-            if len(newCigar) >= newCigarLength:
+                oldCigar[i] = 0
+                newLength += 1
+            if i == newCigarLength:
                 break
 
-        return newCigar, startOffset, mapping.target_begin
+        return oldCigar, startOffset, mapping.target_begin
 
     def cigarToList(self, cigarTuples, isRead1, counterIncremeneted=False):
         """
@@ -201,7 +208,7 @@ class Family:
                 else:
                     self.R2abnormal += 1
 
-        return tuple(cigarList)
+        return cigarList
 
     def add(self, family, mismatchThreshold=8):
         """
@@ -237,7 +244,7 @@ class Family:
         # sequence is
 
         R1consensus, R1qual, R1cigar, R1softClip = self._consensusByRead(self.R1sequence, self.R1qual, self.R1cigar)
-        R2consensus, R2qual, R2cigar, R2softClip = self._consensusByRead(self.R2sequence, self.R2qual, self.R2cigar)
+        R2consensus, R2qual, R2cigar, R2softClip = self._consensusByRead(self.R2sequence, self.R2qual, self.R2cigar, True)
         self.R1sequence = [R1consensus]
         self.R2sequence = [R2consensus]
         self.R1qual = [R1qual]
@@ -248,7 +255,7 @@ class Family:
         self.R2start = [
             self.R2start[0] + R2softClip - self.R2startOffset]  # Compensate for any changes in soft-clipping
 
-    def _consensusByRead(self, sequences, qualities, cigars):
+    def _consensusByRead(self, sequences, qualities, cigars, reverseClip=False):
 
         # In this case, we can simply collapse the sequences without performing any sort of
         # realignment
@@ -398,9 +405,17 @@ class Family:
             consensusCigar = consensusCigar[i:j]
 
         # Finally, calculate the length of the resulting soft-clipping
-        k = 0
-        while consensusCigar[k] == 4 and k < len(consensusCigar):
-            k += 1
+        cigarSize = len(consensusCigar)
+        if reverseClip:
+            k = cigarSize - 1
+            while consensusCigar[k] == 4 and k > 0:
+                k -= 1
+            k = cigarSize - k - 1
+        else:
+            k = 0
+            while consensusCigar[k] == 4 and k < cigarSize:
+                k += 1
+
 
         return "".join(consensusSeq), consensusQual, consensusCigar, k
 
@@ -854,6 +869,9 @@ class FamilyCoordinator:
                 read = next(self.inFile)
                 self.readCounter += 1
 
+                # Discard supplementary and secondary alignments
+                if read.is_supplementary or read.is_secondary:
+                    continue
                 # If this read and it's mate are unmapped, ignore it
                 try:
                     currentPos = read.reference_start
@@ -973,18 +991,22 @@ class FamilyCoordinator:
 
                 # Return all remaining families
                 for readPair in posToProcess.plusFamilies.values():
-                    readPair.toPysam()
+                    readPair.toPysam(self.tagOrig)
                     yield readPair.R1
                     yield readPair.R2
                 for readPair in posToProcess.negFamilies.values():
-                    readPair.toPysam()
+                    readPair.toPysam(self.tagOrig)
                     yield readPair.R1
                     yield readPair.R2
 
             # Print out a status (or error) message, briefly summarizing the overall collapse
-            if self.readCounter == 0:
-                sys.stderr.write("\t".join([print_prefix, time.strftime('%X'),
-                                            "The input BAM file was empty!\n"]))
+            if self.missingBarcode > 0 and self.familyCounter == 0:
+                sys.stderr.write("ERROR: Unable to find a \'BC\' tag, which contains the degenerate barcode, for any read in the input BAM file\n")
+                sys.stderr.write(
+                    "Check that BWA was run using the \'-C\' option\n")
+
+            elif self.readCounter == 0:
+                sys.stderr.write("ERROR: The input BAM file is empty!")
             else:
                 sys.stderr.write(
                     "\t".join([print_prefix, time.strftime('%X'), "Reads Processed: " + str(self.readCounter) + "\n"]))
@@ -1006,6 +1028,10 @@ def validateArgs(args):
             continue
         # Something was provided as an argument
         listArgs.append("--" + argument)
+
+        # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
+        if isinstance(parameter, bool):
+            continue
         # If the parameter is a list, we need to add each element seperately
         if isinstance(parameter, list):
             for p in parameter:
@@ -1129,7 +1155,21 @@ def main(args=None, sysStdin=None):
     familyIndices = list(i for i in range(0, len(familyMask)) if familyMask[i] == "1")
     duplexIndices = list(i for i in range(0, len(duplexMask)) if duplexMask[i] == "1")
     inBAM = pysam.AlignmentFile(args["input"], "rb")
-    outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM)
+
+    # Add this command (collapse) to the BAM header
+    header = inBAM.header
+    if "PG" not in header:
+        header["PG"] = []
+
+    # Format the input command in such a way that it can be added to the header (i.e. follow BAM specifications)
+    command = "produse collapse"
+    for argument, parameter in args.items():
+        command += " --" + argument
+        if parameter and not isinstance(parameter, bool):
+            command += " " + parameter
+    header["PG"].append({"ID": "PRODUSE-COLLAPSE", "PN": "ProDuSe", "CL": command})
+
+    outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM, header=header)
 
     readProcessor = FamilyCoordinator(inBAM, args["reference"], familyIndices, args["family_mismatch"],
                                       duplexIndices, args["duplex_mismatch"], len(args["duplex_mask"]) * 2,
