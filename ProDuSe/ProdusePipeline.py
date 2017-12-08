@@ -7,7 +7,7 @@ import subprocess
 import re
 import time
 from configobj import ConfigObj
-from ProDuSe import trim, collapse
+from ProDuSe import Trim, Collapse, ClipOverlap, __version
 
 
 def isValidFile(file, parser, default=None):
@@ -65,6 +65,9 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
 	# Create a tmp directory, which will hold intermediate files
 	tmpDir = samplePath + os.sep + "tmp" + os.sep
 
+	# Create a results directory which will hold the finalized BAM file, as well as the variant calls
+	resultsDir = samplePath + os.sep + "results" + os.sep
+
 	# Create a config directory, which will hold the config file used to run each step of the pipeline
 	configDir = samplePath + os.sep + "config" + os.sep
 	os.mkdir(configDir)
@@ -76,17 +79,14 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
 	bwaR1In = tmpDir + sampleName + ".trim_R1.fastq.gz"
 	bwaR2In = tmpDir + sampleName + ".trim_R2.fastq.gz"
 	bwaOut = tmpDir + sampleName + ".trim.bam"
+	collapseOut = tmpDir + sampleName + ".collapse.bam"
+	clipUnsortedOut = tmpDir + sampleName + ".clipO.bam"
 
+	# Since the input and output of each script will be unique, specify them here
 	scriptToArgs["bwa"] = {"input" : [bwaR1In, bwaR2In], "output": bwaOut, "reference": sampleParameters["reference"]}
-
-	# Since the input and output of each script will be unique, create mappings for them, which will be specified
-	# in the config file
-	confIO = {
-		"trim"		:	{"input": sampleParameters["fastqs"],
-				  	"output": [bwaR1In, bwaR2In]
-							},
-		"collapse"	:	{"input": bwaOut, "output": tmpDir + sampleName + ".collapse.bam"}
-	}
+	scriptToArgs["trim"] = {"input": sampleParameters["fastqs"], "output": [bwaR1In, bwaR2In]}
+	scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut}
+	scriptToArgs["clipoverlap"] = {"input": collapseOut, "output": clipUnsortedOut}
 
 	for argument, scripts in argsToScript.items():
 
@@ -97,7 +97,7 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
 
 			if script not in scriptToArgs:
 				# Add the input and output mappings for this script
-				scriptToArgs[script] = confIO[script]
+				scriptToArgs[script] = {}
 			scriptToArgs[script][argument] = sampleParameters[argument]
 
 	# Next, write a config file for each script
@@ -150,6 +150,11 @@ def checkArgs(rawArgs):
 	for arg, parameter in rawArgs.items():
 		if parameter is not None:
 			listArgs.append("--" + arg)
+
+			# If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
+			if isinstance(parameter, bool):
+				continue
+
 			# Convert paramters that are lists into strings
 			if isinstance(parameter, list):
 				for p in parameter:
@@ -173,12 +178,12 @@ def checkArgs(rawArgs):
 	parser.add_argument("--directory_name", default="produse_analysis_directory", help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
 	parser.add_argument("--append_to_directory", action="store_true", help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
 
-	trimArgs = parser.add_argument_group()
+	trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
 	trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", required=True, type=str, help="The sequence of the degenerate barcode, represented in IUPAC bases")
 	trimArgs.add_argument("-p", "--barcode_position", metavar="0001111111111110", required=True, type=str, help="Barcode positions to use when comparing expected and actual barcode sequences (1=Yes, 0=No)")
 	trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", required=True, type=int, help="The maximum number of mismatches permitted between the expected and actual barcode sequences")
 
-	collapseArgs = parser.add_argument_group()
+	collapseArgs = parser.add_argument_group("Arguments used when Collapsing families into a consensus")
 	collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str, required=True,
 							  help="Positions to consider when identifying reads are members of the same family. Usually the same as \'-b\'")
 	collapseArgs.add_argument("-fmm", "--family_mismatch", metavar="INT", type=int, required=True,
@@ -189,6 +194,7 @@ def checkArgs(rawArgs):
 							  help="Maximum number of mismatches allowed between two barcodes before they are classified as not in duplex")
 	collapseArgs.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser),
 							  help="A BED file containing capture regions of interest. Read pairs that do not overlap these regions will be filtered out")
+	collapseArgs.add_argument("--tag_family_members", action="store_true", help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
 	validatedArgs = parser.parse_args(args=listArgs)
 	return vars(validatedArgs)
@@ -264,8 +270,8 @@ def checkCommand(command, versionStr=None, minVer=None):
 
 				validVer = compareVerNumbers(minVer, currentVer)
 				if not validVer:
-					sys.stdout.write(
-						"ERROR: The minimum version required for %s is %s, but the version specified is %s\n" % (
+					sys.stderr.write(
+						"ERROR: The minimum %s version required is %s, but the version provided is %s\n" % (
 						command, minVer, currentVer))
 					exit(1)
 
@@ -278,7 +284,35 @@ def checkCommand(command, versionStr=None, minVer=None):
 	return currentVer
 
 
-def runPipeline(sampleName, sampleDir, args):
+def createLogFile(filePath, args, **toolVer):
+	"""
+	Creates a log file, specifying both the command line parameters used, as well as the version number of any tools
+
+	:param filePath: A string listing the path of the log file. Any existing file with this name will be overwritten
+	:param args: A dictionary storing argument: parameter values
+	:param toolVer: A dictionary storing toolName: toolVersion
+
+	:return: None
+	"""
+
+	with open(filePath, "w") as o:
+
+		# Add the version number of ProDuSe
+		o.write("ProDuSe Version " + __version.__version__ + os.linesep)
+		o.write(os.linesep)
+
+		# Add command line parameters
+		for argument, parameter in args.items():
+			o.write(str(argument) + ": " + str(parameter) + os.linesep)
+		o.write(os.linesep)
+
+		# Add tool version numbers
+		for tool, version in toolVer.items():
+			o.write(str(tool) + ": " + str(version) + os.linesep)
+		o.write(os.linesep)
+
+
+def runPipeline(sampleName, sampleDir):
 	"""
 	Run all scripts in the ProDuSe pipeline on the specified sample
 	:param sampleName:
@@ -290,12 +324,12 @@ def runPipeline(sampleName, sampleDir, args):
 		"""
 		Aligns the reads in the specified FASTQ files using the Burrows-Wheeler aligner
 		In addition, a read group is added, and the resulting BAM file is sorted
-		
+
 		:param configPath: A string containing a filepath to a ini file listing bwa's parameters
 		:return: None
 		"""
 
-		sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Initializing BWA\n"]))
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Running BWA...\n"]))
 		# Read the arguments from the config file
 		try:
 			bwaConfig = ConfigObj(configPath)["bwa"]
@@ -327,7 +361,7 @@ def runPipeline(sampleName, sampleDir, args):
 				bwaLine = bwaLine.decode("utf-8")
 				if bwaLine.startswith("[M::mem_process_seqs]"):
 					bwaCounter += int(bwaLine.split(" ")[2])
-					sys.stdout.write(
+					sys.stderr.write(
 						"\t".join([printPrefix, time.strftime('%X'), "Reads Processed:" + str(bwaCounter) + "\n"]))
 				bwaStderr.append(bwaLine)
 
@@ -347,27 +381,56 @@ def runPipeline(sampleName, sampleDir, args):
 				sys.stderr.write("\n".join(samtoolsStderr))
 				exit(1)
 
-			sys.stdout.write("\t".join([printPrefix, time.strftime('%X'), "Mapping Complete\n"]))
+			sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Mapping Complete\n"]))
 
 		except KeyError:  # i.e. A required argument is missing from the config file
 			sys.stderr.write("ERROR: Unable to locate a required argument in the bwa config file \'%s\'\n" % (configPath))
 			exit(1)
 
 
-	global printPrefix
+	printPrefix = "PRODUSE-MAIN\t"
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Processing Sample \'%s\'\n" % (sampleName)]))
 
 	# Run Trim
-	trimConfig = os.path.join(sampleDir, "config", "trim_task.ini")
-	trim.main(sysStdin=["--config", trimConfig])
+	trimDone = os.path.join(sampleDir, "config", "Trim_Complete")  # Similar to Make's "TASK_COMPLETE" file
+	if not os.path.exists(trimDone):  # i.e. Did Trim already complete for this sample? If so, do not re-run it
+		trimConfig = os.path.join(sampleDir, "config", "trim_task.ini")  # Where is Trim's config file?
+		Trim.main(sysStdin=["--config", trimConfig])  # Actually run Trim
+		open(trimDone, "w").close()  # After Trim completes, it will create this file, signifying to the end user that this task completed
 
 	# Run bwa
-	bwaConfig = os.path.join(sampleDir, "config", "bwa_task.ini")
-	runBWA(bwaConfig)
+	bwaDone = os.path.join(sampleDir, "config", "BWA_Complete")
+	if not os.path.exists(bwaDone):
+		bwaConfig = os.path.join(sampleDir, "config", "bwa_task.ini")
+		runBWA(bwaConfig)
+		open(bwaDone, "w").close()
 
 	# Run Collapse
-	collapseConfig = os.path.join(sampleDir, "config", "collapse_task.ini")
-	collapse.main(sysStdin=["--config", collapseConfig])
+	collapseDone = os.path.join(sampleDir, "config", "Collapse_Complete")
+	if not os.path.exists(collapseDone):
+		collapseConfig = os.path.join(sampleDir, "config", "collapse_task.ini")
+		Collapse.main(sysStdin=["--config", collapseConfig])
+		open(collapseDone, "w").close()
+
+	# Run clipoverlap
+	clipDone = os.path.join(sampleDir, "config", "Clipoverlap_Complete")
+	if not os.path.exists(clipDone):
+		clipConfig = os.path.join(sampleDir, "config", "clipoverlap_task.ini")
+		ClipOverlap.main(sysStdin=["--config", clipConfig])
+		open(clipDone, "w").close()
+
+		# Sort the clipOverlap output
+		# Parse the clipoverlap config file for the output file name
+		clipConfArgs = ConfigObj(clipConfig)
+		sortInput = clipConfArgs["clipoverlap"]["output"]
+		# Append "sort" as the output file name
+		sortOutput = sortInput.replace(".bam", ".sort.bam")
+		sortOutput = sortOutput.replace(os.linesep + "tmp" + os.linesep, os.linesep + "results" + os.linesep)
+		sortCommand = ["samtools", "sort", sortInput, "-o", sortOutput]
+		sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Sorting final BAM file...\n"]))
+		subprocess.check_call(sortCommand)
+
+	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "%s: Pipeline Complete\n" % (sampleName)]))
 
 
 parser = argparse.ArgumentParser(description="Runs all stages of the ProDuSe pipeline on the designated samples")
@@ -381,19 +444,20 @@ parser.add_argument("--samtools", help="Path to samtools executable [Default: \'
 parser.add_argument("--directory_name", help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
 parser.add_argument("--append_to_directory", help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
 
-trimArgs = parser.add_argument_group()
+trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
 trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str, help="The sequence of the degenerate barcode, represented in IUPAC bases")
 trimArgs.add_argument("-p", "--barcode_position", metavar="0001111111111110", type=str, help="Barcode positions to use when comparing expected and actual barcode sequences (1=Yes, 0=No)")
 trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", type=int, help="The maximum number of mismatches permitted between the expected and actual barcode sequences")
 
-collapseArgs = parser.add_argument_group()
+collapseArgs = parser.add_argument_group("Arguments used when Collapsing families into a consensus")
 collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str, help="Positions to consider when identifying reads are members of the same family. Usually the same as \'-b\'")
 collapseArgs.add_argument("-fmm", "--family_mismatch", metavar="INT", type=int, help="Maximum number of mismatches allowed between two barcodes before they are considered as members of different families")
 collapseArgs.add_argument("-dm", "--duplex_mask", metavar="0000000001111110", type=str, help="Positions to consider when determining if two families are in duplex")
 collapseArgs.add_argument("-dmm", "--duplex_mismatch", metavar="INT", type=int, help="Maximum number of mismatches allowed between two barcodes before they are classified as not in duplex")
 collapseArgs.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser), help="A BED file containing capture regions of interest. Read pairs that do not overlap these regions will be filtered out")
+collapseArgs.add_argument("--tag_family_members", action="store_true", help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
-# For config parsing purposes, assign each paramter to the pipeline component from which it originates
+# For config parsing purposes, assign each parameter to the pipeline component from which it originates
 argsToPipelineComponent = {
 	"fastqs": ["pipeline"],
 	"barcode_sequence":	["trim"],
@@ -434,9 +498,8 @@ def main(args=None, sysStdin=None):
 	# requirements
 	bwaVer = checkCommand("bwa", minVer="0.7.12")
 	samtoolsVer = checkCommand("samtools", minVer="1.3.1")
-	pythonVer = checkCommand("python", "--version", "3.0")
+	pythonVer = checkCommand("python", "--version", "0")
 
-	global printPrefix
 	printPrefix = "PRODUSE-MAIN\t"
 	sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting..." + "\n"]))
 
@@ -452,6 +515,10 @@ def main(args=None, sysStdin=None):
 	else:
 		os.mkdir(baseOutDir)
 
+	# Create a log file specifying the command line parameters
+	logFileName = baseOutDir + os.sep + "ProDuSe_task.log"
+	createLogFile(logFileName, args, bwa=bwaVer, samtools=samtoolsVer, python=pythonVer)
+
 	# Finally, organize samples and prepare to run the entire pipeline on each sample
 	# If only a single sample was specified at the command (i.e. a single pair of FASTQ files, using -f)
 	samples = {}
@@ -466,7 +533,7 @@ def main(args=None, sysStdin=None):
 		for sample, arguments in sConfig.items():
 			samples[sample] = arguments
 
-	# Actually run each sample
+	# Now process each sample
 	for sample, sampleArgs in samples.items():
 		# Override the existing arguments with any sample-specific arguments
 		runArgs = args
@@ -484,9 +551,13 @@ def main(args=None, sysStdin=None):
 			sys.stderr.write("\t".join(
 				[printPrefix, time.strftime('%X'), "WARNING: Two FASTQ files must be provided for \'%s\', Skipping...\n" % (sample)]))
 			continue
-		# Configure the directories for this sample
+		# Configure the output directories and config files for this sample
 		sampleDir = configureOutput(sample, runArgs, baseOutDir, argsToPipelineComponent)
-		runPipeline(sample, sampleDir, sampleArgs)
+		# Create a sample-specific log file
+		sLogName = os.path.join(sampleDir, "config", sample + "_Task.log")
+		createLogFile(sLogName, runArgs, bwa=bwaVer, samtools=samtoolsVer, python=pythonVer)
+
+		runPipeline(sample, sampleDir)
 
 
 if __name__ == "__main__":
