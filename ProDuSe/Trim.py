@@ -118,7 +118,7 @@ def main(args=None, sysStdin=None):
     if args["config"] is not None:
         config = ConfigObj(args["config"])
         try:
-            for argument, parameter in config["Trim"].items():
+            for argument, parameter in config["trim"].items():
                 if argument in args and args[
                     argument] is None:  # Aka this argument is used by trim, and a parameter was not provided at the command line
                     args[argument] = parameter
@@ -190,7 +190,7 @@ def main(args=None, sysStdin=None):
 
     # Status messages
     print_prefix = "PRODUSE-TRIM\t"
-    sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
+    sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
     count = 0
     discard = 0
 
@@ -272,7 +272,7 @@ def main(args=None, sysStdin=None):
 
             count += 2
             if count % 100000 == 0:
-                sys.stdout.write("\t".join([print_prefix, time.strftime('%X'),
+                sys.stderr.write("\t".join([print_prefix, time.strftime('%X'),
                                             "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%",
                                             "Count:" + str(count) + "\n"]))
 
@@ -283,10 +283,10 @@ def main(args=None, sysStdin=None):
 
     # Final messages
     if count % 100000 != 0:
-        sys.stdout.write("\t".join([print_prefix, time.strftime('%X'),
+        sys.stderr.write("\t".join([print_prefix, time.strftime('%X'),
                                     "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%",
                                     "Count:" + str(count) + "\n"]))
-    sys.stdout.write("\t".join([print_prefix, time.strftime('%X'), "Trimming Complete\n"]))
+    sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Trimming Complete\n"]))
 
 
 if __name__ == "__main__":
