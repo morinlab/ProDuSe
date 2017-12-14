@@ -565,7 +565,7 @@ def reparseArgs(args):
             listArgs.append(str(parameter))
 
     parser = argparse.ArgumentParser(
-        description="Generates a consensus for overlapping bases in a read pair, and assigns the overlapping bases to a single read")
+        description="Generates a consensus for overlapping bases in a read pair, and assigns the consensus to a single read")
     parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                         help="An optional configuration file, which can specify any parameters")
     parser.add_argument("-i", "--input", required=True, metavar="BAM/SAM", type=lambda x: isValidFile(x, parser, True),
