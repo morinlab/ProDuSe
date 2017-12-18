@@ -233,6 +233,7 @@ class ReadIterator:
         read1Ins = []  # The format of these lists are going to be ([Cigar] 1=Insertion, 2=Deletion), location, sequence, quality)
         read1Index = r1SoftClip + r2StartIndex + read1SeqOffset
         read1SeqClipPoint = read1Index
+        read1CigarClipPoint = r2StartIndex + read1CigarOffset + r1SoftClip
         read2Ins = []
         read2Index = r2SoftClip + read2SeqOffset
         read1Type = "1" if read1.is_read1 else "2"
@@ -411,13 +412,17 @@ class ReadIterator:
 
         if consensusSeq:  # Add the overlap consensus to one of the two reads
 
-            consensusSeq = "".join(consensusSeq)
-
             # To ensure a valid record is produced for downstream tools, check to see if the clip point of either
             # read coresponds to an INDEL. if it does, we need to add the consensus to that sequence, to ensure a valid
             # record is generated
-            read1ClipPoint = read1Cigar[-1]
-            read2ClipPoint = read2Cigar[0]
+            if read1CigarClipPoint == 0:
+                read1ClipPoint = None
+            else:
+                read1ClipPoint = read1Cigar[read1CigarClipPoint]
+            try:
+                read2ClipPoint = read2Cigar[r2CigarIndex]
+            except IndexError:
+                read2ClipPoint = None
             if read1ClipPoint == 1 or read1ClipPoint == 2:
                 # If the clip point of both reads is an INDEL, don;t clip them....
                 if read2ClipPoint == 1 or read2ClipPoint == 2:
@@ -426,10 +431,12 @@ class ReadIterator:
             elif read2ClipPoint == 1 or read2ClipPoint == 2:
                 self._trimR1 = True
 
+            consensusSeq = "".join(consensusSeq)
+
             # Trim read 1
             read1Qual = read1.query_qualities[:read1SeqClipPoint]
             read1.query_sequence = read1.query_sequence[:read1SeqClipPoint]
-            read1Cigar = read1Cigar[:r2StartIndex + read1CigarOffset + r1SoftClip]
+            read1Cigar = read1Cigar[:read1CigarClipPoint]
 
             # Trim read 2
             read2Qual = read2.query_qualities[read2Index:]
@@ -450,7 +457,7 @@ class ReadIterator:
                 read2Cigar = consensusCigar
 
                 # If we are cleaning up the output (i.e. discarding reads which are purely soft-clipped bases), do so now
-                if self._cleanup and read1ClipPoint == 4:
+                if self._cleanup and set(read1Cigar) == {4}:
                     read1.query_sequence = None
                     read1Qual = []
                     read1Cigar = []
@@ -466,7 +473,7 @@ class ReadIterator:
                 read1.next_reference_start = read2.reference_start
 
                 # If we are cleaning up the output (i.e. discarding reads which are purely soft-clipped bases), do so now
-                if self._cleanup and read2ClipPoint == 4:
+                if self._cleanup and set(read2Cigar) == {4}:
                     read2.query_sequence = None
                     read2Qual = []
                     read2Cigar = []
@@ -530,9 +537,18 @@ class ReadIterator:
 
 
         except StopIteration:
+
+            # Output all remaining unpaired reads
+            unpairedReadNum = len(self._waitingForMate)
+            for read in self._waitingForMate.values():
+                yield read
+
             if self._pairCount % 100000 != 0:
                 sys.stderr.write(
                     "\t".join([printPrefix, time.strftime("%X"), "Pairs Processed: %s\n" % self._pairCount]))
+            if unpairedReadNum > 0:
+                sys.stderr.write(
+                    "\t".join([printPrefix, time.strftime("%X"), "Unable to find a mate for: %s reads\n" % unpairedReadNum]))
 
 
 def reparseArgs(args):
@@ -568,10 +584,10 @@ def reparseArgs(args):
         description="Generates a consensus for overlapping bases in a read pair, and assigns the consensus to a single read")
     parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                         help="An optional configuration file, which can specify any parameters")
-    parser.add_argument("-i", "--input", required=True, metavar="BAM/SAM", type=lambda x: isValidFile(x, parser, True),
-                        help="Input BAM file. Does not need to be sorted")
-    parser.add_argument("-o", "--output", required=True, metavar="BAM/SAM",
-                        help="A path to an output BAM file. Will be UNSORTED")
+    parser.add_argument("-i", "--input", required=True, metavar="BAM/SAM/CRAM", type=lambda x: isValidFile(x, parser, True),
+                        help="Input BAM file. Does not need to be sorted (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
+    parser.add_argument("-o", "--output", required=True, metavar="BAM/SAM/CRAM",
+                        help="A path to an output BAM file. Will be UNSORTED (use \"-\" for stdout)")
     parser.add_argument("--no_cleanup", action="store_true",
                         help="Output ALL non-clipped bases, even if the post-clip read is only comprised of soft-clipped bases")
     parser.add_argument("--no_tag", action="store_true",
@@ -603,12 +619,12 @@ def isValidFile(file, parser, allowStream=False):
 
 
 parser = argparse.ArgumentParser(
-    description="Generates a consensus for overlapping bases between a read pair, and assigns the overlapping bases to a single read")
+    description="Generates a consensus for overlapping bases between a read pair, and assigns the consensus to a single read")
 parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can specify any parameters")
-parser.add_argument("-i", "--input", metavar="BAM/SAM", type=lambda x: isValidFile(x, parser, True),
-                    help="Input BAM file. Does not need to be sorted")
-parser.add_argument("-o", "--output", metavar="BAM/SAM", help="A path to an output BAM file. Will be UNSORTED")
+parser.add_argument("-i", "--input", metavar="BAM/SAM/CRAM", type=lambda x: isValidFile(x, parser, True),
+                    help="Input BAM file. Does not need to be sorted (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
+parser.add_argument("-o", "--output", metavar="BAM/SAM/CRAM", help="A path to an output BAM file. Will be UNSORTED (use \"-\" for stdout)")
 parser.add_argument("--no_cleanup", action="store_true", help="Output ALL non-clipped bases, even if a post-clip read is only comprised of soft-clipped bases")
 parser.add_argument("--no_tag", action="store_true", help="Do not add a read tag indicating from which read a consensus base originated")
 
@@ -661,8 +677,14 @@ def main(args=None, sysStdin=None):
             command += " " + parameter
     header["PG"].append({"ID": "PRODUSE-CLIPOVERLAP", "PN": "ProDuSe", "CL": command})
 
-
-    outBAM = pysam.AlignmentFile(args["output"], mode="wb", header=header)
+    # Determine the output file type via the file extension
+    outType = args["output"].split(".")[-1]
+    if outType == "bam":
+        outBAM = pysam.AlignmentFile(args["output"], mode="wb", header=header)
+    elif outType == "cram":
+        outBAM = pysam.AlignmentFile(args["output"], mode="wc", header=header)
+    else:
+        outBAM = pysam.AlignmentFile(args["output"], mode="w", header=header)
 
     processor = ReadIterator(inBAM, args["no_cleanup"], args["no_tag"])
 
