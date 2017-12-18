@@ -45,7 +45,7 @@ def main(args):
         Trim.main(sysStdin=args[2:])
     elif command == "collapse":
         Collapse.main(sysStdin=args[2:])
-    elif command == "clip":
+    elif command == "clip" or command == "clipoverlap":
         ClipOverlap.main(sysStdin=args[2:])
     elif command == "call":
         print("Coming soon")
