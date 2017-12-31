@@ -76,7 +76,7 @@ parser.add_argument("-i", "--input", metavar="FASTQ", nargs=2, required=True, ty
 parser.add_argument("-m", "--max_barcode_length", metavar="INT", default=16, type=int, help="Maximum barcode length to predict [Default: %(default)s]")
 
 
-def main(args=None, sysStdin=None):
+def main(args=None, sysStdin=None, supressOutput=False):
 
     if args is None:
         if sysStdin is None:
@@ -148,7 +148,9 @@ def main(args=None, sysStdin=None):
         else:
             break
 
-    sys.stdout.write(barcode + "\n")
+    if not supressOutput:
+        sys.stdout.write(barcode + "\n")
+    return barcode
 
 if __name__ == "__main__":
     main()
