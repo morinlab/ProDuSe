@@ -47,7 +47,8 @@ def validateArgs(args):
         else:
             listArgs.append(str(parameter))
 
-    parser = argparse.ArgumentParser(description="Trims degenerate barcodes")
+    global prog
+    parser = argparse.ArgumentParser(description="Trims degenerate barcodes", prog=prog)
     parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                         help="An optional configuration file, which can provide one or more arguments")
     parser.add_argument("-i", "--input", metavar="FASTQ", required=True, nargs=2, type=lambda x: isValidFile(x, parser),
@@ -67,7 +68,13 @@ def validateArgs(args):
     return vars(validatedargs)
 
 
-parser = argparse.ArgumentParser(description="Trims degenerate barcodes")
+global prog
+if __name__ == "__main__":
+    prog = sys.argv[0]
+else:
+    prog = "produse trim"
+
+parser = argparse.ArgumentParser(description="Trims degenerate barcodes", prog=prog)
 parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can provide one or more arguments")
 parser.add_argument("-i", "--input", metavar="FASTQ", nargs=2, type=lambda x: isValidFile(x, parser),
@@ -264,11 +271,9 @@ def main(args=None, sysStdin=None):
             r1name = None
             r1strand = None
             r1seq = None
-            r1qual = None
             r2name = None
             r2strand = None
             r2seq = None
-            r2qual = None
 
             count += 2
             if count % 100000 == 0:
