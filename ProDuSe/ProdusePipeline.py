@@ -672,8 +672,10 @@ def main(args=None, sysStdin=None):
         # If a barcode was not specified, estimate it using adapter_predict
         # Note that this will end catastrophically if the sample is multiplexed
         if runArgs["barcode_sequence"] is None:
-            adapterPredictArgs = "-i " + " ".join(runArgs["fastqs"]) + " -m " + str(len(runArgs["barcode_position"]))
-            runArgs["barcode_sequence"] = AdapterPredict.main(sysStdin=adapterPredictArgs)
+            adapterPredictArgs = ["--max_barcode_length", str(len(runArgs["barcode_position"])), "--input"]
+            adapterPredictArgs.extend(runArgs["fastqs"])
+            runArgs["barcode_sequence"] = AdapterPredict.main(sysStdin=adapterPredictArgs, supressOutput=True)
+            # Check if the resulting barcode is garbage
             if set(runArgs["barcode_sequence"]) == {"N"}:
                 sys.stderr.write("WARNING: Unable to predict barcode for \'%s\'. Skipping..." % runArgs["sample"])
                 continue
