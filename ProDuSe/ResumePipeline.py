@@ -62,8 +62,6 @@ def main(args=None, sysStdin=None):
         if validSample:
             validSamples.append(sample)
 
-    print(validSamples)
-
     # If no valid samples were found, then this is not a valid analysis directory
     if len(validSamples) == 0:
          sys.stderr.write("ERROR: Unable to find any valid sample directories in \"%s\". Check that this a directory created by \"ProDuSe Pipeline\", and that setup completed sucessfully" % args["produse_dir"] + os.linesep)
