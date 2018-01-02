@@ -53,34 +53,61 @@ class Family:
             self.familyName = None
             self.invalidBarcode = True
 
-        self.R1sequence = [R1.query_sequence]
-        self.R1qual = [R1.query_qualities]
-
-        # We need to reverse the sequence of read 2, due to the read orientation
-        self.R2sequence = [R2.query_sequence[::-1]]
-        self.R2qual = [R2.query_qualities[::-1]]
-
         # Do these families map to different chromosomes?
         self.isSplit = R1.reference_name != R2.reference_name
 
-        R1LeadingSoftClipping = 0
-        R1startOffset = 0
-        R2LeadingSoftClipping = 0
-        R2startOffset = 0
         try:
+            # Convert pysam's cigar tuples into lists for easier iteration later
             self.R1cigar = self.cigarToList(R1.cigartuples, True)
             self.R2cigar = self.cigarToList(R2.cigartuples, False)
-            # If a read is soft-clipped, we need to locate the "actual" start position of the read
-            # The simplist way to do this is through local realignment
-            if R1.cigartuples[0][0] == 4:
-                self.R1cigar, R1startOffset, R1LeadingSoftClipping = self._realign(R1, 5, self.R1cigar)
+            self.R1start = R1.reference_start
+            self.R2start = R2.reference_start
+            self.softClipped = False  # Does this read pair display large swaths of soft-clipping which may support an alternative alignment?
 
+            # We need to reverse the sequence of the reads that are mapped to the reverse strand, due to the read orientation
+            if R1.is_reverse:
+                self.R1sequence = [R1.query_sequence[::-1]]
+                self.R1qual = [R1.query_qualities[::-1]]
+                self.R1pos = R1.reference_end
+                self.R1cigar = [self.R1cigar[::-1]]
+                # Is this read soft clipped at the end? If so, we need to add the soft-clipping back onto the read position
+                # to determine the "real" position of this read
+                if R1.cigartuples[-1][0] == 4:
+                    self.R1pos += R1.cigartuples[-1][1]
+                    self.softClipped = True
+                    # Skip realignment for now
+                if R1.cigartuples[0][0] == 4:
+                    self.R1start -= R1.cigartuples[0][1]
+            else:
+                self.R1sequence = [R1.query_sequence]
+                self.R1qual = [R1.query_qualities]
+                self.R1pos = R1.reference_start
+                self.R1cigar = [self.R1cigar]
+                if R1.cigartuples[0][0] == 4:
+                    self.R1pos -= R1.cigartuples[0][1]
+                    self.R1start = self.R1pos
+                    self.softClipped = True
 
-            if R2.cigartuples[0][0] == 4:
-                self.R2cigar, R2startOffset, R2LeadingSoftClipping = self._realign(R2, 5, self.R2cigar)
+            if R2.is_reverse:
+                self.R2sequence = [R2.query_sequence[::-1]]
+                self.R2qual = [R2.query_qualities[::-1]]
+                self.R2pos = R2.reference_end
+                self.R2cigar = [self.R2cigar[::-1]]
+                if R2.cigartuples[-1][0] == 4:
+                    self.R2pos += R2.cigartuples[-1][1]
+                    self.softClipped = True
+                if R2.cigartuples[0][0] == 4:
+                    self.R2start -= R2.cigartuples[0][1]
+            else:
+                self.R2sequence = [R2.query_sequence]
+                self.R2qual = [R2.query_qualities]
+                self.R2pos = R2.reference_start
+                self.R2cigar = [self.R2cigar]
+                if R2.cigartuples[0][0] == 4:
+                    self.R2pos -= R2.cigartuples[0][1]
+                    self.R2start = self.R2pos
+                    self.softClipped = True
 
-            self.R2cigar = [self.R2cigar[::-1]]
-            self.R1cigar = [self.R1cigar]
             self.malformed = False
         except IndexError:
             self.malformed = True
@@ -91,35 +118,6 @@ class Family:
             self.R1cigar = [None]
             self.R2cigar = [None]
 
-        self.R1startOffset = R1LeadingSoftClipping
-        self.R2startOffset = R2LeadingSoftClipping
-
-        # Next, identify the start position of this read pair, and determine if it is soft-clipped at the start
-        R1effectiveStart = R1.reference_start + R1startOffset
-        self.R1start = [R1effectiveStart]
-        R2effectiveStart = R2.reference_start + R2startOffset
-        self.R2start = [R2effectiveStart]
-        if R1effectiveStart < R2effectiveStart:
-            self.pos = R1effectiveStart - R1LeadingSoftClipping
-            if R1effectiveStart != 0:
-                self.softClipped = True
-            else:
-                self.softClipped = False
-        else:
-            self.pos = R2effectiveStart - R2LeadingSoftClipping
-            if R2LeadingSoftClipping != 0:
-                self.softClipped = True
-            else:
-                self.softClipped = False
-
-        try:
-            self.end = max(R1.reference_end, R2.reference_end)
-        except TypeError:  # One read is unmapped
-            if R1.reference_end is not None:
-                self.end = R1.reference_end
-            else:
-                self.end = R2.reference_end
-
         # These are statistics which will be used after all reads are collapsed into a consensus
         self.collapseSize = []
 
@@ -128,7 +126,27 @@ class Family:
         self.R2 = R2
         self.name = R1.query_name
 
-    def _realign(self, read, cigarOffset, oldCigar, windowBuffer=200):
+    def _cigarstringToList(self, cigarString):
+
+        cigToOp ={
+            "S":4,
+            "M":0,
+            "I":2,
+            "D":1,  # This is the cigar of the query sequence, so it needs to be reversed
+            "H":5
+        }
+        cigar = []
+        opLen = ""
+        for char in cigarString:
+            if char.isdigit():
+                opLen += char
+            else:
+                cigar.extend([cigToOp[char]] * int(opLen))
+                opLen = ""
+
+        return cigar
+
+    def _realign(self, read, windowBuffer=200):
         """
         Aligns a fragment of a sequence to the reference using Smith-Waterman alignment
         """
@@ -140,7 +158,7 @@ class Family:
         global refName
         global refAlignment
 
-        # If we have switched contigs, or moved outside the window that is currently buffered,
+        # If we have switched contigs, or moved outside the reference window that is currently buffered,
         # we need to re-buffer
         readWindowStart = read.reference_start - windowBuffer
         if readWindowStart < 0:
@@ -159,36 +177,26 @@ class Family:
 
         # Create a reference alignment object
         mapping = refAlignment(read.query_sequence)
+
+        # If the read is mapped identically as the previous alignment, where will it start and end?
         expectedStart = read.reference_start - refStart
+        expectedEnd = read.reference_end - refStart
 
-        # If the start location of the read has changed (because of realignment), identify any difference
-        startOffset = mapping.query_begin - expectedStart
+        # Add soft clipping
+        if mapping.target_begin != 0:
+            finalCigar = self._cigarstringToList(str(mapping.target_begin) + "S" + mapping.cigar)
+        else:
+            finalCigar = self._cigarstringToList(mapping.cigar)
 
-        # Replace the start of the old cigar sequence with the start of this new alignment
-        # This is more likely to correspond to the correct alignment
-        newCigarLength = read.cigartuples[0][1] + cigarOffset
+        endSoftClip = len(mapping.target_sequence) - mapping.target_end_optimal - 1
+        if endSoftClip != 0:
+            finalCigar.extend([4] * endSoftClip)
 
-        i = -1
-        for i in range(0, mapping.target_begin):
-            oldCigar[i] = 4
+        # If the leading and trailing soft clipping have changed, quantify the change
+        startOffset = mapping.query_begin - expectedStart - mapping.target_begin
+        endOffset = mapping.query_end - expectedEnd + endSoftClip + 1
 
-        newLength = i
-        for b1, b2 in zip(mapping.aligned_query_sequence, mapping.aligned_target_sequence):
-
-            i += 1
-            if b1 == "-":
-                oldCigar[i] = 1
-                newLength += 1
-            elif b2 == "-":
-                oldCigar.insert(i, 2)
-                # Since deletions do not consume a base, we do not include this in the length
-            else:
-                oldCigar[i] = 0
-                newLength += 1
-            if i == newCigarLength:
-                break
-
-        return oldCigar, startOffset, mapping.target_begin
+        return finalCigar, startOffset, endOffset
 
     def cigarToList(self, cigarTuples, isRead1, counterIncremeneted=False):
         """
@@ -215,16 +223,30 @@ class Family:
         Combines another family into this family
         """
 
-        assert family.pos == self.pos
+        if family.R1pos != self.R1pos or family.R2pos != self.R2pos:
+            thisOrigEnd = None
+            familyOrigEnd = None
+            if self.R1.is_reverse:
+                thisOrigEnd = self.R1.reference_end
+            else:
+                thisOrigEnd = self.R2.reference_end
+
+            if family.R1.is_reverse:
+                familyOrigEnd = family.R1.reference_end
+            else:
+                familyOrigEnd = family.R2.reference_end
+            if thisOrigEnd != familyOrigEnd:
+                return
+            else:
+                raise TypeError()
+
         self.R1sequence.extend(family.R1sequence)
         self.R1qual.extend(family.R1qual)
         self.R1cigar.extend(family.R1cigar)
-        self.R1start.extend(family.R1start)
 
         self.R2sequence.extend(family.R2sequence)
         self.R2qual.extend(family.R2qual)
         self.R2cigar.extend(family.R2cigar)
-        self.R2start.extend(family.R2start)
 
         self.size += family.size
         self.members.extend(family.members)
@@ -243,116 +265,153 @@ class Family:
         # The easiest way to account for this is to simply figure out what the offset of each
         # sequence is
 
-        R1consensus, R1qual, R1cigar, R1softClip = self._consensusByRead(self.R1sequence, self.R1qual, self.R1cigar)
-        R2consensus, R2qual, R2cigar, R2softClip = self._consensusByRead(self.R2sequence, self.R2qual, self.R2cigar, True)
+        R1consensus, R1qual, R1cigar, R1softClip = self._consensusByRead(self.R1sequence, self.R1qual, self.R1cigar, self.R1.is_reverse)
+        R2consensus, R2qual, R2cigar, R2softClip = self._consensusByRead(self.R2sequence, self.R2qual, self.R2cigar, self.R2.is_reverse)
         self.R1sequence = [R1consensus]
         self.R2sequence = [R2consensus]
         self.R1qual = [R1qual]
         self.R2qual = [R2qual]
         self.R1cigar = [R1cigar]
         self.R2cigar = [R2cigar]
-        self.R1start = [self.R1start[0] + R1softClip - self.R1startOffset]
-        self.R2start = [
-            self.R2start[0] + R2softClip - self.R2startOffset]  # Compensate for any changes in soft-clipping
+        self.R1start += R1softClip
+        self.R2start += R2softClip  # Compensate for any changes in soft-clipping
 
     def _consensusByRead(self, sequences, qualities, cigars, reverseClip=False):
 
-        # In this case, we can simply collapse the sequences without performing any sort of
-        # realignment
+        # Generate a consensus for all reads in the family in the provided orientation
 
         consensusSeq = []
         consensusQual = []
         consensusCigar = []
+
+        # Handle leading anjd trailing soft-clipping
+        softClippedStart = True
+        softClippedEnd = False
+
         # First, shift all the sequences over to account for any leading soft-clipping
         # and differences in start position
         # The end goal of this is to have the bases of all sequences line up properly
-        baseIndex = [0] * len(sequences)
-        cigarIndex = [0] * len(sequences)
-        seqLengths = tuple(len(x) for x in sequences)
+        seqNumber = len(sequences)
+        baseIndex = [0] * seqNumber
+        cigarIndex = [0] * seqNumber
+        seqLengths = tuple(len(x) for x in cigars)
+        startOffset = 0
+        refLength = 0  # The change in the number of reference positions consumed by this read relative to read1
+
         # Lets start processing the sequence
         while True:
-            qualSum = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0}
-            qualMax = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0}
+            qualSum = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0, "N": 0}
+            qualMax = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0, "N": 0}
             insertion = []  # This data structure will store {Base: (count, maxqual, qualSum)}
-            baseCount = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0}
-            cigarOp = {"A": {0: 0, 3: 0, 4: 0, 5: 0}, "C": {0: 0, 3: 0, 4: 0, 5: 0}, "G": {0: 0, 3: 0, 4: 0, 5: 0},
-                       "T": {0: 0, 3: 0, 4: 0, 5: 0}}
+            normBaseCount = {"A": 0, "C": 0, "T": 0, "G": 0, "-": 0, "N": 0}
+            softClippedBaseCount = {"A": 0, "C": 0, "T": 0, "G": 0, "N": 0}
 
-            seqCollapsed = 0
-            for i in range(0, len(sequences)):
+            seqCollapsed = 0.0
+            softClippedNum = 0.0
+
+            for i in range(0, seqNumber):
                 if cigarIndex[i] < seqLengths[i]:
-
-                    seqCollapsed += 1
+                #try:
                     # Here we have to account for the cigar operator
+                    cigar = cigars[i][cigarIndex[i]]
+                    if cigar == 4:
+                        softClippedNum += 1
+
                     # If this sequence has an insertion at this position,
                     # We need to account for it, and store it seperatly for comparison
-                    cigar = cigars[i][cigarIndex[i]]
-                    if cigar == 1:
+                    j = 0
+                    while cigar == 1:
+                        if i == 0:
+                            refLength += 1
+                        base = sequences[i][baseIndex[i]]
+                        qual = qualities[i][baseIndex[i]]
 
-                        j = 0
-                        while cigarIndex[i] < len(sequences[i]) and cigars[i][cigarIndex[i]] == 1:
-                            base = sequences[i][cigarIndex[i]]
-                            qual = qualities[i][cigarIndex[i]]
-
-                            if j >= len(insertion):
-                                insertion.append({base: [1, qual, qual]})
-                            elif base not in insertion[j]:
-                                insertion[j][base] = [1, qual, qual]
-                            else:
-                                insertion[j][base][0] += 1  # Base count
-                                insertion[j][base][2] += qual  # Qual sum
-                                if insertion[j][base][1] < qual:  # Max qual
-                                    insertion[j][base][1] = qual
-                            cigarIndex[i] += 1
-                            j += 1
-                            baseIndex[i] += 1
+                        if j >= len(insertion):
+                            insertion.append({base: [1, qual, qual]})
+                        elif base not in insertion[j]:
+                            insertion[j][base] = [1, qual, qual]
+                        else:
+                            insertion[j][base][0] += 1  # Base count
+                            insertion[j][base][2] += qual  # Qual sum
+                            if insertion[j][base][1] < qual:  # Max qual
+                                insertion[j][base][1] = qual
+                        cigarIndex[i] += 1
+                        baseIndex[i] += 1
+                        j += 1
+                        cigar = cigars[i][cigarIndex[i]]
 
                     # In the case of a deletion, all we need to do is indicate that there is
                     # a deletion at this position
-                    elif cigar == 2:
-                        baseCount["-"] += 1
+                    if cigar == 2:
+                        normBaseCount["-"] += 1
                         cigarIndex[i] += 1
                     # Otherwise, save the base and associated quality score
                     else:
                         base = sequences[i][baseIndex[i]]
                         qual = qualities[i][baseIndex[i]]
 
-                        baseCount[base] += 1
+                        if cigar == 4:
+                            softClippedBaseCount[base] += 1
+                        else:
+                            normBaseCount[base] += 1
                         qualSum[base] += qual
-                        cigarOp[base][cigar] += 1
                         if qualMax[base] < qual:
                             qualMax[base] = qual
                         cigarIndex[i] += 1
                         baseIndex[i] += 1
-                else:
-                    baseCount["-"] += 1
+                    seqCollapsed += 1
 
-            if seqCollapsed == 0:
+                #except IndexError:
+                #    pass
+
+            if seqCollapsed / seqNumber < 0.5:
                 break
 
             # Identify the consensus base/sequence at this position
             # The base which is most frequent is used as the consensus
-
             maxBase = None
-            maxBaseCount = -1
+            maxBaseCount = 0
             maxQual = 0
-            for base, count in baseCount.items():
-                if count > maxBaseCount:
-                    maxBase = base
-                    maxBaseCount = count
-                    maxQual = qualSum[base]
-                # If there is a tie, use the base with the highest aggregate quality score
-                elif count == maxBaseCount and maxQual < qualSum[base]:
-                    maxBase = base
-                    maxBaseCount = count
-                    maxQual = qualSum[base]
+
+            if softClippedStart and softClippedNum / seqCollapsed <= 0.5:
+                softClippedStart = False
+            elif not softClippedStart and not softClippedEnd and softClippedNum / seqCollapsed > 0.5:
+                softClippedEnd = True
+
+            if softClippedStart or softClippedEnd:
+                for base, count in softClippedBaseCount.items():
+
+                    if count > maxBaseCount or (count == maxBaseCount and maxQual < qualSum[base]):  # If there is a tie, use the base with the highest aggregate quality score
+
+                        maxBase = base
+                        maxBaseCount = count
+                        maxQual = qualSum[base]
+                maxCigOp = 4
+                if softClippedStart and not reverseClip:
+                    startOffset += 1
+                elif softClippedEnd and reverseClip:
+                    startOffset += 1
+
+            else:
+                for base, count in normBaseCount.items():
+
+                    if count > maxBaseCount or (count == maxBaseCount and maxQual < qualSum[base]):  # If there is a tie, use the base with the highest aggregate quality score
+
+                        maxBase = base
+                        maxBaseCount = count
+                        maxQual = qualSum[base]
+
+                if maxBase == "-":
+                    maxCigOp = 2
+                else:
+                    maxCigOp = 0
 
             # Next, determine if the insertion is actually more common than the current base
+            # TODO: Check if this breaks anything. Because it looks like it might
             insertionWeight = sum(insertion[0][x][0] for x in insertion[0]) if len(insertion) != 0 else -1
-            if insertionWeight > maxBaseCount:
+            if insertionWeight > seqCollapsed/ 2:
+
                 # If so, we will simply use the consensus of the insertion
-                bases = []
-                qual = []
                 for position in insertion:
                     posWeight = sum(position[x][0] for x in position)
                     if posWeight < insertionWeight / 2:
@@ -366,58 +425,33 @@ class Family:
                             maxPosBase = base
                             maxPosCount = elements[0]
                             maxPosQual = elements[2]
-                        # If there is a tie, use the base with the highest aggregate quality score
+                        # If there is a tie, use the base that is not soft clipped, or that with the highest aggregate quality score
                         elif elements[0] == maxPosCount and maxPosQual < qualSum[base]:
                             maxPosBase = base
                             maxPosCount = elements[0]
                             maxPosQual = elements[2]
 
-                    bases.append(maxPosBase)
-                    qual.append(position[maxPosBase][1])
+                    # Add these bases, quality scores, and the appropriate cigar operator
+                    # into the consensus sequence
+                    consensusSeq.append(maxPosBase)
+                    consensusQual.append(position[base][1])
+                    consensusCigar.append(1)
 
-                # Add these bases, quality scores, and the appropriate cigar operator
-                # into the consensus sequence
-                consensusSeq.extend(bases)
-                consensusQual.extend(qual)
-                consensusCigar.extend([1] * len(bases))
-
+            # Add this base, quality score, and cigar operator into the consensus
+            if maxCigOp != 2:
+                consensusSeq.append(maxBase)
+                consensusQual.append(qualMax[maxBase])
+                consensusCigar.append(maxCigOp)
             else:
-                # Otherwise, just add this base, quality score, and cigar operator into the consensus
-                if maxBase != "-":
-                    consensusSeq.append(maxBase)
-                    consensusQual.append(qualMax[maxBase])
-                    badOperator = max(cigarOp[maxBase], key=lambda x: cigarOp[maxBase][x])
-                    consensusCigar.append(badOperator)
-                else:
-                    consensusCigar.append(2)
+                consensusCigar.append(2)
+            refLength += 1
 
-        # Finally, to ensure the output read is valid and aligned properly,
-        # strip any leading and trailing deletions
-        i = 0
-        while consensusCigar[i] == 2 and i < len(consensusSeq):
-            i += 1
-        j = len(consensusCigar) - 1
-        while consensusCigar[j] == 2 and j >= 0:
-            j -= 1
-        # Remove trailing deletions
-        j += 1
-        if i < j:
-            consensusCigar = consensusCigar[i:j]
-
-        # Finally, calculate the length of the resulting soft-clipping
-        cigarSize = len(consensusCigar)
+        # If this read is mapped to the reverse strand, and thus we are collapsing from the back, account for the
+        # case where the start position changes due to differences between the consensus length and the "seed" read length
         if reverseClip:
-            k = cigarSize - 1
-            while consensusCigar[k] == 4 and k > 0:
-                k -= 1
-            k = cigarSize - k - 1
-        else:
-            k = 0
-            while consensusCigar[k] == 4 and k < cigarSize:
-                k += 1
+            startOffset += len(cigars[0]) - refLength
 
-
-        return "".join(consensusSeq), consensusQual, consensusCigar, k
+        return "".join(consensusSeq), consensusQual, consensusCigar, startOffset
 
     def listToCigar(self, cigar):
         """
@@ -439,6 +473,10 @@ class Family:
 
         cigarTuples.append((currentOp, opLength))
 
+        # Bug-hunting here. Find invalid cigar records
+        #for i in range(1, len(cigarTuples) - 2):
+        #    if cigarTuples[i][0] == 4:
+        #        raise TypeError
         return cigarTuples
 
     def toPysam(self, tagOrig):
@@ -447,23 +485,37 @@ class Family:
         """
 
         self.R1.query_name = self.name
-        self.R1.query_sequence = self.R1sequence[0]
-        self.R1.query_qualities = self.R1qual[0]
-        self.R1.cigartuples = self.listToCigar(self.R1cigar[0])
-        self.R1.reference_start = self.R1start[0]
+        self.R1.reference_start = self.R1start
         if tagOrig:
             self.R1.set_tag("Zm", ",".join(self.members))
 
         self.R2.query_name = self.name
-        self.R2.query_sequence = self.R2sequence[0][::-1]  # Un-reverse the sequence of read 2, so the sequences will be in the expected format
-        self.R2.query_qualities = self.R2qual[0][::-1]
-        self.R2.cigartuples = self.listToCigar(self.R2cigar[0][::-1])
-        self.R2.reference_start = self.R2start[0]
+        self.R2.reference_start = self.R2start
         if tagOrig:
             self.R2.set_tag("Zm", ",".join(self.members))
 
+        # Un-reverse the sequence of the reverse-strand-mapped, so the sequences will be in the expected format
+        if self.R1.is_reverse:
+            self.R1.query_sequence = self.R1sequence[0][::-1]
+            self.R1.query_qualities = self.R1qual[0][::-1]
+            self.R1.cigartuples = self.listToCigar(self.R1cigar[0][::-1])
+        else:
+            self.R1.query_sequence = self.R1sequence[0]
+            self.R1.query_qualities = self.R1qual[0]
+            self.R1.cigartuples = self.listToCigar(self.R1cigar[0])
+
+        if self.R2.is_reverse:
+            self.R2.query_sequence = self.R2sequence[0][::-1]
+            self.R2.query_qualities = self.R2qual[0][::-1]
+            self.R2.cigartuples = self.listToCigar(self.R2cigar[0][::-1])
+        else:
+            self.R2.query_sequence = self.R2sequence[0]
+            self.R2.query_qualities = self.R2qual[0]
+            self.R2.cigartuples = self.listToCigar(self.R2cigar[0])
+
         self.R1.next_reference_start = self.R2.reference_start
         self.R2.next_reference_start = self.R1.reference_start
+
 
 
 class Position:
@@ -867,11 +919,11 @@ class FamilyCoordinator:
         try:
             while True:
                 read = next(self.inFile)
-                self.readCounter += 1
 
                 # Discard supplementary and secondary alignments
                 if read.is_supplementary or read.is_secondary:
                     continue
+                self.readCounter += 1
                 # If this read and it's mate are unmapped, ignore it
                 try:
                     currentPos = read.reference_start
@@ -906,23 +958,23 @@ class FamilyCoordinator:
                         i = self._pairsAtPositions.bisect(currentPos - self._baseBuffer) - 1
                     while i >= 0:
                         posKey = self._pairsAtPositions.iloc[i]
-                        posToProcess = self._pairsAtPositions.pop(posKey)
+                        posList = self._pairsAtPositions.pop(posKey)
 
                         # Now, it's time to do all the magic
                         # Identify any reads which could originate from the same family, and collapse them into a consensus
-                        posToProcess.collapse(self.familyIndices, self.familyThreshold)
+                        for posToProcess in posList.values():
+                            posToProcess.collapse(self.familyIndices, self.familyThreshold)
+                            posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
 
-                        posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
-
-                        # Return all families stored at this position
-                        for readPair in posToProcess.plusFamilies.values():
-                            readPair.toPysam(self.tagOrig)
-                            yield readPair.R1
-                            yield readPair.R2
-                        for readPair in posToProcess.negFamilies.values():
-                            readPair.toPysam(self.tagOrig)
-                            yield readPair.R1
-                            yield readPair.R2
+                            # Return all families stored at this position
+                            for readPair in posToProcess.plusFamilies.values():
+                                readPair.toPysam(self.tagOrig)
+                                yield readPair.R1
+                                yield readPair.R2
+                            for readPair in posToProcess.negFamilies.values():
+                                readPair.toPysam(self.tagOrig)
+                                yield readPair.R1
+                                yield readPair.R2
                         i -= 1
 
                     self._previousChr = currentChrom
@@ -975,29 +1027,33 @@ class FamilyCoordinator:
                 # Store this read pair until we obtain all read pairs that overlap this position
                 # If this is the first time we are seeing a read pair at this position,
                 # we need to create the data structure which will hold all the read pairs
-                if pair.pos not in self._pairsAtPositions:
-                    self._pairsAtPositions[pair.pos] = Position()
-                self._pairsAtPositions[pair.pos].add(pair)
+                if pair.R1pos not in self._pairsAtPositions:
+                    self._pairsAtPositions[pair.R1pos] = {}
+                    self._pairsAtPositions[pair.R1pos][pair.R2pos] = Position()
+                elif pair.R2pos not in self._pairsAtPositions[pair.R1pos]:
+                    self._pairsAtPositions[pair.R1pos][pair.R2pos] = Position()
+                self._pairsAtPositions[pair.R1pos][pair.R2pos].add(pair)
 
         except StopIteration:
 
             # We have run out of reads. Thus, finalize and collapse any remaining positions
-            for posKey, posToProcess in self._pairsAtPositions.items():
+            for posList in self._pairsAtPositions.values():
 
                 # Now, it's time to do all the magic
                 # Identify any reads which could originate from the same family, and collapse them into a consensus
-                posToProcess.collapse(self.familyIndices, self.familyThreshold)
-                posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
+                for posToProcess in posList.values():
+                    posToProcess.collapse(self.familyIndices, self.familyThreshold)
+                    posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
 
-                # Return all remaining families
-                for readPair in posToProcess.plusFamilies.values():
-                    readPair.toPysam(self.tagOrig)
-                    yield readPair.R1
-                    yield readPair.R2
-                for readPair in posToProcess.negFamilies.values():
-                    readPair.toPysam(self.tagOrig)
-                    yield readPair.R1
-                    yield readPair.R2
+                    # Return all remaining families
+                    for readPair in posToProcess.plusFamilies.values():
+                        readPair.toPysam(self.tagOrig)
+                        yield readPair.R1
+                        yield readPair.R2
+                    for readPair in posToProcess.negFamilies.values():
+                        readPair.toPysam(self.tagOrig)
+                        yield readPair.R1
+                        yield readPair.R2
 
             # Print out a status (or error) message, briefly summarizing the overall collapse
             if self.missingBarcode > 0 and self.familyCounter == 0:
@@ -1091,7 +1147,7 @@ parser = argparse.ArgumentParser(description="Collapsed duplicate sequences into
 parser.add_argument("-c", "--config", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can provide one or more arguments")
 parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser, True),
-                    help="Input sorted BAM file (use \"-\" to read from stdin [use control + d to stop reading])")
+                    help="Input sorted BAM file (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
 parser.add_argument("-o", "--output", help="Output BAM file (use \"-\" to write to stdout). Will be unsorted")
 parser.add_argument("-fm", "--family_mask", type=str,
                     help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
@@ -1109,6 +1165,7 @@ parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
 
 
 def main(args=None, sysStdin=None):
+
     if args is None:
         if sysStdin is None:
             args = parser.parse_args()
@@ -1164,9 +1221,11 @@ def main(args=None, sysStdin=None):
     # Format the input command in such a way that it can be added to the header (i.e. follow BAM specifications)
     command = "produse collapse"
     for argument, parameter in args.items():
+        if not parameter:
+            continue
         command += " --" + argument
-        if parameter and not isinstance(parameter, bool):
-            command += " " + parameter
+        if not isinstance(parameter, bool):
+            command += " " + str(parameter)
     header["PG"].append({"ID": "PRODUSE-COLLAPSE", "PN": "ProDuSe", "CL": command})
 
     outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM, header=header)
