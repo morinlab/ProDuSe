@@ -516,8 +516,8 @@ def runPipeline(sampleName, sampleDir):
         sortInput = clipConfArgs["clipoverlap"]["output"]
         # Append "sort" as the output file name
         sortOutput = sortInput.replace(".bam", ".sort.bam")
-        tmpDir = os.linesep + "tmp" + os.linesep
-        resultsDir = os.linesep + "results" + os.linesep
+        tmpDir = os.sep + "tmp" + os.sep
+        resultsDir = os.sep + "results" + os.sep
         sortOutput = sortOutput.replace(tmpDir, resultsDir)
         sortCommand = ["samtools", "sort", sortInput, "-o", sortOutput]
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Sorting final BAM file...\n"]))
@@ -650,7 +650,7 @@ def main(args=None, sysStdin=None):
     samplesToProcess = {}
     for sample, sampleArgs in samples.items():
         # Override the existing arguments with any sample-specific arguments
-        runArgs = args
+        runArgs = args.copy()
         if len(sampleArgs) != 0:
             for argument, parameter in sampleArgs.items():
                 runArgs[argument] = parameter
@@ -680,7 +680,7 @@ def main(args=None, sysStdin=None):
                 sys.stderr.write("WARNING: Unable to predict barcode for \'%s\'. Skipping..." % runArgs["sample"])
                 continue
             elif "N" in runArgs["barcode_sequence"]:  # TODO: Improve this estimate
-                sys.stderr.write("WARNING: The barcode sequence predicted for \'%s\' is quite broad\n" % runArgs["sample"])
+                sys.stderr.write("WARNING: The barcode sequence predicted for \'%s\' is quite broad\n" % sample)
                 sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the results will be catastrophic\n")
 
         # Configure the output directories and config files for this sample
