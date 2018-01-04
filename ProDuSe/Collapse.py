@@ -108,6 +108,14 @@ class Family:
                     self.R2start = self.R2pos
                     self.softClipped = True
 
+            # When we mark duplxes, the coordinates of read1 and read2 will be the other way around, since read1 will map to the
+            # opposite strand
+            # Thus, normalize the coordinates
+            if self.R1pos > self.R2pos:
+                tmp = self.R1pos
+                self.R1pos = self.R2pos
+                self.R2pos = tmp
+
             self.malformed = False
         except IndexError:
             self.malformed = True
@@ -621,7 +629,7 @@ class Position:
                     if b1 != b2:
                         distance += 1
                 if distance < minDistance:
-                    # In the case of a tie, the most largest family will be taken
+                    # In the case of a tie, the largest family will be taken
                     minDistance = distance
                     minBarcode = familyName
 
@@ -670,12 +678,14 @@ class Position:
                 barcodesInFamilies[barcode] = [barcode]
                 continue
 
+            cBarcode = list(barcode[x] for x in collapseIndices)
             # Next, calculate the distance between the current barcode and any existing barcode family
             minBarcode = None
             minDistance = 10000
             for familyName in barcodesInFamilies.keys():
                 distance = 0
-                for b1, b2 in zip(familyName, barcode):
+                cFamilyName = list(familyName[x] for x in collapseIndices)
+                for b1, b2 in zip(cFamilyName, cBarcode):
                     if b1 != b2:
                         distance += 1
                 if distance < minDistance:
@@ -744,7 +754,7 @@ class Position:
             # same parental molecule, using the adapter sequence
             # First, calculate the distance between the (-) strand family, and all possible (+) strand families, and find the (+) strand family
             # which is closest
-            dKey = tuple(key[x] for x in duplexIndices)
+            dKey = tuple(adapter[x] for x in duplexIndices)
             minDist = 100000
             minAdapter = None
             minSize = 0
