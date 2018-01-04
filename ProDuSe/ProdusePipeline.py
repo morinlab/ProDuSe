@@ -681,7 +681,7 @@ def main(args=None, sysStdin=None):
                 continue
             elif "N" in runArgs["barcode_sequence"]:  # TODO: Improve this estimate
                 sys.stderr.write("WARNING: The barcode sequence predicted for \'%s\' is quite broad\n" % sample)
-                sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the results will be catastrophic\n")
+                sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the resulting analysis will include both samples\n")
 
         # Configure the output directories and config files for this sample
         sampleDir = configureOutput(sample, runArgs, baseOutDir, argsToPipelineComponent)
