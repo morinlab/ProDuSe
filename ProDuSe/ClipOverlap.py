@@ -532,8 +532,8 @@ class ReadIterator:
                 # First, identify if this read pair could possibly overlap
                 if self._possibleOverlap(read1, read2):
                     self.identifyOverlap(read1, read2)
-                    yield read1
-                    yield read2
+                yield read1
+                yield read2
 
 
         except StopIteration:
