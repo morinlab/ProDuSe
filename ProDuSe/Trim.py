@@ -36,10 +36,15 @@ def validateArgs(args):
     listArgs = []
     for argument, parameter in args.items():
 
-        if parameter is None or parameter is False:
+        if parameter is None or parameter is False  or parameter == "None" or parameter == "False":
             continue
         # Something was provided as an argument
         listArgs.append("--" + argument)
+
+        # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
+        if parameter == "True":
+            continue
+
         # If the parameter is a list, we need to add each element seperately
         if isinstance(parameter, list):
             for p in parameter:
@@ -126,8 +131,7 @@ def main(args=None, sysStdin=None):
         config = ConfigObj(args["config"])
         try:
             for argument, parameter in config["trim"].items():
-                if argument in args and args[
-                    argument] is None:  # Aka this argument is used by trim, and a parameter was not provided at the command line
+                if argument in args and not args[argument]:  # Aka this argument is used by trim, and a parameter was not provided at the command line
                     args[argument] = parameter
         except KeyError:  # i.e. there is no section named "trim" in the config file
             sys.stderr.write(

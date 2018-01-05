@@ -941,10 +941,6 @@ class FamilyCoordinator:
                 except ValueError:
                     continue
 
-                if self.readCounter % 100000 == 0:
-                    sys.stderr.write(
-                        "\t".join(
-                            [print_prefix, time.strftime('%X'), "Reads Processed: " + str(self.readCounter) + "\n"]))
                 # If the start position of this read is not the same as the start position of the
                 # previous read, and assuming the input BAM file is sorted, then we can assume that
                 # no additional reads exists which start at the previous position
@@ -999,6 +995,12 @@ class FamilyCoordinator:
                 # First, create an object representing this read pair
                 pair = Family(read, self._waitingForMate[read.query_name], self.barcodeLength)
                 self.pairCounter += 1
+
+                if self.pairCounter % 100000 == 0:
+                    sys.stderr.write(
+                        "\t".join(
+                            [print_prefix, time.strftime('%X'), "Pairs Processed: " + str(self.pairCounter) + "\n"]))
+
                 # Delete the mate from the dictionary to free up space
                 del self._waitingForMate[read.query_name]
 
@@ -1075,7 +1077,7 @@ class FamilyCoordinator:
                 sys.stderr.write("ERROR: The input BAM file is empty!")
             else:
                 sys.stderr.write(
-                    "\t".join([print_prefix, time.strftime('%X'), "Reads Processed: " + str(self.readCounter) + "\n"]))
+                    "\t".join([print_prefix, time.strftime('%X'), "Pairs Processed: " + str(self.pairCounter) + "\n"]))
                 sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Collapse Complete\n"]))
 
 
@@ -1096,7 +1098,7 @@ def validateArgs(args):
         listArgs.append("--" + argument)
 
         # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
-        if isinstance(parameter, bool):
+        if parameter == "True":
             continue
         # If the parameter is a list, we need to add each element seperately
         if isinstance(parameter, list):
@@ -1183,13 +1185,12 @@ def main(args=None, sysStdin=None):
             args = parser.parse_args(sysStdin)
         args = vars(args)
 
-    # If a config file was specified, parse the arguments from
+    # If a config file was specified, parse arguments from it
     if args["config"] is not None:
         config = ConfigObj(args["config"])
         try:
             for argument, parameter in config["collapse"].items():
-                if argument in args and args[
-                    argument] is None:  # Aka this argument is used by collapse, and a parameter was not provided at the command line
+                if argument in args and not args[argument]:  # Aka this argument is used by collapse, and a parameter was not provided at the command line
                     args[argument] = parameter
         except KeyError:  # i.e. there is no section named "collapse" in the config file
             sys.stderr.write(
