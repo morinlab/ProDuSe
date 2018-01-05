@@ -506,6 +506,12 @@ class ReadIterator:
                 if read.is_supplementary or read.is_secondary:
                     yield read
                     continue
+
+                # Ignore reads that map to different chromosomes, as they will never overlap
+                if read.reference_name != read.next_reference_name:
+                    yield read
+                    continue
+
                 # Have we encountered this read's mate before?
                 if read.query_name not in self._waitingForMate:
                     # If not, buffer this read until we encounter its' mate
@@ -571,7 +577,7 @@ def reparseArgs(args):
         listArgs.append("--" + argument)
 
         # Ignore booleans, as we will re-add them when the arguments are re-parsed
-        if isinstance(parameter, bool):
+        if parameter == "True:
             continue
         # If the parameter is a list, we need to add each element seperately
         if isinstance(parameter, list):
@@ -642,10 +648,9 @@ def main(args=None, sysStdin=None):
         config = ConfigObj(args["config"])
         try:
             for argument, parameter in config["clipoverlap"].items():
-                if argument in args and args[
-                    argument] is None:  # Aka this argument is used by collapse, and a parameter was not provided at the command line
+                if argument in args and not args[argument]:  # Aka this argument is used by clipovlerap, and a parameter was not provided at the command line
                     args[argument] = parameter
-        except KeyError:  # i.e. there is no section named "collapse" in the config file
+        except KeyError:  # i.e. there is no section named "clipoverlap" in the config file
             sys.stderr.write("ERROR: Unable to locate a section named \'clipoverlap\' in the config file \'%s\'\n" % (
             args["config"]))
             exit(1)
