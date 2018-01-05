@@ -577,7 +577,7 @@ def reparseArgs(args):
         listArgs.append("--" + argument)
 
         # Ignore booleans, as we will re-add them when the arguments are re-parsed
-        if parameter == "True:
+        if parameter == "True":
             continue
         # If the parameter is a list, we need to add each element seperately
         if isinstance(parameter, list):
