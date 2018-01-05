@@ -7,7 +7,8 @@ import subprocess
 import re
 import time
 from configobj import ConfigObj
-from ProDuSe import Trim, Collapse, ClipOverlap, __version, AdapterPredict
+from ProDuSe import Trim, Collapse, ClipOverlap, __version, AdapterPredict, Call
+
 
 
 def isValidFile(file, parser, default=None):
@@ -83,6 +84,8 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     bwaOut = tmpDir + sampleName + ".trim.bam"
     collapseOut = tmpDir + sampleName + ".collapse.bam"
     clipUnsortedOut = tmpDir + sampleName + ".clipO.bam"
+    clipSortedOut = resultsDir + sampleName + ".clipO.sort.bam"
+    callOut = resultsDir + sampleName + ".call.vcf"
 
     # Read group for BWA
     # Since the input and output of each script will be unique, specify them here
@@ -90,6 +93,7 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     scriptToArgs["trim"] = {"input": sampleParameters["fastqs"], "output": [bwaR1In, bwaR2In]}
     scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut}
     scriptToArgs["clipoverlap"] = {"input": collapseOut, "output": clipUnsortedOut}
+    scriptToArgs["call"] = {"input": clipSortedOut, "output": callOut}
 
     for argument, scripts in argsToScript.items():
 
@@ -213,6 +217,11 @@ def checkArgs(rawArgs):
                               help="A BED file containing capture regions of interest. Read pairs that do not overlap these regions will be filtered out")
     collapseArgs.add_argument("--tag_family_members", action="store_true",
                               help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
+
+    callArgs = parser.add_argument_group("Arguments used when calling variants")
+    callArgs.add_argument("--min_depth", metavar="INT", type=int, default=3, help="Minimum overall depth required to call a variant")
+    callArgs.add_argument("--min_alt_molecules", metavar="INT", default=2, type=int,
+                        help="Minimum number of molecules supporting an alternate allele required to call a variant")
 
     validatedArgs = parser.parse_args(args=listArgs)
     return vars(validatedArgs)
@@ -508,7 +517,6 @@ def runPipeline(sampleName, sampleDir):
     if not os.path.exists(clipDone):
         clipConfig = os.path.join(sampleDir, "config", "clipoverlap_task.ini")
         ClipOverlap.main(sysStdin=["--config", clipConfig])
-        open(clipDone, "w").close()
 
         # Sort the clipOverlap output
         # Parse the clipoverlap config file for the output file name
@@ -522,6 +530,14 @@ def runPipeline(sampleName, sampleDir):
         sortCommand = ["samtools", "sort", sortInput, "-o", sortOutput]
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Sorting final BAM file...\n"]))
         subprocess.check_call(sortCommand)
+        open(clipDone, "w").close()
+
+    # Run call (variant calling)
+    callDone = os.path.join(sampleDir, "config", "Call_Complete")
+    if not os.path.exists(callDone):
+        callConfig = os.path.join(sampleDir, "config", "call_task.ini")
+        Call.main(sysStdin=["--config", callConfig])
+        open(callDone, "w").close()
 
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "%s: Pipeline Complete\n" % (sampleName)]))
 
@@ -564,6 +580,9 @@ collapseArgs.add_argument("-t", "--targets", metavar="BED", type=lambda x: isVal
                           help="A BED file containing capture regions of interest. Read pairs that do not overlap these regions will be filtered out")
 collapseArgs.add_argument("--tag_family_members", action="store_true",
                           help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
+callArgs = parser.add_argument_group("Arguments used when calling variants")
+callArgs.add_argument("--min_depth", metavar="INT", type=int, help="Minimum overall depth required to call a variant")
+callArgs.add_argument("--min_alt_molecules", metavar="INT", type=int, help="Minimum number of molecules supporting an alternate allele required to call a variant")
 
 # For config parsing purposes, assign each parameter to the pipeline component from which it originates
 argsToPipelineComponent = {
@@ -572,7 +591,7 @@ argsToPipelineComponent = {
     "barcode_position": ["trim"],
     "max_mismatch": ["trim"],
     "sample_config": ["pipeline"],
-    "reference": ["pipeline", "collapse"],
+    "reference": ["pipeline", "collapse", "call"],
     "bwa": ["bwa"],
     "samtools": ["bwa"],
     "family_mask": ["collapse"],
@@ -580,7 +599,9 @@ argsToPipelineComponent = {
     "duplex_mask": ["collapse"],
     "duplex_mismatch": ["collapse"],
     "targets": ["collapse"],
-    "tag_family_members": ["collapse"]
+    "tag_family_members": ["collapse"],
+    "min_depth": ["call"],
+    "min_alt_molecules": ["call"]
 }
 
 
