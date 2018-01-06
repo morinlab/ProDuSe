@@ -23,7 +23,7 @@ class ReadIterator:
         self._cleanup = not noCleanup
         self._generateTag = not noTag
 
-    def _possibleOverlap(self, read1, read2, maxGap=200, allowSeperateReference=False):
+    def _possibleOverlap(self, read1, read2, allowSeperateReference=False):
         """
         Determine if there is a reasonable chance of overlap between the two reads
 
@@ -36,8 +36,6 @@ class ReadIterator:
 
         :param read1: A pysam.AlignedSegment()
         :param read2: A pysam.AlignedSegment()
-        :param maxGap: An int representing the maximum number of bases allowed between the end of the first read and the start
-        of the next read before the read pair will be considered as not overlapping
         :param allowSeperateReference: Consider reads which map to different chromosomes as possibly overlapping
 
         :returns: A boolean indicating if this read pair could possibly overlap
@@ -508,7 +506,11 @@ class ReadIterator:
                     continue
 
                 # Ignore reads that map to different chromosomes, as they will never overlap
-                if read.reference_name != read.next_reference_name:
+                try:
+                    if read.reference_name != read.next_reference_name:
+                        yield read
+                        continue
+                except ValueError:  # One of the reads is unmapped. They cannot overlap
                     yield read
                     continue
 
@@ -535,7 +537,7 @@ class ReadIterator:
                 # Delete this to reduce the memory footprint
                 del self._waitingForMate[read.query_name]
 
-                # First, identify if this read pair could possibly overlap
+                # Actual clip overlap, if this reads overlap
                 if self._possibleOverlap(read1, read2):
                     self.identifyOverlap(read1, read2)
                 yield read1
