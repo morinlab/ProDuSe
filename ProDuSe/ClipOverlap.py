@@ -5,7 +5,6 @@ import os
 import sys
 import pysam
 from configobj import ConfigObj
-# from skbio import alignment
 import time
 
 
@@ -15,15 +14,16 @@ class ReadIterator:
     The consensus overlap is then assigned to a single read only (thus clipping overlap)
     """
 
-    def __init__(self, inFile, noCleanup, noTag):
+    def __init__(self, inFile, noCleanup, tag, printPrefix="PRODUSE-CLIPOVERLAP"):
         self.inFile = inFile
         self._waitingForMate = {}
         self._trimR1 = True
         self._pairCount = 0
         self._cleanup = not noCleanup
-        self._generateTag = not noTag
+        self._generateTag = tag
+        self._printPrefix = printPrefix
 
-    def _possibleOverlap(self, read1, read2, allowSeperateReference=False):
+    def _possibleOverlap(self, read1, read2):
         """
         Determine if there is a reasonable chance of overlap between the two reads
 
@@ -36,17 +36,12 @@ class ReadIterator:
 
         :param read1: A pysam.AlignedSegment()
         :param read2: A pysam.AlignedSegment()
-        :param allowSeperateReference: Consider reads which map to different chromosomes as possibly overlapping
 
         :returns: A boolean indicating if this read pair could possibly overlap
         """
         # If one of the reads is unmapped, they cannot overlap
         if read1.is_unmapped or read2.is_unmapped:
             return False
-
-        # Check to see if the reads map to the same reference
-        if read1.reference_name != read2.reference_name:
-            return allowSeperateReference
 
         # Next, check to see if the reads are close enough to possibly be overlapping
         if read1.reference_end >= read2.reference_start:
@@ -127,6 +122,7 @@ class ReadIterator:
     def _checkIndels(self, read1Ins, read1Type, read2Ins, read2Type, consensusSeq, consensusQual, consensusCigar, assignedBases):
         # If only one read has an indel, we can safely assume it is an artifact, and ignore them, since a simplier
         # alignment exists
+        # TODO: Handle assigned bases in the case of indels
         read1IndelNum = len(read1Ins)
         read2IndelNum = len(read2Ins)
         if read1IndelNum and read2IndelNum:
@@ -161,9 +157,9 @@ class ReadIterator:
                 if qual is None:  # i.e. this event is a deletion
                     for i in range(cigarPos, cigarPos + eventLength):
                         consensusCigar[i] = 2
-                        assignedBases[i] = type
                         del consensusSeq[seqPos]
                         del consensusQual[seqPos]
+                        del assignedBases[seqPos]
                     sOffset -= eventLength
                 else:  # i.e. this event is an insertion
                     # Add the cigar
@@ -185,9 +181,9 @@ class ReadIterator:
                     consensusQual = tmp
 
                     # Add the event type
-                    tmp = assignedBases[:cigarPos]
+                    tmp = assignedBases[:seqPos]
                     tmp.extend([type] * eventLength)
-                    tmp.extend(assignedBases[cigarPos:])
+                    tmp.extend(assignedBases[seqPos:])
                     assignedBases = tmp
 
                     sOffset += eventLength
@@ -234,8 +230,8 @@ class ReadIterator:
         read1CigarClipPoint = r2StartIndex + read1CigarOffset + r1SoftClip
         read2Ins = []
         read2Index = r2SoftClip + read2SeqOffset
-        read1Type = "1" if read1.is_read1 else "2"
-        read2Type = "1" if read2.is_read1 else "2"
+        read1Type = "R" if read1.is_reverse else "F"
+        read2Type = "R" if read2.is_reverse else "F"
         read2StartOffset = 0
 
         # Store these as tuples to reduce the number of  calls, and thus improve efficiency
@@ -265,19 +261,19 @@ class ReadIterator:
                             consensusQual[iSeq] = q1
                         else:
                             consensusQual[iSeq] = q2
-                        assignedBases[iCigar] = "S"
+                        assignedBases[iSeq] = "S"
 
                     # If these bases disagree, use the base with the highest quality
                     elif q1 > q2:
                         consensusCigar[iCigar] = c1
                         consensusSeq[iSeq] = b1
                         consensusQual[iSeq] = q1
-                        assignedBases[iCigar] = read1Type
+                        assignedBases[iSeq] = read1Type
                     else:  # If the bases disagree and the quality score is the same, just use read 2's base, I guess
                         consensusCigar[iCigar] = c2
                         consensusSeq[iSeq] = b2
                         consensusQual[iSeq] = q2
-                        assignedBases[iCigar] = read2Type
+                        assignedBases[iSeq] = read2Type
                     r1CigarIndex += 1
                     r2CigarIndex += 1
                     read1Index += 1
@@ -320,9 +316,9 @@ class ReadIterator:
                 # Handle deletions
                 elif c1 == 2 and c2 == 2:
                     consensusCigar[iCigar] = 2
-                    assignedBases[iCigar] = "S"
                     del consensusSeq[iSeq]
                     del consensusQual[iSeq]
+                    del assignedBases[iSeq]
                     r1CigarIndex += 1
                     r2CigarIndex += 1
                     read2StartOffset += 1
@@ -333,7 +329,7 @@ class ReadIterator:
                         consensusSeq[iSeq] = b2
                         consensusQual[iSeq] = q2
                         consensusCigar[iCigar] = c2
-                        assignedBases[iCigar] = read2Type
+                        assignedBases[iSeq] = read2Type
                         read1Ins[-1][2].append("N")
                         read2Index += 1
                         r1CigarIndex += 1
@@ -354,7 +350,7 @@ class ReadIterator:
                         consensusSeq[iSeq] = b1
                         consensusQual[iSeq] = q1
                         consensusCigar[iCigar] = c1
-                        assignedBases[iCigar] = read1Type
+                        assignedBases[iSeq] = read1Type
                         read2Ins[-1][2].append("N")
                         read1Index += 1
                         r1CigarIndex += 1
@@ -377,19 +373,19 @@ class ReadIterator:
                             consensusQual.insert(iSeq, q1)
                         else:
                             consensusQual.insert(iSeq, q2)
-                        assignedBases.insert(iCigar, "S")
+                        assignedBases.insert(iSeq, "S")
 
                     # If these bases disagree, use the base with the highest quality
                     elif q1 > q2:
                         consensusCigar.insert(iCigar, c1)
                         consensusSeq.insert(iSeq, b1)
                         consensusQual.insert(iSeq, q1)
-                        assignedBases.insert(iCigar, read1Type)
+                        assignedBases.insert(iSeq, read1Type)
                     else:  # If the bases disagree and the quality score is the same, just use read 2's base, I guess
                         consensusCigar.insert(iCigar, c2)
                         consensusSeq.insert(iSeq, b2)
                         consensusQual.insert(iSeq, q2)
-                        assignedBases.insert(iCigar, read2Type)
+                        assignedBases.insert(iSeq, read2Type)
                     r1CigarIndex += 1
                     r2CigarIndex += 1
                     read1Index += 1
@@ -408,6 +404,8 @@ class ReadIterator:
                                                                         read2Ins, read2Type, consensusSeq,
                                                                         consensusQual, consensusCigar, assignedBases)
 
+
+        # Assign the consensus generated to one of two reads
         if consensusSeq:  # Add the overlap consensus to one of the two reads
 
             # To ensure a valid record is produced for downstream tools, check to see if the clip point of either
@@ -416,7 +414,7 @@ class ReadIterator:
             if read1CigarClipPoint == 0:
                 read1ClipPoint = None
             else:
-                read1ClipPoint = read1Cigar[read1CigarClipPoint]
+                read1ClipPoint = r1Cigar[r1CigarClipPoint]
             try:
                 read2ClipPoint = read2Cigar[r2CigarIndex]
             except IndexError:
@@ -443,6 +441,16 @@ class ReadIterator:
 
             if self._trimR1:
 
+                if self._generateTag:
+                    try:
+                        read1Tag = read1Type * len(read1.query_sequence)
+                    except TypeError:
+                        read1Tag = ""
+                    try:
+                        read2Tag = "".join(assignedBases) + read2Type * len(read2.query_sequence)
+                    except TypeError:
+                        read2Tag = "".join(assignedBases)
+
                 if read2.query_sequence:  # Because pysam converts "" into None
                     read2.query_sequence = consensusSeq + read2.query_sequence
                 else:
@@ -459,8 +467,21 @@ class ReadIterator:
                     read1.query_sequence = None
                     read1Qual = []
                     read1Cigar = []
+                    read1Tag = ""
+
 
             else:
+                # Add the tag which indicates which bases were used to generate the consensus
+                if self._generateTag:
+                    try:
+                        read1Tag = read1Type * len(read1.query_sequence) + "".join(assignedBases)
+                    except TypeError:
+                        read1Tag = "".join(assignedBases)
+                    try:
+                        read2Tag = read2Type * len(read2.query_sequence)
+                    except TypeError:
+                        read2Tag = ""
+
                 if read1.query_sequence:  # Because pysam converts "" into None
                     read1.query_sequence= read1.query_sequence + consensusSeq
                 else:
@@ -475,17 +496,16 @@ class ReadIterator:
                     read2.query_sequence = None
                     read2Qual = []
                     read2Cigar = []
+                    read2Tag = ""
 
             read1.query_qualities = read1Qual
             read2.query_qualities = read2Qual
             read1.cigartuples = self.listToCigar(read1Cigar)
             read2.cigartuples = self.listToCigar(read2Cigar)
 
-            # Add the assigned bases flag
             if self._generateTag:
-                read1.set_tag("co", "".join(assignedBases))
-                read2.set_tag("co", "".join(assignedBases))
-
+                read1.set_tag("co", read1Tag)
+                read2.set_tag("co", read2Tag)
             self._trimR1 = not self._trimR1
 
     def next(self):
@@ -493,8 +513,7 @@ class ReadIterator:
 
     def __iter__(self):
 
-        printPrefix = "PRODUSE-CLIPOVERLAP"
-        sys.stderr.write("\t".join([printPrefix, time.strftime("%X"), "Starting...\n"]))
+        sys.stderr.write("\t".join([self._printPrefix, time.strftime("%X"), "Starting...\n"]))
 
         try:
             while True:
@@ -522,7 +541,7 @@ class ReadIterator:
 
                 self._pairCount += 1
                 if self._pairCount % 100000 == 0:
-                    sys.stderr.write("\t".join([printPrefix, time.strftime("%X"), "Pairs Processed: %s\n" % self._pairCount]))
+                    sys.stderr.write("\t".join([self._printPrefix, time.strftime("%X"), "Pairs Processed:%s\n" % self._pairCount]))
                 # Once a read pair has been obtained, we need to generate an alignment between the read and it's mate,
                 # and identify any overlapping bases
 
@@ -553,10 +572,10 @@ class ReadIterator:
 
             if self._pairCount % 100000 != 0:
                 sys.stderr.write(
-                    "\t".join([printPrefix, time.strftime("%X"), "Pairs Processed: %s\n" % self._pairCount]))
+                    "\t".join([self._printPrefix, time.strftime("%X"), "Pairs Processed:%s\n" % self._pairCount]))
             if unpairedReadNum > 0:
                 sys.stderr.write(
-                    "\t".join([printPrefix, time.strftime("%X"), "Unable to find a mate for: %s reads\n" % unpairedReadNum]))
+                    "\t".join([self._printPrefix, time.strftime("%X"), "Unable to find a mate for %s reads\n" % unpairedReadNum]))
 
 
 def reparseArgs(args):
@@ -598,7 +617,7 @@ def reparseArgs(args):
                         help="A path to an output BAM file. Will be UNSORTED (use \"-\" for stdout)")
     parser.add_argument("--no_cleanup", action="store_true",
                         help="Output ALL non-clipped bases, even if the post-clip read is only comprised of soft-clipped bases")
-    parser.add_argument("--no_tag", action="store_true",
+    parser.add_argument("--tag_origin", action="store_true",
                         help="Do not add a read tag indicating from which read a consensus base originated")
     args = parser.parse_args(listArgs)
     return vars(args)
@@ -634,10 +653,10 @@ parser.add_argument("-i", "--input", metavar="BAM/SAM/CRAM", type=lambda x: isVa
                     help="Input BAM file. Does not need to be sorted (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
 parser.add_argument("-o", "--output", metavar="BAM/SAM/CRAM", help="A path to an output BAM file. Will be UNSORTED (use \"-\" for stdout)")
 parser.add_argument("--no_cleanup", action="store_true", help="Output ALL non-clipped bases, even if a post-clip read is only comprised of soft-clipped bases")
-parser.add_argument("--no_tag", action="store_true", help="Do not add a read tag indicating from which read a consensus base originated")
+parser.add_argument("--tag_origin", action="store_true", help="Do not add a read tag indicating from which read a consensus base originated")
 
 
-def main(args=None, sysStdin=None):
+def main(args=None, sysStdin=None, printPrefix="PRODUSE-CLIPOVERLAP"):
     if args is None:
         if sysStdin is None:
             args = parser.parse_args()
@@ -693,7 +712,7 @@ def main(args=None, sysStdin=None):
     else:
         outBAM = pysam.AlignmentFile(args["output"], mode="w", header=header)
 
-    processor = ReadIterator(inBAM, args["no_cleanup"], args["no_tag"])
+    processor = ReadIterator(inBAM, args["no_cleanup"], args["tag_origin"], printPrefix)
 
     for read in processor:
         outBAM.write(read)
