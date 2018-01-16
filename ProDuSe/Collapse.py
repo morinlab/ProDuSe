@@ -117,11 +117,7 @@ class Family:
                 self.R2pos = tmp
 
             self.malformed = False
-        except IndexError:
-            self.malformed = True
-            self.R1cigar = [None]
-            self.R2cigar = [None]
-        except TypeError:
+        except (IndexError, TypeError):
             self.malformed = True
             self.R1cigar = [None]
             self.R2cigar = [None]
@@ -139,7 +135,7 @@ class Family:
         cigToOp ={
             "S":4,
             "M":0,
-            "I":2,
+            "I":2,  # This is the cigar of the query sequence, so it needs to be reversed
             "D":1,  # This is the cigar of the query sequence, so it needs to be reversed
             "H":5
         }
@@ -224,6 +220,10 @@ class Family:
                 else:
                     self.R2abnormal += 1
 
+        # I wish I didn't have to do this, but I can't guarantee that BWA (or any other aligner) will generate
+        # a record with a valid cigar sequence, so we need to check that here
+        if cigarList[0] == 1 or cigarList[0] == 2 or cigarList[-1] == 1 or cigarList[-1] == 2:
+            raise TypeError("Invalid Cigar Sequence %s" % (cigarTuples))
         return cigarList
 
     def add(self, family, mismatchThreshold=8):
@@ -329,24 +329,29 @@ class Family:
                     # We need to account for it, and store it seperatly for comparison
                     j = 0
                     while cigar == 1:
-                        if i == 0:
-                            refLength += 1
-                        base = sequences[i][baseIndex[i]]
-                        qual = qualities[i][baseIndex[i]]
+                        try:
+                            if i == 0:
+                                refLength += 1
+                            base = sequences[i][baseIndex[i]]
+                            qual = qualities[i][baseIndex[i]]
 
-                        if j >= len(insertion):
-                            insertion.append({base: [1, qual, qual]})
-                        elif base not in insertion[j]:
-                            insertion[j][base] = [1, qual, qual]
-                        else:
-                            insertion[j][base][0] += 1  # Base count
-                            insertion[j][base][2] += qual  # Qual sum
-                            if insertion[j][base][1] < qual:  # Max qual
-                                insertion[j][base][1] = qual
-                        cigarIndex[i] += 1
-                        baseIndex[i] += 1
-                        j += 1
-                        cigar = cigars[i][cigarIndex[i]]
+                            if j >= len(insertion):
+                                insertion.append({base: [1, qual, qual]})
+                            elif base not in insertion[j]:
+                                insertion[j][base] = [1, qual, qual]
+                            else:
+                                insertion[j][base][0] += 1  # Base count
+                                insertion[j][base][2] += qual  # Qual sum
+                                if insertion[j][base][1] < qual:  # Max qual
+                                    insertion[j][base][1] = qual
+                            cigarIndex[i] += 1
+                            baseIndex[i] += 1
+                            j += 1
+                            cigar = cigars[i][cigarIndex[i]]
+
+                        except IndexError as e: # This record ends with an insertion, which is not valid
+                            badCigar = self.listToCigar(cigars[i])
+                            raise TypeError("Invalid Cigar Sequence %s" % badCigar) from e
 
                     # In the case of a deletion, all we need to do is indicate that there is
                     # a deletion at this position
@@ -802,7 +807,7 @@ class FamilyCoordinator:
     """
 
     def __init__(self, inputFile, reference, familyIndices, familyThreshold, duplexIndices, duplexThreshold,
-                 barcodeLength, targets=None, tagOrig = False, baseBuffer=400, padding=10):
+                 barcodeLength, targets=None, tagOrig = False, baseBuffer=400, padding=10, printPrefix="PRODUSE-COLLAPSE"):
         self.inFile = inputFile
         self.tagOrig = tagOrig
 
@@ -828,6 +833,7 @@ class FamilyCoordinator:
         refEnd = None
         global refName
         refName = None
+
         self.targets = self._loadTargets(targets, padding)
 
         self.familyIndices = familyIndices
@@ -845,6 +851,8 @@ class FamilyCoordinator:
         global counter
         counter = 0
 
+        self.printPrefix = printPrefix
+
     def _loadTargets(self, targetFile, padding):
         """
         Loads BED intervals from the specified file into a dictionary
@@ -858,11 +866,28 @@ class FamilyCoordinator:
         if targetFile is None:
             return targets
 
+        # Does the BAM file use "chr"-prefixed contig names? If so, we should make sure the names of these regions are consistent
+        isChrPrefixed = None
+        try:
+            # Check the first reference sequence listed in the BAM header. This isn't perfect, but it should handle most cases
+            isChrPrefixed = self.inFile.header["SQ"][0]["SN"].startswith("chr")  # TODO: Handle this better
+        except AssertionError:
+            pass
         try:
             with open(targetFile) as f:
                 for line in f:
                     elements = line.split("\t")
+
                     chrom = elements[0]
+                    # Make sure the "chr" prefix is consistent with the BAM file
+                    if isChrPrefixed is not None:
+                        if isChrPrefixed:
+                            if not chrom.startswith("chr"):
+                                chrom = "chr" + chrom
+                        else:
+                            if chrom.startswith("chr"):
+                                chrom = chrom[3:]
+
                     start = int(elements[1]) - padding
                     end = int(elements[2]) + padding
                     if chrom not in targets:
@@ -898,7 +923,7 @@ class FamilyCoordinator:
         """
         return Fasta(refGenome, one_based_attributes=False, rebuild=False)
 
-    def _withinCaptureSpace(self, readPair):
+    def _withinCaptureSpace(self, readPair):  # TODO: Fix cases where the read pair completely overlaps the capture space
         """
         Determines if a read pair overlaps the capture space
 
@@ -907,15 +932,16 @@ class FamilyCoordinator:
         """
 
         if readPair.R1.reference_name in self.targets:
-            if bisect.bisect_left(self.targets[readPair.R1.reference_name], readPair.R1.reference_start) % 2 == 1 \
-                    or bisect.bisect_left(self.targets[readPair.R1.reference_name], readPair.R1.reference_end) % 2 == 1:
+            bisectPoint1 = bisect.bisect_left(self.targets[readPair.R1.reference_name], readPair.R1.reference_start)
+            bisectPoint2 = bisect.bisect_left(self.targets[readPair.R1.reference_name], readPair.R1.reference_end)
+            if bisectPoint1 != bisectPoint2 or bisectPoint1 % 2 == 1:
                 return True
 
         if readPair.R2.reference_name in self.targets:
-            if bisect.bisect_left(self.targets[readPair.R2.reference_name], readPair.R2.reference_start) % 2 == 1 \
-                    or bisect.bisect_left(self.targets[readPair.R2.reference_name], readPair.R2.reference_end) % 2 == 1:
+            bisectPoint1 = bisect.bisect_left(self.targets[readPair.R2.reference_name], readPair.R2.reference_start)
+            bisectPoint2 = bisect.bisect_left(self.targets[readPair.R2.reference_name], readPair.R2.reference_end)
+            if bisectPoint1 != bisectPoint2 or bisectPoint1 % 2 == 1:
                 return True
-
         return False
 
     def __next__(self):
@@ -923,8 +949,7 @@ class FamilyCoordinator:
 
     def __iter__(self):
 
-        print_prefix = "PRODUSE-COLLAPSE"
-        sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
+        sys.stderr.write("\t".join([self.printPrefix, time.strftime('%X'), "Starting...\n"]))
 
         try:
             while True:
@@ -999,7 +1024,7 @@ class FamilyCoordinator:
                 if self.pairCounter % 100000 == 0:
                     sys.stderr.write(
                         "\t".join(
-                            [print_prefix, time.strftime('%X'), "Pairs Processed: " + str(self.pairCounter) + "\n"]))
+                            [self.printPrefix, time.strftime('%X'), "Pairs Processed:" + str(self.pairCounter) + "\n"]))
 
                 # Delete the mate from the dictionary to free up space
                 del self._waitingForMate[read.query_name]
@@ -1077,8 +1102,8 @@ class FamilyCoordinator:
                 sys.stderr.write("ERROR: The input BAM file is empty!")
             else:
                 sys.stderr.write(
-                    "\t".join([print_prefix, time.strftime('%X'), "Pairs Processed: " + str(self.pairCounter) + "\n"]))
-                sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Collapse Complete\n"]))
+                    "\t".join([self.printPrefix, time.strftime('%X'), "Pairs Processed:" + str(self.pairCounter) + "\n"]))
+                sys.stderr.write("\t".join([self.printPrefix, time.strftime('%X'), "Collapse Complete\n"]))
 
 
 def validateArgs(args):
@@ -1176,7 +1201,7 @@ parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
                     help="A BED file listing targets of interest")
 
 
-def main(args=None, sysStdin=None):
+def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
 
     if args is None:
         if sysStdin is None:
@@ -1243,7 +1268,7 @@ def main(args=None, sysStdin=None):
 
     readProcessor = FamilyCoordinator(inBAM, args["reference"], familyIndices, args["family_mismatch"],
                                       duplexIndices, args["duplex_mismatch"], len(args["duplex_mask"]) * 2,
-                                      args["targets"], args["tag_family_members"])
+                                      args["targets"], args["tag_family_members"], printPrefix=printPrefix)
 
     for read in readProcessor:
         outBAM.write(read)
