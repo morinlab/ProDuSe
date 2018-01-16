@@ -6,6 +6,7 @@ import sys
 import subprocess
 import re
 import time
+import multiprocessing
 from configobj import ConfigObj
 from ProDuSe import Trim, Collapse, ClipOverlap, __version, AdapterPredict, Call
 
@@ -85,15 +86,16 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     collapseOut = tmpDir + sampleName + ".collapse.bam"
     clipUnsortedOut = tmpDir + sampleName + ".clipO.bam"
     clipSortedOut = resultsDir + sampleName + ".clipO.sort.bam"
-    callOut = resultsDir + sampleName + ".call.vcf"
+    callPassedOut = resultsDir + sampleName + ".call.passed.vcf"
+    callAllOut = resultsDir + sampleName + ".call.all.vcf"
 
     # Read group for BWA
     # Since the input and output of each script will be unique, specify them here
     scriptToArgs["bwa"] = {"input": [bwaR1In, bwaR2In], "output": bwaOut, "reference": sampleParameters["reference"]}
     scriptToArgs["trim"] = {"input": sampleParameters["fastqs"], "output": [bwaR1In, bwaR2In]}
     scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut}
-    scriptToArgs["clipoverlap"] = {"input": collapseOut, "output": clipUnsortedOut}
-    scriptToArgs["call"] = {"input": clipSortedOut, "output": callOut}
+    scriptToArgs["clipoverlap"] = {"input": collapseOut, "output": clipUnsortedOut, "tag_origin": "True"}
+    scriptToArgs["call"] = {"input": clipSortedOut, "output": callPassedOut, "unfiltered": callAllOut}
 
     for argument, scripts in argsToScript.items():
 
@@ -156,20 +158,20 @@ def checkArgs(rawArgs):
     # Convert the dictionary of arguments to a list, to allow for parsing
     listArgs = []
     for arg, parameter in rawArgs.items():
-        if parameter is not None:
-            listArgs.append("--" + arg)
+        if parameter is None or parameter is False or parameter == "None" or parameter == "False":
+            continue
+        listArgs.append("--" + arg)
+        # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
+        if parameter is True or parameter == "True":
+            continue
 
-            # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
-            if isinstance(parameter, bool):
-                continue
+        # Convert paramters that are lists into strings
+        if isinstance(parameter, list):
+            for p in parameter:
+                listArgs.append(str(p))
 
-            # Convert paramters that are lists into strings
-            if isinstance(parameter, list):
-                for p in parameter:
-                    listArgs.append(str(p))
-
-            else:
-                listArgs.append(str(parameter))
+        else:
+            listArgs.append(str(parameter))
 
     # To validate the argument type, recreate the parser
     # BUT HERE, INDICATE IF AN ARGUMENT IS REQUIRED OR NOT
@@ -180,7 +182,8 @@ def checkArgs(rawArgs):
                         help="Output directory for analysis directory")
     parser.add_argument("-r", "--reference", metavar="FASTA", required=True,
                         help="Reference genome, in FASTA format. BWA indexes should be present in the same directory")
-
+    parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
+                        help="If multiple samples are specified (using \'-sc\'), how many samples will be processed in parallel")
     inputFiles = parser.add_mutually_exclusive_group(required=True)
     inputFiles.add_argument("-f", "--fastqs", metavar="FASTQ", default=None, nargs=2,
                             type=lambda x: isValidFile(x, parser), help="Two paired end FASTQ files")
@@ -201,8 +204,10 @@ def checkArgs(rawArgs):
                           help="The sequence of the degenerate barcode, represented in IUPAC bases")
     trimArgs.add_argument("-p", "--barcode_position", metavar="0001111111111110", required=True, type=str,
                           help="Barcode positions to use when comparing expected and actual barcode sequences (1=Yes, 0=No)")
-    trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", default=3, type=int,
+    trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", type=int, required=True,
                           help="The maximum number of mismatches permitted between the expected and actual barcode sequences [Default: 3]")
+    trimArgs.add_argument("--trim_other_end", action="store_true",
+                        help="In addition, examine the other end of the read for a barcode. Will not remove partial barcodes")
 
     collapseArgs = parser.add_argument_group("Arguments used when Collapsing families into a consensus")
     collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str, required=True,
@@ -219,9 +224,11 @@ def checkArgs(rawArgs):
                               help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
     callArgs = parser.add_argument_group("Arguments used when calling variants")
-    callArgs.add_argument("--min_depth", metavar="INT", type=int, default=3, help="Minimum overall depth required to call a variant")
-    callArgs.add_argument("--min_alt_molecules", metavar="INT", default=2, type=int,
+    callArgs.add_argument("--min_depth", metavar="INT", type=int, help="Minimum overall depth required to call a variant")
+    callArgs.add_argument("--min_alt_molecules", metavar="INT", type=int,
                         help="Minimum number of molecules supporting an alternate allele required to call a variant")
+    callArgs.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float,
+                          help="Any variants with a strand bias above this threshold will be filtered out")
 
     validatedArgs = parser.parse_args(args=listArgs)
     return vars(validatedArgs)
@@ -410,6 +417,18 @@ def checkIndexes(refFasta, bwaExec, samtoolsExec, outDir):
     return newRefFasta
 
 
+def runPipelineMultithread(args):
+    """
+    This function does basically nothing, except unpack the arguments provided and pass them to runPipeline
+
+    This is required since "map" only passes each function one argument
+
+    :param args: An iterable containing the arguments to be passed to runPipeline()
+    :return:
+    """
+
+    runPipeline(args[0], args[1])
+
 def runPipeline(sampleName, sampleDir):
     """
     Run all scripts in the ProDuSe pipeline on the specified sample
@@ -435,6 +454,7 @@ def runPipeline(sampleName, sampleDir):
             sys.stderr.write(
                 "ERROR: The config file \'%s\' does not appear to be a bwa config, as no section is labelled \'bwa\'\n" % (
                 configPath))
+            exit(1)
         # Parse the arguments from the config file in the required order
         try:
             bwaCommand = [bwaConfig["bwa"], "mem", "-C",
@@ -487,14 +507,15 @@ def runPipeline(sampleName, sampleDir):
                 "ERROR: Unable to locate a required argument in the bwa config file \'%s\'\n" % (configPath))
             exit(1)
 
-    printPrefix = "PRODUSE-MAIN\t"
-    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Processing Sample \'%s\'\n" % (sampleName)]))
+    printPrefix = "PRODUSE-MAIN\t\t"+ sampleName
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Processing Sample \'%s\'\n" % sampleName.rstrip()]))
 
     # Run Trim
     trimDone = os.path.join(sampleDir, "config", "Trim_Complete")  # Similar to Make's "TASK_COMPLETE" file
     if not os.path.exists(trimDone):  # i.e. Did Trim already complete for this sample? If so, do not re-run it
         trimConfig = os.path.join(sampleDir, "config", "trim_task.ini")  # Where is Trim's config file?
-        Trim.main(sysStdin=["--config", trimConfig])  # Actually run Trim
+        trimPrintPrefix = "PRODUSE-TRIM\t\t" + sampleName
+        Trim.main(sysStdin=["--config", trimConfig], printPrefix=trimPrintPrefix)  # Actually run Trim
         open(trimDone,
              "w").close()  # After Trim completes, it will create this file, signifying to the end user that this task completed
 
@@ -509,14 +530,16 @@ def runPipeline(sampleName, sampleDir):
     collapseDone = os.path.join(sampleDir, "config", "Collapse_Complete")
     if not os.path.exists(collapseDone):
         collapseConfig = os.path.join(sampleDir, "config", "collapse_task.ini")
-        Collapse.main(sysStdin=["--config", collapseConfig])
+        collapsePrintPrefix = "PRODUSE-COLLAPSE\t" + sampleName
+        Collapse.main(sysStdin=["--config", collapseConfig], printPrefix=collapsePrintPrefix)
         open(collapseDone, "w").close()
 
     # Run clipoverlap
     clipDone = os.path.join(sampleDir, "config", "Clipoverlap_Complete")
     if not os.path.exists(clipDone):
         clipConfig = os.path.join(sampleDir, "config", "clipoverlap_task.ini")
-        ClipOverlap.main(sysStdin=["--config", clipConfig])
+        clipPrintPrefix = "PRODUSE-CLIPOVERLAP\t" + sampleName
+        ClipOverlap.main(sysStdin=["--config", clipConfig], printPrefix=clipPrintPrefix)
 
         # Sort the clipOverlap output
         # Parse the clipoverlap config file for the output file name
@@ -530,16 +553,18 @@ def runPipeline(sampleName, sampleDir):
         sortCommand = ["samtools", "sort", sortInput, "-o", sortOutput]
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Sorting final BAM file...\n"]))
         subprocess.check_call(sortCommand)
+
         open(clipDone, "w").close()
 
     # Run call (variant calling)
     callDone = os.path.join(sampleDir, "config", "Call_Complete")
     if not os.path.exists(callDone):
         callConfig = os.path.join(sampleDir, "config", "call_task.ini")
-        Call.main(sysStdin=["--config", callConfig])
+        callPrintPrefix = "PRODUSE-CALL\t\t" + sampleName
+        Call.main(sysStdin=["--config", callConfig], printPrefix=callPrintPrefix)
         open(callDone, "w").close()
 
-    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "%s: Pipeline Complete\n" % (sampleName)]))
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "%s: Pipeline Complete\n" % sampleName.rstrip()]))
 
 
 parser = argparse.ArgumentParser(description="Runs all stages of the ProDuSe pipeline on the designated samples")
@@ -552,6 +577,7 @@ parser.add_argument("-r", "--reference", metavar="FASTA",
                     help="Reference genome, in FASTA format. BWA indexes should present in the same directory")
 parser.add_argument("-sc", "--sample_config", metavar="INI", default=None, type=lambda x: isValidFile(x, parser),
                     help="A sample cofiguration file, specifying one or more samples")
+parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="If multiple samples are specified (using \'-sc\'), how many samples will be processed in parallel")
 parser.add_argument("--bwa", help="Path to bwa executable [Default: \'bwa\']")
 parser.add_argument("--samtools", help="Path to samtools executable [Default: \'samtools\']")
 parser.add_argument("--directory_name",
@@ -566,6 +592,7 @@ trimArgs.add_argument("-p", "--barcode_position", metavar="0001111111111110", ty
                       help="Barcode positions to use when comparing expected and actual barcode sequences (1=Yes, 0=No)")
 trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", type=int,
                       help="The maximum number of mismatches permitted between the expected and actual barcode sequences [Default: 3]")
+trimArgs.add_argument("--trim_other_end", action="store_true", help="In addition, examine the other end of the read for a barcode. Will not remove partial barcodes")
 
 collapseArgs = parser.add_argument_group("Arguments used when Collapsing families into a consensus")
 collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str,
@@ -580,9 +607,11 @@ collapseArgs.add_argument("-t", "--targets", metavar="BED", type=lambda x: isVal
                           help="A BED file containing capture regions of interest. Read pairs that do not overlap these regions will be filtered out")
 collapseArgs.add_argument("--tag_family_members", action="store_true",
                           help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
+
 callArgs = parser.add_argument_group("Arguments used when calling variants")
 callArgs.add_argument("--min_depth", metavar="INT", type=int, help="Minimum overall depth required to call a variant")
 callArgs.add_argument("--min_alt_molecules", metavar="INT", type=int, help="Minimum number of molecules supporting an alternate allele required to call a variant")
+callArgs.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float, help="Any variants with a strand bias above this threshold will be filtered out")
 
 # For config parsing purposes, assign each parameter to the pipeline component from which it originates
 argsToPipelineComponent = {
@@ -598,10 +627,11 @@ argsToPipelineComponent = {
     "family_mismatch": ["collapse"],
     "duplex_mask": ["collapse"],
     "duplex_mismatch": ["collapse"],
-    "targets": ["collapse"],
+    "targets": ["collapse", "call"],
     "tag_family_members": ["collapse"],
     "min_depth": ["call"],
-    "min_alt_molecules": ["call"]
+    "min_alt_molecules": ["call"],
+    "strand_bias_threshold": ["call"]
 }
 
 
@@ -628,7 +658,7 @@ def main(args=None, sysStdin=None):
     # requirements
     bwaVer = checkCommand("bwa", minVer="0.7.12")
     samtoolsVer = checkCommand("samtools", minVer="1.3.1")
-    pythonVer = sys.version_info
+    pythonVer = sys.version
 
     printPrefix = "PRODUSE-MAIN\t"
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting..." + "\n"]))
@@ -711,9 +741,33 @@ def main(args=None, sysStdin=None):
         createLogFile(sLogName, runArgs, bwa=bwaVer, samtools=samtoolsVer, python=pythonVer)
         samplesToProcess[sample] = sampleDir
 
-    # Run each sample
-    for sample, sampleDir in samplesToProcess.items():
-        runPipeline(sample, sampleDir)
+    # If multiple samples were provided, and more than 1 job was specified, run these samples in parallel
+    if args["jobs"] == 0:  # i.e. use as many threads as possible
+        threads = None  # The multiprocessing module will chose the number of threads
+    else:
+        threads = min(len(samplesToProcess), args["jobs"], os.cpu_count())  # Just as a safety measure, don't let the user spawn more threads then there are CPU cores
+
+    if threads > 1 or threads is None:
+        processPool = multiprocessing.Pool(processes=threads)
+
+        # Convert the dictionary which contains the sample arguments into a list of tuples, for multithreading use
+        # In addition, to keep the command line status messages semi-reasonable, normalize for sample name length
+        maxLength = max(len(x) for x in samplesToProcess.keys())
+        multithreadArgs = list((x.ljust(maxLength, " "), y) for x, y in samplesToProcess.items())
+        try:
+            # Run the jobs
+            processPool.map(runPipelineMultithread, multithreadArgs)
+            processPool.close()
+            processPool.join()
+        except KeyboardInterrupt as e:
+            processPool.terminate()
+            processPool.join()
+            raise e
+
+    else:
+        # Run each sample in series
+        for sample, sampleDir in samplesToProcess.items():
+            runPipeline(sample, sampleDir)
 
 
 if __name__ == "__main__":
