@@ -7,7 +7,7 @@ import sys
 import sortedcontainers
 from pyfaidx import Fasta
 import time
-from FisherExact import fisher_exact
+from fisher import pvalue
 from configobj import ConfigObj
 
 class Position:
@@ -55,7 +55,7 @@ class Position:
         self.nearbyVar = nearbyVariants
         self.nWindow = nWindow  # How many positions were examined to find nearby variants?
 
-    def summarizeVariant(self, strongMoleculeThreshold=3, minDepth=0, minAltDepth=0):
+    def summarizeVariant(self, minDepth=0, minAltDepth=0, strandBiasThreshold=0, strongMoleculeThreshold=3):
         """
         Summarize the statistics of this position
         :return:
@@ -164,8 +164,7 @@ class Position:
             if pMapStrand[index] + nMapStrand[index] == 0:
                 self.strandBias.append(1.0)
             else:
-                self.strandBias.append(fisher_exact(
-                [[pMapStrand[refIndex], nMapStrand[refIndex]], [pMapStrand[index], nMapStrand[refIndex]]]))
+                self.strandBias.append(pvalue(pMapStrand[index], pMapStrand[refIndex], nMapStrand[index], nMapStrand[refIndex]).two_tail)
 
         self.vafs = []
         for index in range(0,4):
@@ -175,33 +174,54 @@ class Position:
             self.vafs.append(self.strandCounts[index]/depth)
 
         # Does this variant fail basic filters?
-        altCount = sum(self.strandCounts[x] for x in range(0,4) if x != refIndex)
+        failedFilters = []
+        self.passedAltAlleles = []
         if depth < minDepth:
-            return False
-        elif altCount < minAltDepth:
-            return False
+            failedFilters.append("LOW_DEPTH")
+        else:
+            tmpAlleles = tuple(self.altAlleles)
+            for allele in tmpAlleles:
 
-        # Pass filters
-        return True
+                index = baseToIndex[allele]
+                # Does this alternate allele fail depth filters
+                if self.strandCounts[index] < minAltDepth:
+                    failedFilters.append("LOW_ALT_SUPPORT")
+                    continue
+
+                # Does this alt allele fail strand bias filters?
+                if self.strandBias[index] < strandBiasThreshold:
+                    failedFilters.append("STRAND_BIAS")
+                    continue
+
+                self.passedAltAlleles.append(allele)
+
+            # There are still alleles left after filtering. The variant has passed filters
+            if len(self.passedAltAlleles) != 0:
+                failedFilters = []
+
+        return failedFilters
 
 
-class PileupManager:
+class PileupEngine:
     """
     Generates a custom pileup using family characteristics
     """
-    def __init__(self, inBAM, refGenome, homopolymerWindow=5, noiseWindow=150, pileupWindow = 1000):
+    def __init__(self, inBAM, refGenome, homopolymerWindow=5, noiseWindow=150, pileupWindow = 1000, printPrefix="PRODUSE-CALL\t"):
         self._inFile=pysam.AlignmentFile(inBAM)
         self._refGenome = Fasta(refGenome, read_ahead=20000)
         self._candidateIndels = []
         self.pileup = {}
         self._clipOverlap = False
         self.candidateVar = {}
+        self.filteredVar = {}
         self._homopolymerWindow = homopolymerWindow
         self._noiseWindow = noiseWindow
         # The number of positions to store before collapsing previous positions
         # Reduce this number to lower memory footprint, but be warned that, if this falls below the length of a read,
         # Some positions may not be tallied correctly
         self._pileupWindow = pileupWindow
+
+        self._printPrefix = printPrefix
 
     def __writeVcfHeader(self, file):
         """
@@ -235,25 +255,38 @@ class PileupManager:
         header.append("\t".join(["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO\n"]))
         file.write(os.linesep.join(header))
 
-    def writeVariants(self, outfile, minMolecules=3, minAltMolecules=2):
+    def filterAndWriteVariants(self, outfile, unfilteredOut=None, minMolecules=3, minAltMolecules=2, strandBiasThreshold=0.05):
+        """
 
+        Filters candidate variants based upon specified characteristics, and writes the output to the output file
+        This is a placeholder for the real filter, which will be developed at a later time
+
+        :param outfile: A string containing a filepath to the output VCF file
+        :param unfilteredOut: A sting containing a filepath to an output VCF file which will contain ALL variants, even those that do not pass filters
+        :param minMolecules: An integer indicating the minimum number of total molecules must cover a position to pass filters
+        :param minAltMolecules: An integer indicating the minimum number of molecules must support a variant for it to pass filters
+        :param strandBiasThreshold: A float representing the strand bias p-value threshold
+        :return:
+        """
+
+        sys.stderr.write(
+            "\t".join([self._printPrefix, time.strftime('%X'), "Filtering Candidate Variants\n"]))
         moleculeTypes = ("DPN", "DPn", "DpN", "Dpn", "SP", "Sp", "SN", "Sn")
-        with open(outfile, "w") as o:
+        with open(outfile, "w") as o, open(unfilteredOut, "w") if unfilteredOut is not None else open(os.devnull, "w") as u:
             self.__writeVcfHeader(o)
+            self.__writeVcfHeader(u)
 
             for chrom in self.candidateVar:
                 for position, stats in self.candidateVar[chrom].items():
 
-                    if stats.ref == "N":
-                        continue  # Don't process positions where the reference base is an "N". TODO: Implement this elsewhere
-
                     try:
-                        passFilter = stats.summarizeVariant(minMolecules, minAltMolecules)
+                        filtersFailed = stats.summarizeVariant(minMolecules, minAltMolecules, strandBiasThreshold)
 
-                        if not passFilter:
-                            continue
-                    except ZeroDivisionError:  # This will be thrown if the "depth" at this position is 0
-                        # This will occur if all the bases which map to a position are "N"s
+                    # A zerodivisionerror will be thrown if the "depth" at this position is 0
+                    # This will occur if all the bases which map to a position are "N"s
+
+                    # A keyerror will occur if the Reference base is not an "A,C,G,T" (i.e. an "N" or "M")
+                    except (ZeroDivisionError, KeyError):
                         continue
 
                     # Does this variant meet the basic filter requirements?
@@ -264,17 +297,29 @@ class PileupManager:
                         x = molecule + "=" + ",".join(str(x) for x in stats.baseCounts[molecule])
                         infoCol.append(x)
 
-                    infoCol.append("MC=" + ",".join(str(x) for x in stats.strandCounts))  # Parental Strand counts
+                    infoCol.append("MC=" + ",".join(str(int(x)) for x in stats.strandCounts))  # Parental Strand counts
                     infoCol.append("STP=" + ",".join(str(x) for x in stats.strandBias))  # Strand bias
                     infoCol.append("PC=" + ",".join(str(x) for x in stats.posMolec))
                     infoCol.append("NC=" + ",".join(str(x) for x in stats.negMolec))
                     infoCol.append("VAF=" + ",".join(str(x) for x in stats.vafs))  # VAF
 
+                    failedFilters = False
+                    if len(filtersFailed) == 0:
+                        filter = "PASS"
+                    else:
+                        filter = ",".join(filtersFailed)
+                        failedFilters = True
 
                     # Add 1 to the position, to compensate for the fact that pysam uses 0-based indexing, while VCF files use 1-based
-                    outLine = "\t".join([chrom, str(position + 1), ".", ",".join(stats.altAlleles), stats.ref, str(stats.maxAltQual), ".", ";".join(infoCol)])
-                    o.write(outLine + os.linesep)
+                    outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(stats.altAlleles), str(stats.maxAltQual), filter, ";".join(infoCol)])
+                    u.write(outLine + os.linesep)
+                    if not failedFilters:
+                        outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(stats.passedAltAlleles),
+                                             str(stats.maxAltQual), filter, ";".join(infoCol)])
+                        o.write(outLine + os.linesep)
 
+        sys.stderr.write(
+            "\t".join([self._printPrefix, time.strftime('%X'), "Variant Calling Complete\n"]))
 
     def cigarToTuple(self, cigarTuples):
         """
@@ -335,9 +380,8 @@ class PileupManager:
 
 
         # Print status messages
-        printPrefix = "PRODUSE-CALL\t"
-        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
-        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Finding Candidate Variants\n"]))
+        sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Starting...\n"]))
+        sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Finding Candidate Variants\n"]))
         readsProcessed = 0
         lastPos = -1
         chrom = None
@@ -355,7 +399,7 @@ class PileupManager:
             # Print out status messages
             readsProcessed += 1
             if readsProcessed % 100000 == 0:
-                sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Reads Processed: %s\n" % readsProcessed]))
+                sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Reads Processed:%s\n" % readsProcessed]))
 
             # Ignore unmapped reads
             if read.is_unmapped:
@@ -504,9 +548,9 @@ class PileupManager:
         for coordinate in posToProcess:
             processWindow(self.pileup[chrom][coordinate], coordinate)
 
-        sys.stderr.write("\t".join(["PRODUSE-CALL\t", time.strftime('%X'), "Reads Processed: " + str(readsProcessed) + "\n"]))
+        sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Reads Processed:" + str(readsProcessed) + "\n"]))
         sys.stderr.write(
-            "\t".join(["PRODUSE-CALL\t", time.strftime('%X'), "Variant Calling Complete\n"]))
+            "\t".join([self._printPrefix, time.strftime('%X'), "Candidate Variants Identified\n"]))
 
 
 def isValidFile(file, parser):
@@ -557,12 +601,16 @@ def validateArgs(args):
     parser.add_argument("-i", "--input", metavar="BAM", required=True, type=lambda x: isValidFile(x, parser),
                         help="Input post-collapse or post-clipoverlap BAM file")
     parser.add_argument("-o", "--output", metavar="VCF", required=True, help="Output VCF file")
+    parser.add_argument("-u", "--unfiltered", metavar="VCF",
+                        help="An additional output VCF file, which lists all candidate variants, including those that failed filters")
     parser.add_argument("-r", "--reference", metavar="FASTA", required=True, type=lambda x: isValidFile(x, parser),
                         help="Reference Genome, in FASTA format")
     parser.add_argument("--min_depth", metavar="INT", type=int, default=3,
                         help="Minimum overall depth required to call a variant")
     parser.add_argument("--min_alt_molecules", metavar="INT", type=int, default=2,
                         help="Minimum number of molecules supporting an alternate allele required to call a variant")
+    parser.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float, default=0.05,
+                        help="Any variants with a strand bias above this threshold will be filtered out")
     validatedArgs = parser.parse_args(listArgs)
     return vars(validatedArgs)
 
@@ -570,13 +618,15 @@ def validateArgs(args):
 parser = argparse.ArgumentParser(description="Identifies and calls variants")
 parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser), help="An optional configuration file which can provide one or more arguments")
 parser.add_argument("-i", "--input", metavar="BAM", type=lambda x: isValidFile(x, parser), help="Input post-collapse or post-clipoverlap BAM file")
-parser.add_argument("-o", "--output", metavar="VCF", help="Output VCF file")
+parser.add_argument("-o", "--output", metavar="VCF", help="Output VCF file, listing all variants which passed filters")
+parser.add_argument("-u", "--unfiltered", metavar="VCF", help="An additional output VCF file, which lists all candidate variants, including those that failed filters")
 parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser), help="Reference Genome, in FASTA format")
 parser.add_argument("--min_depth", metavar="INT", type=int, help="Minimum overall depth required to call a variant")
 parser.add_argument("--min_alt_molecules", metavar="INT", type=int, help="Minimum number of molecules supporting an alternate allele required to call a variant")
+parser.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float, help="Any variants with a strand bias above this threshold will be filtered out")
 
 
-def main(args=None, sysStdin=None):
+def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
     if args is None:
         if sysStdin is None:
             args = parser.parse_args()
@@ -597,11 +647,11 @@ def main(args=None, sysStdin=None):
             exit(1)
 
     args = validateArgs(args)
-    pileup = PileupManager(args["input"], args["reference"])
+    pileup = PileupEngine(args["input"], args["reference"], printPrefix=printPrefix)
 
     # Find candidate variants
     pileup.generatePileup()
-    pileup.writeVariants(args["output"], args["min_depth"], args["min_alt_molecules"])
+    pileup.filterAndWriteVariants(args["output"], args["unfiltered"], args["min_depth"], args["min_alt_molecules"], args["strand_bias_threshold"])
 
 
 if __name__ == "__main__":
