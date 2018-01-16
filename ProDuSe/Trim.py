@@ -36,13 +36,13 @@ def validateArgs(args):
     listArgs = []
     for argument, parameter in args.items():
 
-        if parameter is None or parameter is False  or parameter == "None" or parameter == "False":
+        if parameter is None or parameter is False:
             continue
         # Something was provided as an argument
         listArgs.append("--" + argument)
 
-        # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
-        if parameter == "True":
+        # If the argument is a flag, ignore the boolean, as it will be re-added once the arguments re-parsed
+        if isinstance(parameter, bool):
             continue
 
         # If the parameter is a list, we need to add each element seperately
@@ -52,8 +52,7 @@ def validateArgs(args):
         else:
             listArgs.append(str(parameter))
 
-    global prog
-    parser = argparse.ArgumentParser(description="Trims degenerate barcodes", prog=prog)
+    parser = argparse.ArgumentParser(description="Trims degenerate barcodes")
     parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                         help="An optional configuration file, which can provide one or more arguments")
     parser.add_argument("-i", "--input", metavar="FASTQ", required=True, nargs=2, type=lambda x: isValidFile(x, parser),
@@ -66,20 +65,16 @@ def validateArgs(args):
                         help="Degenerate barcode sequence, represented in IUPAC bases")
     parser.add_argument("-p", "--barcode_position", metavar="0001111111111110", required=True, type=str,
                         help="Positions to consider when comparing expected and actual barcode sequences (1=Yes, 0=No)")
-    parser.add_argument("-v", action="store_true",
+    parser.add_argument("--reverse", action="store_true",
                         help="Instead, output reads which fall outside the mismatch threshold")
-    parser.add_argument("-u", action="store_true", help="Instead, output entries without trimming the adapter sequence")
+    parser.add_argument("--no_trim", action="store_true", help="Instead, output entries without trimming the adapter sequence")
+    parser.add_argument("--trim_other_end", action="store_true",
+                        help="In addition, examine the other end of the read for a barcode. Will not remove partial barcodes")
     validatedargs = parser.parse_args(listArgs)
     return vars(validatedargs)
 
 
-global prog
-if __name__ == "__main__":
-    prog = sys.argv[0]
-else:
-    prog = "produse trim"
-
-parser = argparse.ArgumentParser(description="Trims degenerate barcodes", prog=prog)
+parser = argparse.ArgumentParser(description="Trims degenerate barcodes")
 parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can provide one or more arguments")
 parser.add_argument("-i", "--input", metavar="FASTQ", nargs=2, type=lambda x: isValidFile(x, parser),
@@ -92,11 +87,12 @@ parser.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type
                     help="Degenerate barcode sequence, represented in IUPAC bases")
 parser.add_argument("-p", "--barcode_position", metavar="0001111111111110", type=str,
                     help="Positions to consider when comparing expected and actual barcode sequences (1=Yes, 0=No)")
-parser.add_argument("-v", action="store_true", help="Instead, output reads which fall outside the mismatch threshold")
-parser.add_argument("-u", action="store_true", help="Instead, output entries without trimming the adapter sequence")
+parser.add_argument("--reverse", action="store_true", help="Instead, output reads which fall outside the mismatch threshold")
+parser.add_argument("--no_trim", action="store_true", help="Instead, output entries without trimming the adapter sequence")
+parser.add_argument("--trim_other_end", action="store_true", help="In addition, examine the other end of the read for a barcode. Will not remove partial barcodes")
 
 
-def main(args=None, sysStdin=None):
+def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
     IUPACCodeDict = {
         'A': {'A'},  # Adenine
         'C': {'C'},  # Cytosine
@@ -118,6 +114,25 @@ def main(args=None, sysStdin=None):
         '-': {'.', '-'}  # gap
     }
 
+    compliment = {
+        'A': 'T',
+        'T': 'A',
+        'C': 'G',
+        'G': 'C',
+        'U': 'A',
+        'R': 'Y',
+        'Y': 'R',
+        'S': 'S',
+        'W': 'W',
+        'K': 'M',
+        'M': 'K',
+        'B': 'V',
+        'D': 'H',
+        'H': 'D',
+        'V': 'B',
+        'N': 'N'
+    }
+
     if args is None:
         if sysStdin is None:
             args = parser.parse_args()
@@ -131,7 +146,7 @@ def main(args=None, sysStdin=None):
         config = ConfigObj(args["config"])
         try:
             for argument, parameter in config["trim"].items():
-                if argument in args and not args[argument]:  # Aka this argument is used by trim, and a parameter was not provided at the command line
+                if argument in args and args[argument] is None:  # Aka this argument is used by trim, and a parameter was not provided at the command line
                     args[argument] = parameter
         except KeyError:  # i.e. there is no section named "trim" in the config file
             sys.stderr.write(
@@ -145,20 +160,28 @@ def main(args=None, sysStdin=None):
     if os.path.realpath(args["input"][0]) == os.path.realpath(args["input"][1]):
         parser.error("The input files specified are the same file!")
 
-    # Perform some basic sanity checks
+    # Check that the barcode sequence and mask are the same length
     if len(args["barcode_sequence"]) != len(args["barcode_position"]):
         parser.error("The barcode sequence and barcode mask must be the same length")
+
+    # Just in case someone used lowercase
+    args["barcode_sequence"] = args["barcode_sequence"].upper()
 
     # Make sure the user used IUPAC bases in the barcode sequence
     for base in args["barcode_sequence"]:
         if base not in IUPACCodeDict:
             parser.error("Unrecognized IUPAC base: %s" % base)
-    # Just in case someone used lowercase
-    args["barcode_sequence"] = args["barcode_sequence"].upper()
 
     barcodeLength = len(args["barcode_position"])
     barcodeIndexes = tuple(i for i in range(0, barcodeLength) if args["barcode_position"][i] == "1")
     barcodeBases = tuple(args["barcode_sequence"][i] for i in barcodeIndexes)
+
+    # Obtain the reverse compliment of the barcode, if the other end of the read is to be examined
+    if args["trim_other_end"]:
+        reverseIndexes = tuple(barcodeLength - i - 1 for i in barcodeIndexes)
+        reverseIndexes = reverseIndexes[::-1]
+        reverseBarcode = barcodeBases[::-1]
+        reverseBarcode = tuple(compliment[x] for x in reverseBarcode)
 
     # Check to ensure that the user actually provided positions to be compared
     if len(barcodeIndexes) == 0:
@@ -200,10 +223,10 @@ def main(args=None, sysStdin=None):
     r2qual = None
 
     # Status messages
-    print_prefix = "PRODUSE-TRIM\t"
-    sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Starting...\n"]))
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
     count = 0
     discard = 0
+    discardWarning = False
 
     for line1, line2 in zip(f1in, f2in):
 
@@ -250,16 +273,42 @@ def main(args=None, sysStdin=None):
             # If the mismatch is greater than the mismatch tolerated, "discard" this read by emptying the sequence
             # Unless the option is specified to keep reads which fall outside the mismatch threshold. In which case,
             # do the opposite
-            if (not args["v"] and mismatch > args["max_mismatch"]) or (args["v"] and mismatch < args["max_mismatch"]):
+            if (not args["reverse"] and mismatch > args["max_mismatch"]) or (args["reverse"] and mismatch < args["max_mismatch"]):
                 discard += 2
             else:
                 # Otherwise, the barcode of this read pair is within thresholds
                 # Trim the sequence and quality scores, unless the user has specified otherwise
-                if not args["u"]:
+                if not args["no_trim"]:
                     r1seq = r1seq[barcodeLength:]
                     r2seq = r2seq[barcodeLength:]
                     r1qual = r1qual[barcodeLength:]
                     r2qual = r2qual[barcodeLength:]
+
+
+                # If we are checking the other end of the read for the presence of a barcode, do so now
+                # Note that we do NOT discard reads here
+                if args["trim_other_end"] and not args["no_trim"]:
+                    # Yeah yeah, I know I'm duplicating code. But it's not that much code
+                    # Obtain the candidate reverse barcode sequence
+                    barcode1 =r1seq.rstrip()[-barcodeLength:]  # Ignore the newline
+                    barcode2 = r1seq.rstrip()[-barcodeLength:]
+                    familyBarcode = barcode1 + barcode2
+                    b1pos = tuple(barcode1[i] for i in reverseIndexes)
+                    b2pos = tuple(barcode2[i] for i in reverseIndexes)
+                    # Next,compare these positions to the barcode sequence
+                    mismatch = 0
+                    for b1, b2, bRef in zip(b1pos, b2pos, reverseBarcode):
+                        if b1 not in IUPACCodeDict[bRef]:
+                            mismatch += 1
+                        if b2 not in IUPACCodeDict[bRef]:
+                            mismatch += 1
+
+                    # If the trailing sequence is within the mismatch, assume that is is a barcode, and trim it
+                    if mismatch < args["max_mismatch"]:
+                        r1seq = r1seq.rstrip()[:-barcodeLength] + os.linesep
+                        r2seq = r2seq.rstrip()[:-barcodeLength] + os.linesep
+                        r1qual = r1qual.rstrip()[:-barcodeLength] + os.linesep
+                        r2qual = r2qual.rstrip()[:-barcodeLength] + os.linesep
 
                 # Finally, output these reads
                 f1out.write(r1name)
@@ -275,15 +324,23 @@ def main(args=None, sysStdin=None):
             r1name = None
             r1strand = None
             r1seq = None
+            r1qual = None
             r2name = None
             r2strand = None
             r2seq = None
+            r2qual = None
 
             count += 2
             if count % 100000 == 0:
-                sys.stderr.write("\t".join([print_prefix, time.strftime('%X'),
+
+                sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
                                             "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%",
                                             "Count:" + str(count) + "\n"]))
+                # Check to see if the discard rate is excessive (>70%). If so, the barcode is probably incorrect
+                if float(discard) / float(count) > 0.70 and not discardWarning:
+                    sys.stderr.write("WARNING: The read discard rate is excessively high. Are you sure the barcode sequence is correct?\n")
+                    sys.stderr.write("You can check the barcode using \'adapter_predict\'\n")
+                    discardWarning = True
 
     f1in.close()
     f2in.close()
@@ -292,10 +349,10 @@ def main(args=None, sysStdin=None):
 
     # Final messages
     if count % 100000 != 0:
-        sys.stderr.write("\t".join([print_prefix, time.strftime('%X'),
+        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
                                     "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%",
                                     "Count:" + str(count) + "\n"]))
-    sys.stderr.write("\t".join([print_prefix, time.strftime('%X'), "Trimming Complete\n"]))
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Trimming Complete\n"]))
 
 
 if __name__ == "__main__":
