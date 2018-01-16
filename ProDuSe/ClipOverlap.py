@@ -414,7 +414,7 @@ class ReadIterator:
             if read1CigarClipPoint == 0:
                 read1ClipPoint = None
             else:
-                read1ClipPoint = r1Cigar[r1CigarClipPoint]
+                read1ClipPoint = read1Cigar[read1CigarClipPoint]
             try:
                 read2ClipPoint = read2Cigar[r2CigarIndex]
             except IndexError:
