@@ -34,7 +34,7 @@ setup(
 	"scikit-bio",
         "pyfaidx",
         "pysam",
-	"FisherExact"
+	"fisher"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.4.tar.gz",
     license="GNU GPLv3",
