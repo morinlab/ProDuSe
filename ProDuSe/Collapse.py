@@ -1215,7 +1215,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
         config = ConfigObj(args["config"])
         try:
             for argument, parameter in config["collapse"].items():
-                if argument in args and not args[argument]:  # Aka this argument is used by collapse, and a parameter was not provided at the command line
+                if argument in args and args[argument] is None:  # Aka this argument is used by collapse, and a parameter was not provided at the command line
                     args[argument] = parameter
         except KeyError:  # i.e. there is no section named "collapse" in the config file
             sys.stderr.write(
