@@ -1,3 +1,6 @@
+dist: trusty
+sudo: required
+
 language: python
 python:
     - "3.3"
@@ -6,8 +9,15 @@ python:
     - "3.6"
 
 before_install:
-    - sudo apt-get install -qq samtools
     - sudo apt-get install -qq bwa
+    - wget https://github.com/samtools/samtools/releases/download/1.3.1/samtools-1.3.1.tar.bz2
+    - bzip2 -d samtools-1.3.1.tar.bz2
+    - tar -xf samtools-1.3.1.tar
+    - cd samtools-1.3.1
+    - sudo ./configure
+    - sudo make
+    - sudo make install
+    - cd ..
 
 install: "pip install -r requirements.txt"
 
