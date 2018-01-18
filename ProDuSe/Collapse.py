@@ -1123,7 +1123,7 @@ def validateArgs(args):
         listArgs.append("--" + argument)
 
         # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
-        if parameter == "True":
+        if parameter == "True" or parameter is True:
             continue
         # If the parameter is a list, we need to add each element seperately
         if isinstance(parameter, list):
