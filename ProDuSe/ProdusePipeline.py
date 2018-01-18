@@ -267,7 +267,7 @@ def compareVerNumbers(minVer, currentVer):
     return True
 
 
-def checkCommand(command, versionStr=None, minVer=None):
+def checkCommand(command, path, versionStr=None, minVer=None):
     """
     Ensures the command is installed on the system, and returns the version if it does exist
 
@@ -275,13 +275,14 @@ def checkCommand(command, versionStr=None, minVer=None):
     Otherwise, save and return the version number
 
     :param command: Literal name of the command
+    :param path: A string containing a filepath to the command executable
     :param versionStr: The argument passed to the command to print out the version
     :param minVer: A minimum version number. If specified, the version number of the specified command will be checked
     :returns: The installed version of the specified command
     """
 
     try:
-        runCom = [command]
+        runCom = [path]
         if versionStr:
             runCom.append(versionStr)
         runCheck = subprocess.Popen(runCom, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -309,7 +310,7 @@ def checkCommand(command, versionStr=None, minVer=None):
                 validVer = compareVerNumbers(minVer, currentVer)
                 if not validVer:
                     sys.stderr.write(
-                        "ERROR: The minimum %s version required is %s, but the version provided is %s\n" % (
+                        "ERROR: The minimum version of %s required is %s, but the version provided is %s\n" % (
                             command, minVer, currentVer))
                     exit(1)
 
@@ -665,8 +666,8 @@ def main(args=None, sysStdin=None):
 
     # Next, lets make sure that ProDuSe's dependencies exist, and they meet the minumum version
     # requirements
-    bwaVer = checkCommand("bwa", minVer="0.7.12")
-    samtoolsVer = checkCommand("samtools", minVer="1.3.1")
+    bwaVer = checkCommand("bwa", args["bwa"], minVer="0.7.0")
+    samtoolsVer = checkCommand("samtools", args["samtools"], minVer="1.3.1")
     pythonVer = sys.version
 
     printPrefix = "PRODUSE-MAIN\t"
