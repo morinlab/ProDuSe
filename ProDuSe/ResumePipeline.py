@@ -8,9 +8,9 @@ import argparse
 import os
 import sys
 import multiprocessing
-try:
+try:  # If not installed
     import ProdusePipeline
-except ImportError:
+except ImportError:  # If installed
     from ProDuSe import ProdusePipeline
 
 

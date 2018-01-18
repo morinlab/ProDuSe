@@ -8,7 +8,16 @@ import re
 import time
 import multiprocessing
 from configobj import ConfigObj
-from ProDuSe import Trim, Collapse, ClipOverlap, __version, AdapterPredict, Call
+
+try: # If not installed, this works
+    import Trim
+    import Collapse
+    import ClipOverlap
+    import __version
+    import AdapterPredict
+    import Call
+except ImportError:
+    from ProDuSe import Trim, Collapse, ClipOverlap, __version, AdapterPredict, Call
 
 
 
