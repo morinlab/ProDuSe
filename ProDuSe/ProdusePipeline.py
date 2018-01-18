@@ -131,15 +131,11 @@ def combineArgs(confArgs, args, argMappings):
 
     # Loop through each command line parameter, and if an argument was not provided, parse it from the
     # config file (assuming one was provided there)
-    for paramter, arg in args.items():
+    for parameter, arg in args.items():
 
-        if arg is None:
-            try:
-                group = argMappings[paramter]
-                if paramter in confArgs[group]:
-                    args[paramter] = confArgs[group][paramter]
-            except KeyError:  # If no section containing this paramter is specified in the config file, ignore it
-                continue
+        if arg is None and parameter in confArgs["Pipeline"]:
+            # If this parameter is specified in the config file, add it to the argument groupings
+            args[parameter] = confArgs["Pipeline"][parameter]
 
     return args
 
@@ -558,11 +554,15 @@ def runPipeline(sampleName, sampleDir):
 
     # Run call (variant calling)
     callDone = os.path.join(sampleDir, "config", "Call_Complete")
+    pipelineDone = os.path.join(sampleDir, "config", "Pipeline_Complete")
     if not os.path.exists(callDone):
         callConfig = os.path.join(sampleDir, "config", "call_task.ini")
         callPrintPrefix = "PRODUSE-CALL\t\t" + sampleName
         Call.main(sysStdin=["--config", callConfig], printPrefix=callPrintPrefix)
         open(callDone, "w").close()
+
+        # Mark this sample as fully processed
+        open(pipelineDone, "w").close()
 
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "%s: Pipeline Complete\n" % sampleName.rstrip()]))
 
