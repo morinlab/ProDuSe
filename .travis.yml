@@ -1,6 +1,6 @@
 language: python
 python:
-    - "2.7"
+    - "3.3"
     - "3.4"
     - "3.5"
     - "3.6"
@@ -11,4 +11,4 @@ before_install:
 
 install: "pip install -r requirements.txt"
 
-script: "python ProDuSe/adapter_predict.py -i test/test5/wv_R1.fastq test/test5/wv_R2.fastq"
+script: "python ProDuSe/ProdusePipeline.py -c etc/produse_config.ini"
