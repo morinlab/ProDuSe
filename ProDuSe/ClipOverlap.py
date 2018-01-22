@@ -419,13 +419,19 @@ class ReadIterator:
                 read2ClipPoint = read2Cigar[r2CigarIndex]
             except IndexError:
                 read2ClipPoint = None
-            if read1ClipPoint == 1 or read1ClipPoint == 2:
-                # If the clip point of both reads is an INDEL, don;t clip them....
-                if read2ClipPoint == 1 or read2ClipPoint == 2:
-                    return  # This could be handled better, but there are only so many edge cases I can realistically deal with
-                self._trimR1 = False
-            elif read2ClipPoint == 1 or read2ClipPoint == 2:
+            if read2ClipPoint == 1 or read2ClipPoint == 2:
+                # If the clip point of both reads is an INDEL, trim back read 1 until there is no longer an indel
+                if read1ClipPoint == 2:  # Simplest case. Trim back the deletion
+                    while read1ClipPoint == 2:
+                        read1ClipPoint -= 1
+                elif read1ClipPoint == 1: # Trim back the insertion
+                    while read1ClipPoint == 1:
+                        read1ClipPoint -= 1
+                        read1SeqClipPoint -= 1
+
                 self._trimR1 = True
+            elif read1ClipPoint == 1 or read1ClipPoint == 2:
+                self._trimR1 = False
 
             consensusSeq = "".join(consensusSeq)
 
