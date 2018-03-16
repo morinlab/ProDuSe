@@ -409,11 +409,16 @@ def checkIndexes(refFasta, bwaExec, samtoolsExec, outDir):
             else:
                 sys.stderr.write(line)
 
+        bwaRun.wait()
         if bwaRun.returncode != 0:
-            raise subprocess.CalledProcessError
+            raise subprocess.CalledProcessError(" ".join(bwaCommand), bwaRun.returncode)
 
     if hasFastaIndex:
-        os.symlink(refFasta + ".fai", refDir)
+        # Some versions of BWA create this
+        try:
+            os.symlink(refFasta + ".fai", refDir)
+        except FileExistsError:
+            pass
     else:
         samtoolsCom = [samtoolsExec, "faidx", newRefFasta]
         subprocess.check_call(samtoolsCom)
@@ -709,6 +714,7 @@ def main(args=None, sysStdin=None):
 
     # Setup each sample
     samplesToProcess = {}
+    barcodeWarned = False
     for sample, sampleArgs in samples.items():
         # Override the existing arguments with any sample-specific arguments
         runArgs = args.copy()
@@ -733,16 +739,19 @@ def main(args=None, sysStdin=None):
         # If a barcode was not specified, estimate it using adapter_predict
         # Note that this will end catastrophically if the sample is multiplexed
         if runArgs["barcode_sequence"] is None:
+            if not barcodeWarned:
+                sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Predicting Barcode Sequences...\n"]))
+                barcodeWarned = True
             adapterPredictArgs = ["--max_barcode_length", str(len(runArgs["barcode_position"])), "--input"]
             adapterPredictArgs.extend(runArgs["fastqs"])
             runArgs["barcode_sequence"] = AdapterPredict.main(sysStdin=adapterPredictArgs, supressOutput=True)
             # Check if the resulting barcode is garbage
             if set(runArgs["barcode_sequence"]) == {"N"}:
-                sys.stderr.write("WARNING: Unable to predict barcode for \'%s\'. Skipping..." % runArgs["sample"])
+                sys.stderr.write("WARNING: Unable to predict barcode sequence for \'%s\'. Skipping..." % runArgs["sample"])
                 continue
             elif "N" in runArgs["barcode_sequence"]:  # TODO: Improve this estimate
                 sys.stderr.write("WARNING: The barcode sequence predicted for \'%s\' is quite broad\n" % sample)
-                sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the resulting analysis will include both samples\n")
+                sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the resulting analysis will merge those samples\n")
 
         # Configure the output directories and config files for this sample
         sampleDir = configureOutput(sample, runArgs, baseOutDir, argsToPipelineComponent)

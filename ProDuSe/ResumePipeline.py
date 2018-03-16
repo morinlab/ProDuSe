@@ -8,9 +8,9 @@ import argparse
 import os
 import sys
 import multiprocessing
-try:  # If not installed
+try:
     import ProdusePipeline
-except ImportError:  # If installed
+except ImportError:
     from ProDuSe import ProdusePipeline
 
 
@@ -32,7 +32,7 @@ def isValidDir(dir, parser):
 def getArgs(stdin):
 
     parser = argparse.ArgumentParser(description="Resumes analysis of a previously terminated Pipeline")
-    parser.add_argument("-d", "--produse_dir", type=lambda x: isValidDir(x, parser), help="An existing output directory for ProDuSe analysis")
+    parser.add_argument("-d", "--produse_dir", type=lambda x: isValidDir(x, parser), required=True, help="An existing output directory for ProDuSe analysis")
     parser.add_argument("-j", "--jobs", metavar="INT", default=1, type=int, help="Number of samples to process in parallel")
     if stdin is None:
         return parser.parse_args()
