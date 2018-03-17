@@ -7,6 +7,7 @@ import subprocess
 import re
 import time
 import multiprocessing
+from packaging import version
 from configobj import ConfigObj
 
 try: # If not installed, this works
@@ -239,34 +240,6 @@ def checkArgs(rawArgs):
     return vars(validatedArgs)
 
 
-def compareVerNumbers(minVer, currentVer):
-    #  Compare version numbers
-    minVerTypes = minVer.split(".")
-    realVerTypes = currentVer.split(".")
-    i = 0
-    while True:
-
-        if int(minVerTypes[i]) > int(realVerTypes[i]):
-            return False
-        elif int(minVerTypes[i]) < int(realVerTypes[i]):
-            break
-
-        i += 1
-        if i == len(realVerTypes):
-            if i == len(minVerTypes):
-                # The version numbers are equivelent
-                break
-            else:
-                # The current version is older
-                return False
-
-        elif i == len(minVerTypes):
-            # The version numbers are at least equivelent
-            break
-        # Otherwise, check the next version number instance
-    return True
-
-
 def checkCommand(command, path, versionStr=None, minVer=None):
     """
     Ensures the command is installed on the system, and returns the version if it does exist
@@ -307,8 +280,7 @@ def checkCommand(command, path, versionStr=None, minVer=None):
             # Check version number, if specified
             if minVer:
 
-                validVer = compareVerNumbers(minVer, currentVer)
-                if not validVer:
+                if version.parse(minVer) > version.parse(currentVer):
                     sys.stderr.write(
                         "ERROR: The minimum version of %s required is %s, but the version provided is %s\n" % (
                             command, minVer, currentVer))
