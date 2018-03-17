@@ -2,5 +2,7 @@ sortedcontainers
 configobj
 scikit-bio
 pyfaidx
-pysam
+pysam==0.13.0
+packaging
+sklearn
 fisher
