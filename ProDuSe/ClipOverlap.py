@@ -5,6 +5,7 @@ import os
 import sys
 import pysam
 from configobj import ConfigObj
+from packaging import version
 import time
 
 
@@ -664,6 +665,11 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CLIPOVERLAP"):
     inBAM = pysam.AlignmentFile(args["input"])  # Pysam claims to auto-detect the input format
 
     # Add this command (clipoverlap) to the BAM header
+    # As of pysam V0.14.0, the header is now managed using an AlignmentHeader class.
+    # Thus, support both approaches (when the API for AlignmentHeaders is listed!!!)
+    if version.parse(pysam.__version__) >= version.parse("0.14.0"):
+        raise NotImplementedError("Pysam version 0.14.0 and above are currently not supported.")
+
     header = inBAM.header
     if "PG" not in header:
         header["PG"] = []
