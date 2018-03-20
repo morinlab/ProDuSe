@@ -17,15 +17,13 @@ setup(
     name='ProDuSe',
     version=version,
     description='Process Duplex Sequence Data',
-    author='Marco Albuquerque',
-    author_email='malbuque@sfu.ca',
-    maintainer='Christopher Rushton',
-    maintainer_email='ckrushto@sfu.ca',
+    author='Christopher Rushton',
+    author_email='ckrushto@sfu.ca',
     include_package_data=True,
     packages=["ProDuSe"],
     url='https://github.com/morinlab/ProDuSe',
     classifiers=[
-       "Programming Language :: Python :: 2.7"
+       "Programming Language :: Python :: 3"
        ],
     setup_requires=["numpy"],
     install_requires=[
