@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 import sys
-from ProDuSe import ProdusePipeline, Trim, Collapse, AdapterPredict, ClipOverlap, ResumePipeline, Call
+from ProDuSe import ProdusePipeline, Trim, Collapse, AdapterPredict, ClipOverlap, ResumePipeline, Call, Train, UpdateConfig
 
 def usage():
     """
@@ -15,13 +15,15 @@ def usage():
     sys.stdout.write("Usage:\tproduse <command> [options]\n")
     sys.stdout.write("\n")
     sys.stdout.write("Commands:\n")
+    sys.stdout.write("update_config\tUpdates an older ProDuSe configuration file\n")
     sys.stdout.write("adapter_predict\tIdentifies the degerate barcode used in a set of FASTQ files\n")
-    sys.stdout.write("run_produse\tRuns all steps of the ProDuSe pipeline listed below\n")
+    sys.stdout.write("run_produse\tRuns all stages of the ProDuSe Pipeline\n")
     sys.stdout.write("resume_produse\tResumes a previous terminated \"run_produse\"\n")
     sys.stdout.write("trim\t\tRemoves barcodes from FASTQ files\n")
-    sys.stdout.write("clip\t\tClips bases which overlap in both the forward and reverse reads in paired-end sequencing\n")
-    sys.stdout.write("collapse\tIdentifies duplicates,and merges duplicates into a consensus\n")
+    sys.stdout.write("clip\t\tSoft-clips redundant bases which overlap within a read pair in paired-end sequencing\n")
+    sys.stdout.write("collapse\tIdentifies duplicates, and merges duplicates into a consensus\n")
     sys.stdout.write("call\t\tIdentifies variants\n")
+    sys.stdout.write("train\t\tTrains the variant calling filter using a set of validated variants\n")
     sys.stdout.write("\n")
     exit(1)
 
@@ -37,6 +39,8 @@ def main(args):
 
     if command == "adapter_predict":
          AdapterPredict.main(sysStdin=args[2:])
+    elif command == "update_config":
+        UpdateConfig.main(sysStdin=args[2:])
     elif command == "run_produse":
         ProdusePipeline.main(sysStdin=args[2:])
     elif command == "resume_produse":
@@ -49,6 +53,8 @@ def main(args):
         ClipOverlap.main(sysStdin=args[2:])
     elif command == "call":
         Call.main(sysStdin=args[2:])
+    elif command == "train":
+        Train.main(sysStdin=args[2:])
     else:
         sys.stdout.write("Unrecognized Command: %s\n" % command)
         usage()
