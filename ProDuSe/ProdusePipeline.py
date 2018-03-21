@@ -21,7 +21,6 @@ except ImportError:
     from ProDuSe import Trim, Collapse, ClipOverlap, __version, AdapterPredict, Call
 
 
-
 def isValidFile(file, parser, default=None):
     """
     Checks to ensure the provided file is exists, and throws an error if it is not.
@@ -130,13 +129,12 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     return samplePath
 
 
-def combineArgs(confArgs, args, argMappings):
+def combineArgs(confArgs, args):
     """
     Merges arguments specified in the config file with those parsed from the command line
 
     :param confArgs: A dictionary listing arguments parsed from the configuration file
     :param args: A Namespace object containing command line paramters
-    :param argMapping: A dictionary mapping each parameter in args to the name of a group in confArgs
     """
 
     # Loop through each command line parameter, and if an argument was not provided, parse it from the
@@ -191,7 +189,7 @@ def checkArgs(rawArgs):
     parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
                         help="If multiple samples are specified (using \'-sc\'), how many samples will be processed in parallel")
     inputFiles = parser.add_mutually_exclusive_group(required=True)
-    inputFiles.add_argument("-f", "--fastqs", metavar="FASTQ", default=None, nargs=2,
+    inputFiles.add_argument("--fastqs", metavar="FASTQ", default=None, nargs=2,
                             type=lambda x: isValidFile(x, parser), help="Two paired end FASTQ files")
     inputFiles.add_argument("-sc", "--sample_config", metavar="INI", default=None,
                             type=lambda x: isValidFile(x, parser),
@@ -230,9 +228,8 @@ def checkArgs(rawArgs):
                               help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
     callArgs = parser.add_argument_group("Arguments used when calling variants")
-    callArgs.add_argument("--min_depth", metavar="INT", type=int, help="Minimum overall depth required to call a variant")
-    callArgs.add_argument("--min_alt_molecules", metavar="INT", type=int,
-                        help="Minimum number of molecules supporting an alternate allele required to call a variant")
+    callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser), required=True,
+                          help="A python pickle containing a trained Random Forest variant filter")
     callArgs.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float,
                           help="Any variants with a strand bias above this threshold will be filtered out")
 
@@ -557,7 +554,7 @@ def runPipeline(sampleName, sampleDir):
 parser = argparse.ArgumentParser(description="Runs all stages of the ProDuSe pipeline on the designated samples")
 parser.add_argument("-c", "--config", metavar="INI", default=None, type=lambda x: isValidFile(x, parser),
                     help="A configuration file, specifying one or more arguments. Overriden by command line parameters")
-parser.add_argument("-f", "--fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
+parser.add_argument("--fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
                     help="Two paired end FASTQ files")
 parser.add_argument("-d", "--outdir", metavar="DIR", help="Output directory for analysis directory")
 parser.add_argument("-r", "--reference", metavar="FASTA",
@@ -596,9 +593,8 @@ collapseArgs.add_argument("--tag_family_members", action="store_true",
                           help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
 callArgs = parser.add_argument_group("Arguments used when calling variants")
-callArgs.add_argument("--min_depth", metavar="INT", type=int, help="Minimum overall depth required to call a variant")
-callArgs.add_argument("--min_alt_molecules", metavar="INT", type=int, help="Minimum number of molecules supporting an alternate allele required to call a variant")
 callArgs.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float, help="Any variants with a strand bias above this threshold will be filtered out")
+callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x:isValidFile(x, parser), help="A python pickle containing a trained Random Forest variant filter")
 
 # For config parsing purposes, assign each parameter to the pipeline component from which it originates
 argsToPipelineComponent = {
@@ -616,8 +612,7 @@ argsToPipelineComponent = {
     "duplex_mismatch": ["collapse"],
     "targets": ["collapse", "call"],
     "tag_family_members": ["collapse"],
-    "min_depth": ["call"],
-    "min_alt_molecules": ["call"],
+    "filter" : ["call"],
     "strand_bias_threshold": ["call"]
 }
 
@@ -635,7 +630,7 @@ def main(args=None, sysStdin=None):
     confArgs = None
     if args["config"] is not None:
         confArgs = ConfigObj(args["config"])
-        args = combineArgs(confArgs, args, argsToPipelineComponent)
+        args = combineArgs(confArgs, args)
 
     # Next, ensure that required parameters were provided, and they are of the correct type
     # This is done here so that parameters passed from the config file can also be checked
