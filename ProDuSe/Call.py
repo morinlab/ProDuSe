@@ -1426,7 +1426,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
     pileup.generatePileup()
 
     # Filter variants
-    with open(args["model"], "r+b") as o:
+    with open(args["filter"], "r+b") as o:
         filterModel = pickle.load(o)
     pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["strand_bias_threshold"])
 
