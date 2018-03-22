@@ -1,12 +1,12 @@
-
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>ProDuSe: Process Duplex Sequence data &#8212; ProDuSe 0.2.3 documentation</title>
+    <title>ProDuSe: Process Duplex Sequence data &#8212; ProDuSe 0.9.1 documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
-        VERSION:     '0.2.3',
+        VERSION:     '0.9.1',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true,
@@ -26,9 +26,9 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Quick Start" href="Quick Start.html" /> 
+    <link rel="next" title="Quick Start" href="Quick_Start.html" /> 
   </head>
-  <body>
+  <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -36,9 +36,9 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="Quick Start.html" title="Quick Start"
+          <a href="Quick_Start.html" title="Quick Start"
              accesskey="N">next</a> |</li>
-        <li class="nav-item nav-item-0"><a href="#">ProDuSe 0.2.3 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="#">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -55,8 +55,8 @@
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Authors:</th><td class="field-body"><div class="first last line-block">
-<div class="line">Marco Albuquerque</div>
 <div class="line">Christopher Rushton</div>
+<div class="line">Marco Albuquerque</div>
 </div>
 </td>
 </tr>
@@ -69,38 +69,41 @@
 </tbody>
 </table>
 </div></blockquote>
-<p>ProDuSe is a Python command-line variant caller designed for use on Illumina sequencing data obtained from libraries constructing using barcoded adapters. Using these adapters,
-read duplicates are identified and collapsed into a single consensus sequence, correcting PCR and sequencing errors. In samples with a high duplication rate, this allows extremely rare
-variants be be called confidently.</p>
+<p>ProDuSe is a variant caller designed for use with libraries prepared and sequenced using <a class="reference external" href="How_ProDuSe_Works.html">semi-degenerate barcoded adapters</a>. These
+barcodes allow PCR and optical duplicates which were derived from the same starting molecule to be flagged and merged into a single
+consensus sequence. The addition of a strand-specific tag also allows molecules which are derived from different parental strands
+to be flagged, allowing variants at extremely low frequency (VAF~=0.1%) to be called confidently.</p>
 </div>
 <div class="section" id="quick-links">
 <h1>Quick Links<a class="headerlink" href="#quick-links" title="Permalink to this headline">¶</a></h1>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="Quick Start.html">Quick Start</a></li>
-<li class="toctree-l1"><a class="reference internal" href="The ProDuSe Pipeline.html">The ProDuSe Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Quick_Start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="The_ProDuSe_Pipeline.html">The ProDuSe Pipeline</a></li>
 </ul>
 </div>
 </div>
-<div class="section" id="produse-commands">
-<h1>ProDuSe Commands<a class="headerlink" href="#produse-commands" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="main-commands">
+<h1>Main Commands<a class="headerlink" href="#main-commands" title="Permalink to this headline">¶</a></h1>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="Config.html">Config</a></li>
+<li class="toctree-l1"><a class="reference internal" href="run_produse.html">Run_ProDuSe</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adapter_predict.html">Adapter Predict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="Trim.html">Trim</a></li>
-<li class="toctree-l1"><a class="reference internal" href="bwa.html">bwa</a></li>
 <li class="toctree-l1"><a class="reference internal" href="Collapse.html">Collapse</a></li>
-<li class="toctree-l1"><a class="reference internal" href="SplitMerge.html">SplitMerge</a></li>
-<li class="toctree-l1"><a class="reference internal" href="snv.html">SNV</a></li>
-<li class="toctree-l1"><a class="reference internal" href="Filter.html">Filter</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ClipOverlap.html">ClipOverlap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ClipOverlap.html#description">Description</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ClipOverlap.html#additional-info">Additional Info</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Call.html">Call</a></li>
 </ul>
 </div>
 </div>
-<div class="section" id="other-commands">
-<h1>Other Commands<a class="headerlink" href="#other-commands" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="additional-commands">
+<h1>Additional Commands<a class="headerlink" href="#additional-commands" title="Permalink to this headline">¶</a></h1>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="Adapter Predict.html">Adapter Predict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="update_config.html">Update_Config</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Train.html">Train</a></li>
 </ul>
 </div>
 </div>
@@ -108,6 +111,8 @@ variants be be called confidently.</p>
 <h1>Additional Links<a class="headerlink" href="#additional-links" title="Permalink to this headline">¶</a></h1>
 <div class="toctree-wrapper compound">
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="How_ProDuSe_Works.html">How ProDuSe Works</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Config_Files.html">Config Files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="License.html">License</a></li>
 </ul>
 </div>
@@ -123,13 +128,13 @@ variants be be called confidently.</p>
   <ul>
 <li><a class="reference internal" href="#">ProDuSe: Process Duplex Sequence data</a></li>
 <li><a class="reference internal" href="#quick-links">Quick Links</a></li>
-<li><a class="reference internal" href="#produse-commands">ProDuSe Commands</a></li>
-<li><a class="reference internal" href="#other-commands">Other Commands</a></li>
+<li><a class="reference internal" href="#main-commands">Main Commands</a></li>
+<li><a class="reference internal" href="#additional-commands">Additional Commands</a></li>
 <li><a class="reference internal" href="#additional-links">Additional Links</a></li>
 </ul>
 
   <h4>Next topic</h4>
-  <p class="topless"><a href="Quick Start.html"
+  <p class="topless"><a href="Quick_Start.html"
                         title="next chapter">Quick Start</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
@@ -159,14 +164,14 @@ variants be be called confidently.</p>
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="Quick Start.html" title="Quick Start"
+          <a href="Quick_Start.html" title="Quick Start"
              >next</a> |</li>
-        <li class="nav-item nav-item-0"><a href="#">ProDuSe 0.2.3 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="#">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
-        &#169; Copyright 2017, Christopher Rushton.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.2.
+        &#169; Copyright 2018, Christopher Rushton.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
     </div>
   </body>
 </html>

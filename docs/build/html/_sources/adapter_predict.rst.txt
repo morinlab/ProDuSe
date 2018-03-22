@@ -1,7 +1,7 @@
 Adapter Predict
 ===============
 
-Predicts the barcoded adapter sequence range used in a given file
+Predicts the barcoded adapter sequence range used in a given file.
 
 Run Using
 ^^^^^^^^^
@@ -17,18 +17,18 @@ or
     python /path/to/ProDuSe/ProDuSe/adapter_predict.py
 
 
-Paramters
-^^^^^^^^^
+Parameters
+^^^^^^^^^^
 
     :-i --input:
-        Paired fastq files. Two files must be specified to this argument.
+        Paired fastq files. Two files must be specified in this argument.
     :-m --max_adapter_length:
-        Limit the adapter sequence position to this length
+        Limit the adapter sequence prediction to this length
 
 Additional Considerations
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. warning:: Ensure your samples are de-multiplexed prior to running Adapter Predict. The adapter sequence is estimated from ALL reads in the fastq files.
+.. warning:: Ensure your samples are de-multiplexed prior to running Adapter Predict. The adapter sequence is predicted from ALL reads in the fastq files.
 
 
 

@@ -1,0 +1,307 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Run_ProDuSe &#8212; ProDuSe 0.9.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.9.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Adapter Predict" href="adapter_predict.html" />
+    <link rel="prev" title="The ProDuSe Pipeline" href="The_ProDuSe_Pipeline.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="adapter_predict.html" title="Adapter Predict"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="The_ProDuSe_Pipeline.html" title="The ProDuSe Pipeline"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="run-produse">
+<h1>Run_ProDuSe<a class="headerlink" href="#run-produse" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Permalink to this headline">¶</a></h2>
+<p>Wrapper script which runs each step of the ProDuSe Pipeline sequentially on each sample. Can process multiple samples simultaneously.</p>
+</div>
+<div class="section" id="run-using">
+<h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">run_produse</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProdusePipeline</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Permalink to this headline">¶</a></h2>
+<p>General Parameters for running analysis</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">-c, &#8211;config:</th><td class="field-body">An INI configuration file, which can specify any of the following
+arguments. Any arguments passed at the command line override those specified in the configuration file, which override defaults.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">&#8211;fastqs:</th><td class="field-body">A pair of filepaths to a set of paired-end FASTQ files. Mutually
+exclusive with -sc&#8211;sample_config.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-sc, &#8211;sample_config:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">An INI configuration file, specifying one or more samples to analyze. This file can also provide sample-specific arguments.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">-d, &#8211;outdir:</th><td class="field-body">Base output directory for intermediate files and results.
+&#8211;directory_name will be created inside this directory. Default is the
+current working directory.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-r, &#8211;reference:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">A filepath to a reference genome FASTA file. Ideally, BWA and .fai
+indexes should be present in the same directory. If they are not, they
+will be generated automatically.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">-j, &#8211;jobs:</th><td class="field-body">Number of samples to analyze in parallel. Use 0 or a negative number to
+process as many samples as possible simultaneously. Default is 1.</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>Additional Analysis Parameters</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">&#8211;bwa:</th><td class="field-body">A filepath to a bwa executable. Default is $(which bwa).</td>
+</tr>
+<tr class="field-even field"><th class="field-name">&#8211;samtools:</th><td class="field-body">A filepath to a samtools executable. Default is $(which samtools)</td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">&#8211;directory_name:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Name of the directory to create inside -d/&#8211;outdir to store intermediate files and results. Default is &#8220;produse_analysis_directory&#8221;.</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">&#8211;append_to_directory:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">If &#8211;directory_name already exists inside -d/&#8211;outdir, place the intermediate files and results for this analysis inside this directory. If any samples have the same name as those inside &#8211;directory_name, they will not be analyzed.</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>Barcode Trimming Parameters</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">-b, &#8211;barcode_sequence:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">The sequence of the degenerate barcode, specified in IUPAC bases.</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-p, &#8211;barcode_position:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Positions in the -b/&#8211;barcode sequence to use when comparing expected and actual barcode sequences (1=Yes, 0=No). The entire barcode will still be trimmed, regardless of which positions are flagged with 0.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-mm, &#8211;max_mismatch:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Maximum number of positions (specified using -p/&#8211;barcode_position) which can fall outside the expected degeneracy range before the read pair is discarded. This is the total between both the forward and reverse read.</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">&#8211;trim_other_end:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Examine the end of the read for the presence of a barcode (for example, in the case of read-through). Will not remove partial barcodes</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>Family Collapsing Parameters</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name" colspan="2">-fm, &#8211;family_mask:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Barcode positions to consider when determining if two reads are members of the same family (1=Yes, 0=No).</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-fmm, &#8211;family_mismatch:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Maximum number of mismatched positions (specified using -fm/&#8211;family_mask) permitted before two reads are considered members of different families.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dm, &#8211;duplex_mask:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Barcode positions to consider when determining if two families are in duplex (1=Yes, 0=No).</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-dmm, &#8211;duplex_max_mismatch:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Maximum number of mismatched positions (specified using -dm/&#8211;duplex_mask) permitted before two families are not considered a duplex</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">-t, &#8211;targets:</th><td class="field-body">A filepath to a BED file listing the capture regions of interest. Read pairs that do not overlap these positions will be discarded</td>
+</tr>
+<tr class="field-even field"><th class="field-name" colspan="2">&#8211;tag_family_members:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Store the name of each read incorporated into a family in the read tag &#8220;Zm&#8221;</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>Filtering Parameters</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">-f, &#8211;filter:</th><td class="field-body">A filepath to a pickled Random Forest Classifier, used to filter variants. Can be generated using &#8216;produse train&#8217;</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">If no -b/&#8211;barcode is specified for one or more samples, adapter_predict will be run on those samples automatically</p>
+</div>
+</div>
+<div class="section" id="pipeline-stages">
+<h2>Pipeline Stages<a class="headerlink" href="#pipeline-stages" title="Permalink to this headline">¶</a></h2>
+<p>This command will run the following stages of the ProDuSe Pipeline sequentially on each sample:</p>
+<blockquote>
+<div><ul class="simple">
+<li>adapter_predict (Estimates the degenerate barcode sequence, only run if no barcode is specified)</li>
+<li>Trim (Trim Barcodes)</li>
+<li>Align reads to reference (Burrows-Wheeler Aligner)</li>
+<li>Collapse (Identify and merge duplicate reads into a consensus)</li>
+<li>ClipOverlap (Identifies positions which overlap between read pairs, and generates a consensus)</li>
+<li>Call (Flag and filter variants)</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="configuration-files">
+<h2>Configuration Files<a class="headerlink" href="#configuration-files" title="Permalink to this headline">¶</a></h2>
+<p>In lieu of specifying all arguments at the command line, arguments can be specified in <strong>either</strong> the sample configuration file,
+or the main produse configuration file. This approach is recommended, as it improves reproducibility between runs.</p>
+<p>If a single argument is specified multiple times, the following orders of precedence apply:</p>
+<ol class="arabic simple">
+<li>-sc/&#8211;sample_config file</li>
+<li>Command line</li>
+<li>-c/&#8211;config file</li>
+</ol>
+<p>Arguments specified in the -sc/&#8211;sample_config file only apply to the specified sample.
+More information on configuration files can be viewed here.</p>
+</div>
+<div class="section" id="directory-layout">
+<h2>Directory Layout<a class="headerlink" href="#directory-layout" title="Permalink to this headline">¶</a></h2>
+<p>When run_produse is called, it creates a directory structure for each sample inside of &#8211;directory_name, as follows:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">directory_name</span>
+        <span class="n">Sample_Name</span>
+                <span class="n">config</span>
+                <span class="n">tmp</span>
+                <span class="n">results</span>
+        <span class="n">ProDuSe_Task</span><span class="o">.</span><span class="n">log</span>
+</pre></div>
+</div>
+<p>The contents of each folder are as follows:</p>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">config:</th><td class="field-body">Stores configuration files for each step of the pipeline, and files indicating when a pipeline stage is complete</td>
+</tr>
+<tr class="field-even field"><th class="field-name">tmp:</th><td class="field-body">Stores intermediate files (ex. Trimmed FASTQ files, raw BAM files)</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">results:</th><td class="field-body">Stores the final BAM file and variant calls</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<p>All parameters used to run a given instance, as well as software versions, are specified in ProDuSe_Task.log</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Run_ProDuSe</a><ul>
+<li><a class="reference internal" href="#purpose">Purpose</a></li>
+<li><a class="reference internal" href="#run-using">Run Using</a></li>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
+<li><a class="reference internal" href="#pipeline-stages">Pipeline Stages</a></li>
+<li><a class="reference internal" href="#configuration-files">Configuration Files</a></li>
+<li><a class="reference internal" href="#directory-layout">Directory Layout</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="The_ProDuSe_Pipeline.html"
+                        title="previous chapter">The ProDuSe Pipeline</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="adapter_predict.html"
+                        title="next chapter">Adapter Predict</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/run_produse.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="adapter_predict.html" title="Adapter Predict"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="The_ProDuSe_Pipeline.html" title="The ProDuSe Pipeline"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2018, Christopher Rushton.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+    </div>
+  </body>
+</html>

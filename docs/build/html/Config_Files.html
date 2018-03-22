@@ -1,0 +1,167 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Configuration Files &#8212; ProDuSe 0.9.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.9.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="License" href="License.html" />
+    <link rel="prev" title="How ProDuSe Works" href="How_ProDuSe_Works.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="License.html" title="License"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="How_ProDuSe_Works.html" title="How ProDuSe Works"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="configuration-files">
+<h1>Configuration Files<a class="headerlink" href="#configuration-files" title="Permalink to this headline">¶</a></h1>
+<p>Most ProDuSe commands allow arguments to be specified using a configuration INI file. In most cases, this is a much more convinient
+method of specifying arguments if ProDuSe is to be run multiple times. While you can view more detailed info on <a class="reference external" href="http://www.voidspace.org.uk/python/configobj.html#the-config-file-format">config files here</a>,
+a brief overview will be described here.</p>
+<div class="section" id="standard-config-files">
+<h2>Standard Config Files<a class="headerlink" href="#standard-config-files" title="Permalink to this headline">¶</a></h2>
+<p>All config files provided to produse commands (using -c/&#8211;config) use the following format:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Script_Name</span><span class="p">]</span>
+<span class="n">argument</span><span class="o">=</span><span class="n">parameter</span>
+<span class="n">argument2</span><span class="o">=</span><span class="n">parameter2</span>
+</pre></div>
+</div>
+<p>Where Script_Name is the name of the tool which will use those arguments, with the arguments listed in the section below. Short form argument
+names are not supported.</p>
+<p>Note that config file sections and arguments not relevent to a given tool will safely be ignored, so it is possible to merge config files:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Trim</span><span class="p">]</span>
+<span class="n">barcode_sequence</span><span class="o">=</span><span class="n">NNNWTWYYT</span>
+<span class="n">max_mismatch</span><span class="o">=</span><span class="mi">3</span>
+
+<span class="p">[</span><span class="n">Pipeline</span><span class="p">]</span>
+<span class="n">reference</span><span class="o">=</span><span class="n">genome</span><span class="o">.</span><span class="n">fa</span>
+</pre></div>
+</div>
+<p>A demo sample configuration file can be obtained <a class="reference external" href="https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini">here</a></p>
+</div>
+<div class="section" id="sample-configuration-files">
+<h2>Sample Configuration Files<a class="headerlink" href="#sample-configuration-files" title="Permalink to this headline">¶</a></h2>
+<p>When running multiple samples uing <a class="reference external" href="run_produse.html">run_produse</a>, a special sample configuration file is specified instead:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Sample_Name</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">some</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R1</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span><span class="p">,</span><span class="o">/</span><span class="n">some</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R2</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span>
+
+<span class="p">[</span><span class="n">Sample_Name_2</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">some</span><span class="o">/</span><span class="n">other</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R1</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span><span class="p">,</span><span class="o">/</span><span class="n">some</span><span class="o">/</span><span class="n">other</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R2</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span>
+</pre></div>
+</div>
+<p>Where Sample_Name is the name used for that sample (this is prepended to all intermediate and output files). Any parameters supported by <a class="reference external" href="run_produse.html">run_produse</a>
+can be specified, and will be used for that sample <strong>only</strong>. For instance:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Sample_Name_1</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">some</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R1</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span><span class="p">,</span><span class="o">/</span><span class="n">some</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R2</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span>
+<span class="n">reference</span><span class="o">=</span><span class="n">GRCh37</span><span class="o">.</span><span class="n">fa</span>
+
+<span class="p">[</span><span class="n">Sample_Name_2</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">some</span><span class="o">/</span><span class="n">other</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R1</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span><span class="p">,</span><span class="o">/</span><span class="n">some</span><span class="o">/</span><span class="n">other</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R2</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span>
+<span class="n">reference</span><span class="o">=</span><span class="n">GRCh38</span><span class="o">.</span><span class="n">fa</span>
+</pre></div>
+</div>
+<p>GRCh37 will be used as the reference genome for Sample 1, while GRCh38 will be used for sample 2. <a class="reference external" href="https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini">Click here to view a demo sample config file</a></p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Configuration Files</a><ul>
+<li><a class="reference internal" href="#standard-config-files">Standard Config Files</a></li>
+<li><a class="reference internal" href="#sample-configuration-files">Sample Configuration Files</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="How_ProDuSe_Works.html"
+                        title="previous chapter">How ProDuSe Works</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="License.html"
+                        title="next chapter">License</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/Config_Files.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="License.html" title="License"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="How_ProDuSe_Works.html" title="How ProDuSe Works"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2018, Christopher Rushton.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+    </div>
+  </body>
+</html>

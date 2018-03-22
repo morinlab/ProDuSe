@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Adapter Predict &#8212; ProDuSe 0.9.1 documentation</title>
+    <title>Update_Config &#8212; ProDuSe 0.9.1 documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -26,8 +26,8 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Trim" href="Trim.html" />
-    <link rel="prev" title="Run_ProDuSe" href="run_produse.html" /> 
+    <link rel="next" title="Train" href="Train.html" />
+    <link rel="prev" title="Call" href="Call.html" /> 
   </head>
   <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
@@ -37,10 +37,10 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="Train.html" title="Train"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="run_produse.html" title="Run_ProDuSe"
+          <a href="Call.html" title="Call"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
@@ -51,17 +51,21 @@
         <div class="bodywrapper">
           <div class="body" role="main">
             
-  <div class="section" id="adapter-predict">
-<h1>Adapter Predict<a class="headerlink" href="#adapter-predict" title="Permalink to this headline">¶</a></h1>
-<p>Predicts the barcoded adapter sequence range used in a given file.</p>
+  <div class="section" id="update-config">
+<h1>Update_Config<a class="headerlink" href="#update-config" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="description">
+<h2>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
+<p>Coverts an older produse config file to a format compatible with this version of ProDuSe</p>
+</div>
 <div class="section" id="run-using">
 <h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">adapter_predict</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">update_config</span>
 </pre></div>
 </div>
-<p>or</p>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">adapter_predict</span><span class="o">.</span><span class="n">py</span>
-</pre></div>
+<div class="section" id="or">
+<h3>or<a class="headerlink" href="#or" title="Permalink to this headline">¶</a></h3>
+<blockquote>
+<div>python /path/to/ProDuSe/ProDuSe/UpdateConfig.py</div></blockquote>
 </div>
 </div>
 <div class="section" id="parameters">
@@ -71,21 +75,19 @@
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-i &#8211;input:</th><td class="field-body">Paired fastq files. Two files must be specified in this argument.</td>
+<tr class="field-odd field"><th class="field-name">-i/&#8211;input:</th><td class="field-body">The configuration file to be reformatted</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-m &#8211;max_adapter_length:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Limit the adapter sequence prediction to this length</td>
+<tr class="field-even field"><th class="field-name">-o/&#8211;output:</th><td class="field-body">Path to the new, reformatted configuration file</td>
 </tr>
 </tbody>
 </table>
 </div></blockquote>
 </div>
-<div class="section" id="additional-considerations">
-<h2>Additional Considerations<a class="headerlink" href="#additional-considerations" title="Permalink to this headline">¶</a></h2>
-<div class="admonition warning">
-<p class="first admonition-title">Warning</p>
-<p class="last">Ensure your samples are de-multiplexed prior to running Adapter Predict. The adapter sequence is predicted from ALL reads in the fastq files.</p>
-</div>
+<div class="section" id="additional-info">
+<h2>Additional Info<a class="headerlink" href="#additional-info" title="Permalink to this headline">¶</a></h2>
+<p>Duplicate parameters are not permitted in config files. If two parameters specify the same argument, one will be removed
+automatically. If they specify different arguments, they will both be retained. One of the arguments must be removed manually.</p>
+<p>Any parameters with no arguments are removed automatically</p>
 </div>
 </div>
 
@@ -97,24 +99,28 @@
         <div class="sphinxsidebarwrapper">
   <h3><a href="index.html">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">Adapter Predict</a><ul>
-<li><a class="reference internal" href="#run-using">Run Using</a></li>
+<li><a class="reference internal" href="#">Update_Config</a><ul>
+<li><a class="reference internal" href="#description">Description</a></li>
+<li><a class="reference internal" href="#run-using">Run Using</a><ul>
+<li><a class="reference internal" href="#or">or</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#parameters">Parameters</a></li>
-<li><a class="reference internal" href="#additional-considerations">Additional Considerations</a></li>
+<li><a class="reference internal" href="#additional-info">Additional Info</a></li>
 </ul>
 </li>
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="run_produse.html"
-                        title="previous chapter">Run_ProDuSe</a></p>
+  <p class="topless"><a href="Call.html"
+                        title="previous chapter">Call</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="Trim.html"
-                        title="next chapter">Trim</a></p>
+  <p class="topless"><a href="Train.html"
+                        title="next chapter">Train</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="_sources/adapter_predict.rst.txt"
+      <li><a href="_sources/update_config.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div>
@@ -139,10 +145,10 @@
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="Train.html" title="Train"
              >next</a> |</li>
         <li class="right" >
-          <a href="run_produse.html" title="Run_ProDuSe"
+          <a href="Call.html" title="Call"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>

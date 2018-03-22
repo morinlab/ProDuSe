@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Adapter Predict &#8212; ProDuSe 0.9.1 documentation</title>
+    <title>ClipOverlap &#8212; ProDuSe 0.9.1 documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -26,8 +26,8 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Trim" href="Trim.html" />
-    <link rel="prev" title="Run_ProDuSe" href="run_produse.html" /> 
+    <link rel="next" title="Call" href="Call.html" />
+    <link rel="prev" title="Collapse" href="Collapse.html" /> 
   </head>
   <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
@@ -37,10 +37,10 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="Call.html" title="Call"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="run_produse.html" title="Run_ProDuSe"
+          <a href="Collapse.html" title="Collapse"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
@@ -51,41 +51,25 @@
         <div class="bodywrapper">
           <div class="body" role="main">
             
-  <div class="section" id="adapter-predict">
-<h1>Adapter Predict<a class="headerlink" href="#adapter-predict" title="Permalink to this headline">¶</a></h1>
-<p>Predicts the barcoded adapter sequence range used in a given file.</p>
-<div class="section" id="run-using">
-<h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">adapter_predict</span>
-</pre></div>
+  <div class="section" id="clipoverlap">
+<h1>ClipOverlap<a class="headerlink" href="#clipoverlap" title="Permalink to this headline">¶</a></h1>
 </div>
-<p>or</p>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">adapter_predict</span><span class="o">.</span><span class="n">py</span>
-</pre></div>
+<div class="section" id="description">
+<h1>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h1>
+<p>Identifies all positions which overlap inside of a given read pair. If any bases overlap, a consensus is generated
+and that consensus is assigned to only one read in the read pair.</p>
 </div>
-</div>
-<div class="section" id="parameters">
-<h2>Parameters<a class="headerlink" href="#parameters" title="Permalink to this headline">¶</a></h2>
-<blockquote>
-<div><table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-i &#8211;input:</th><td class="field-body">Paired fastq files. Two files must be specified in this argument.</td>
-</tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-m &#8211;max_adapter_length:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Limit the adapter sequence prediction to this length</td>
-</tr>
-</tbody>
-</table>
-</div></blockquote>
-</div>
-<div class="section" id="additional-considerations">
-<h2>Additional Considerations<a class="headerlink" href="#additional-considerations" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="additional-info">
+<h1>Additional Info<a class="headerlink" href="#additional-info" title="Permalink to this headline">¶</a></h1>
+<p>Any overlap between read pairs is determined solely using the alignments in the BAM file: No realignment is performed.
+If the bases at a position disagrees between a read pair, the base with the highest mapping quality is used. In the case of
+a tie, the base from the read which starts later is used.</p>
+<p>When obtaining a consensus between INDELs, the read with the lowest number of INDELs in the overlapping region is used as the consensus.
+No realignment is performed.</p>
+<p>The consensus overlap is assigned to either read 1 or read 2. For the other read, the positions coresponding to the consensus are soft clipped.</p>
 <div class="admonition warning">
 <p class="first admonition-title">Warning</p>
-<p class="last">Ensure your samples are de-multiplexed prior to running Adapter Predict. The adapter sequence is predicted from ALL reads in the fastq files.</p>
-</div>
+<p class="last">Overlap between read pairs is removed via soft-clipping. This may cause problems for some structural variant callers which examine soft-clipped bases</p>
 </div>
 </div>
 
@@ -97,24 +81,21 @@
         <div class="sphinxsidebarwrapper">
   <h3><a href="index.html">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">Adapter Predict</a><ul>
-<li><a class="reference internal" href="#run-using">Run Using</a></li>
-<li><a class="reference internal" href="#parameters">Parameters</a></li>
-<li><a class="reference internal" href="#additional-considerations">Additional Considerations</a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#">ClipOverlap</a></li>
+<li><a class="reference internal" href="#description">Description</a></li>
+<li><a class="reference internal" href="#additional-info">Additional Info</a></li>
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="run_produse.html"
-                        title="previous chapter">Run_ProDuSe</a></p>
+  <p class="topless"><a href="Collapse.html"
+                        title="previous chapter">Collapse</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="Trim.html"
-                        title="next chapter">Trim</a></p>
+  <p class="topless"><a href="Call.html"
+                        title="next chapter">Call</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="_sources/adapter_predict.rst.txt"
+      <li><a href="_sources/ClipOverlap.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div>
@@ -139,10 +120,10 @@
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="Trim.html" title="Trim"
+          <a href="Call.html" title="Call"
              >next</a> |</li>
         <li class="right" >
-          <a href="run_produse.html" title="Run_ProDuSe"
+          <a href="Collapse.html" title="Collapse"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>

@@ -4,8 +4,8 @@ Trim
 Purpose
 ^^^^^^^
 
-Trims adapter sequence from barcoded reads, and saves this information in the read name.
-Reads which do not fall within barcode range and mismatch threshold are discarded.
+Trims the barcode sequence from each read, and stores the barcode in a FASTQ tag
+Reads where the barcode does not fall within specified barcode range and mismatch threshold are discarded.
 
 Run Using
 ^^^^^^^^^
@@ -18,49 +18,48 @@ or
 
 ::
 
-    python /path/to/ProDuSe/ProDuSe/trim.py
+    python /path/to/ProDuSe/ProDuSe/Trim.py
 
 Parameters
 ^^^^^^^^^^
 
     :-c, --config:
-        A configuration file which can provide any of the following arguments
+        A configuration file which can provide any of the following arguments. See the `config page`_ for more details.
     :-i --input:
-        A fastq file to be trimmed. This argument must be specified twice. This file may be gzipped.
+        Two FASTQ files to be trimmed. These files may be gzipped.
     :-o --output:
-        | An output file for writing trimmed reads. This argument must be specified exactly twice.
+        | Two output FASTQ files
         | These files can automatically be gzipped by appending '.gz' to the output file name.
-        | The output file order corresponds with the input file order.
-    :-as --adapter_sequence:
-        The barcode sequence range, described using IUPAC bases.
-    :-ap --adapter_position:
-        | The positions in the adapter sequence to consider when comparing reference (i.e. -as) and actual adapter sequences
+        | The output file order corresponds with the input file order (i.e -i read1.fastq read2.fastq -> -o read1.out.fastq read2.out.fastq)
+    :-b --barcode_sequence:
+        The barcode sequence range, described using IUPAC bases. Can be determined using `adapter_predict`_
+    :-p --barcode_position:
+        | The positions in the adapter sequence to consider when comparing reference (i.e. -b) and actual adapter sequences
         | 0 = Do not consider this position
         | 1 = Consider this position
-        | Note that the entire adapter sequence will be trimmed, even if a position is labeled 0.
+        | Note that the entire barcode sequence will be trimmed, even if a position is labeled 0.
     :--mm --max_mismatch:
-        The maximum number of mismatches allowed between the reference and actual adapter sequences.
-    :-v:
-        | Instead of discarding reads with mismatching adapter sequences and saving all other read, do the opposite (save mismatching reads, discard all others).
+        The maximum number of mismatches allowed between the reference and actual adapter sequences before a read pair is discarded
+    :---reverse:
+        | Instead of discarding reads with mismatching barcode sequences, do the opposite (save mismatching reads, discard all others).
         | Useful for debugging.
-    :-u:
-        Do not trim the adapter sequence. Only store the adapter sequence in the read name.
-    :--discard_adapter:
-        Trim the adapter sequence, but do not modify the read name.
+    :--no_trim:
+        Do not trim the adapter sequence. Only store the adapter sequence a read tag.
+    :--trim_other_end:
+        | Examine the other end of the read for barcode sequences as well.
+        | Will not remove partial barcodes
+        | Useful when read lengths are significantly longer than the median fragment length
 
-.. warning:: If --discard_adapter is specified, the resulting FASTQ files can not be used in the ProDuSE Pipeline (except bwa.py_).
-    
-    .. _bwa.py: bwa.html
+    .. _config page: Config_Files.html
+    .. _adapter_predict: adapter_predict.html
 
 Helpful Tips
 ^^^^^^^^^^^^
 
-If the read discard rate is extremely high, check the supplied adapter sequence.
+If the read discard rate is extremely high, check the supplied barcode sequence.
 
 Additional Notes
 ^^^^^^^^^^^^^^^^
 
 If the supplied fastqs are multiplexed, a single sample can be extracted if no other samples use barcoded adapters, or if the barcoded adapter sequences between are distinct enough (i.e. the difference between the two barcode sequences exceeds the maximum mismatch threshold).
 Note that there may be some spillover if non-barcoded reads start with a sequence that falls within the barcode sequence range by chance, or if the differences between barcoded sequences is only slightly higher than the maximum mismatch threshold.
-
-Certain external tools use the read names for various purposes (such as Picard's MarkDuplicates, to identify optical duplicates). As trim stores the barcode sequence in the read name, these tools may not behave correctly. In this case, create a new set of trimmed fastq files, and specify --discard_adapter to leave the read name unmodified
