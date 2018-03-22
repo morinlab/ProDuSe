@@ -53,14 +53,32 @@
             
   <div class="section" id="clipoverlap">
 <h1>ClipOverlap<a class="headerlink" href="#clipoverlap" title="Permalink to this headline">¶</a></h1>
-</div>
 <div class="section" id="description">
-<h1>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h1>
+<h2>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
 <p>Identifies all positions which overlap inside of a given read pair. If any bases overlap, a consensus is generated
 and that consensus is assigned to only one read in the read pair.</p>
 </div>
+<div class="section" id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Permalink to this headline">¶</a></h2>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more info.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">An input SAM/BAM file (use &#8220;-&#8221; to read from standard in). Does not need to be sorted.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body">An output SAM/BAM file in which to write clipped reads (use &#8220;-&#8221; to write to stdout). Will be UNSORTED. The file type is determined from the file extension, or the input file type if stdout is specified.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">&#8211;tag_origin:</th><td class="field-body">Add a read tag indicating which read a consensus base originated. S=Both reads agree.</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</div>
 <div class="section" id="additional-info">
-<h1>Additional Info<a class="headerlink" href="#additional-info" title="Permalink to this headline">¶</a></h1>
+<h2>Additional Info<a class="headerlink" href="#additional-info" title="Permalink to this headline">¶</a></h2>
 <p>Any overlap between read pairs is determined solely using the alignments in the BAM file: No realignment is performed.
 If the bases at a position disagrees between a read pair, the base with the highest mapping quality is used. In the case of
 a tie, the base from the read which starts later is used.</p>
@@ -72,6 +90,7 @@ No realignment is performed.</p>
 <p class="last">Overlap between read pairs is removed via soft-clipping. This may cause problems for some structural variant callers which examine soft-clipped bases</p>
 </div>
 </div>
+</div>
 
 
           </div>
@@ -81,9 +100,12 @@ No realignment is performed.</p>
         <div class="sphinxsidebarwrapper">
   <h3><a href="index.html">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">ClipOverlap</a></li>
+<li><a class="reference internal" href="#">ClipOverlap</a><ul>
 <li><a class="reference internal" href="#description">Description</a></li>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
 <li><a class="reference internal" href="#additional-info">Additional Info</a></li>
+</ul>
+</li>
 </ul>
 
   <h4>Previous topic</h4>

@@ -1,4 +1,4 @@
-Run_ProDuSe
+Run ProDuSe
 ===========
 
 Purpose
@@ -84,8 +84,9 @@ Family Collapsing Parameters
 Filtering Parameters
 
 	:-f, --filter:
-		A filepath to a pickled Random Forest Classifier, used to filter variants. Can be generated using 'produse train'
+		A filepath to a pickled Random Forest Classifier, used to filter variants. Can be generated using train_
 
+	.. _train: Train.html
 
 .. note:: If no -b/--barcode is specified for one or more samples, adapter_predict will be run on those samples automatically
 
@@ -114,7 +115,9 @@ If a single argument is specified multiple times, the following orders of preced
 3. -c/--config file
 
 Arguments specified in the -sc/--sample_config file only apply to the specified sample.
-More information on configuration files can be viewed here.
+More information on configuration files can be found here_.
+
+.. _here: Config_Files.html
 
 Directory Layout
 ^^^^^^^^^^^^^^^^

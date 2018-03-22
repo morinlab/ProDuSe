@@ -21,7 +21,7 @@ Parameters
 ^^^^^^^^^^
 
     :-i --input:
-        Paired fastq files. Two files must be specified in this argument.
+        Paired fastq files. Two files must be specified.
     :-m --max_adapter_length:
         Limit the adapter sequence prediction to this length
 
@@ -29,7 +29,3 @@ Additional Considerations
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. warning:: Ensure your samples are de-multiplexed prior to running Adapter Predict. The adapter sequence is predicted from ALL reads in the fastq files.
-
-
-
-    

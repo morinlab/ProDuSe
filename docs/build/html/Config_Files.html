@@ -53,7 +53,7 @@
             
   <div class="section" id="configuration-files">
 <h1>Configuration Files<a class="headerlink" href="#configuration-files" title="Permalink to this headline">¶</a></h1>
-<p>Most ProDuSe commands allow arguments to be specified using a configuration INI file. In most cases, this is a much more convinient
+<p>Most ProDuSe commands allow arguments to be specified using a configuration INI file. In most cases, this is a much more convenient
 method of specifying arguments if ProDuSe is to be run multiple times. While you can view more detailed info on <a class="reference external" href="http://www.voidspace.org.uk/python/configobj.html#the-config-file-format">config files here</a>,
 a brief overview will be described here.</p>
 <div class="section" id="standard-config-files">
@@ -66,7 +66,7 @@ a brief overview will be described here.</p>
 </div>
 <p>Where Script_Name is the name of the tool which will use those arguments, with the arguments listed in the section below. Short form argument
 names are not supported.</p>
-<p>Note that config file sections and arguments not relevent to a given tool will safely be ignored, so it is possible to merge config files:</p>
+<p>Note that config file sections and arguments not relevant to a given tool will safely be ignored, so it is possible to merge config files:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Trim</span><span class="p">]</span>
 <span class="n">barcode_sequence</span><span class="o">=</span><span class="n">NNNWTWYYT</span>
 <span class="n">max_mismatch</span><span class="o">=</span><span class="mi">3</span>
@@ -75,11 +75,15 @@ names are not supported.</p>
 <span class="n">reference</span><span class="o">=</span><span class="n">genome</span><span class="o">.</span><span class="n">fa</span>
 </pre></div>
 </div>
-<p>A demo sample configuration file can be obtained <a class="reference external" href="https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini">here</a></p>
+<p>A demo sample configuration file can be obtained <a class="reference external" href="https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini">here</a>.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Argument provided at the command line will override arguments specified in the config file</p>
+</div>
 </div>
 <div class="section" id="sample-configuration-files">
 <h2>Sample Configuration Files<a class="headerlink" href="#sample-configuration-files" title="Permalink to this headline">¶</a></h2>
-<p>When running multiple samples uing <a class="reference external" href="run_produse.html">run_produse</a>, a special sample configuration file is specified instead:</p>
+<p>When running multiple samples using <a class="reference external" href="run_produse.html">run_produse</a>, a special sample configuration file is specified instead:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Sample_Name</span><span class="p">]</span>
 <span class="n">fastqs</span><span class="o">=/</span><span class="n">some</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R1</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span><span class="p">,</span><span class="o">/</span><span class="n">some</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">read</span><span class="o">.</span><span class="n">R2</span><span class="o">.</span><span class="n">fastq</span><span class="o">.</span><span class="n">gz</span>
 
@@ -99,6 +103,10 @@ can be specified, and will be used for that sample <strong>only</strong>. For in
 </pre></div>
 </div>
 <p>GRCh37 will be used as the reference genome for Sample 1, while GRCh38 will be used for sample 2. <a class="reference external" href="https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini">Click here to view a demo sample config file</a></p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Argument specified in config superseded those specified at either the command line, or by normal config files</p>
+</div>
 </div>
 </div>
 

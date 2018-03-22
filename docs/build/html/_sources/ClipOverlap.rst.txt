@@ -1,5 +1,5 @@
 ClipOverlap
-^^^^^^^^^^^
+===========
 
 Description
 ^^^^^^^^^^^
@@ -8,7 +8,19 @@ Identifies all positions which overlap inside of a given read pair. If any bases
 and that consensus is assigned to only one read in the read pair.
 
 
+Parameters
+^^^^^^^^^^
 
+	:-c --config:
+		A configuration file which can provide any of the following arguments. See the `config page`_ for more info.
+	:-i --input:
+		An input SAM/BAM file (use "-" to read from standard in). Does not need to be sorted.
+	:-o --output:
+		An output SAM/BAM file in which to write clipped reads (use "-" to write to stdout). Will be UNSORTED. The file type is determined from the file extension, or the input file type if stdout is specified.
+	:--tag_origin:
+		Add a read tag indicating which read a consensus base originated. S=Both reads agree.
+
+	.. _config page: Config_Files.html
 
 Additional Info
 ^^^^^^^^^^^^^^^

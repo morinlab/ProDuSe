@@ -1,7 +1,7 @@
 Configuration Files
 ===================
 
-Most ProDuSe commands allow arguments to be specified using a configuration INI file. In most cases, this is a much more convinient
+Most ProDuSe commands allow arguments to be specified using a configuration INI file. In most cases, this is a much more convenient
 method of specifying arguments if ProDuSe is to be run multiple times. While you can view more detailed info on `config files here`_, 
 a brief overview will be described here.
 
@@ -20,7 +20,7 @@ All config files provided to produse commands (using -c/--config) use the follow
 Where Script_Name is the name of the tool which will use those arguments, with the arguments listed in the section below. Short form argument
 names are not supported.
 
-Note that config file sections and arguments not relevent to a given tool will safely be ignored, so it is possible to merge config files::
+Note that config file sections and arguments not relevant to a given tool will safely be ignored, so it is possible to merge config files::
 
 	[Trim]
 	barcode_sequence=NNNWTWYYT
@@ -29,14 +29,16 @@ Note that config file sections and arguments not relevent to a given tool will s
 	[Pipeline]
 	reference=genome.fa
 
-A demo sample configuration file can be obtained here_
+A demo sample configuration file can be obtained here_.
 
 .. _here: https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini
+
+.. note:: Argument provided at the command line will override arguments specified in the config file
 
 Sample Configuration Files
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-When running multiple samples uing `run_produse`_, a special sample configuration file is specified instead::
+When running multiple samples using `run_produse`_, a special sample configuration file is specified instead::
 
 	[Sample_Name]
 	fastqs=/some/path/read.R1.fastq.gz,/some/path/read.R2.fastq.gz
@@ -56,6 +58,8 @@ can be specified, and will be used for that sample **only**. For instance::
 	reference=GRCh38.fa
 
 GRCh37 will be used as the reference genome for Sample 1, while GRCh38 will be used for sample 2. `Click here to view a demo sample config file`_
+
+.. note:: Argument specified in config superseded those specified at either the command line, or by normal config files
 
 .. _Click here to view a demo sample config file: https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini
 .. _run_produse: run_produse.html

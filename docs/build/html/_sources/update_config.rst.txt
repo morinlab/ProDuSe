@@ -1,4 +1,4 @@
-Update_Config
+Update Config
 =============
 
 Description
@@ -15,6 +15,7 @@ Run Using
 	produse update_config
 
 or 
+
 ::
 
 	python /path/to/ProDuSe/ProDuSe/UpdateConfig.py
