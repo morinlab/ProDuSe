@@ -28,6 +28,7 @@ setup(
     setup_requires=["numpy"],
     install_requires=[
 	"sortedcontainers",
+        "scipy",
         "configobj",
 	"scikit-bio",
         "pyfaidx",
@@ -36,7 +37,7 @@ setup(
 	"packaging",
 	"sklearn"
         ],
-    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.4.tar.gz",
+    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.1.tar.gz",
     license="GNU GPLv3",
     scripts=["bin/produse"],
     data_files = [("ProDuSe", ["LICENSE.txt", "README.md"])])
