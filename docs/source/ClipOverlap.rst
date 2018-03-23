@@ -34,6 +34,16 @@ Parameters
 
 	.. _config page: Config_Files.html
 
+.. warning:: The output BAM file will be unsorted, even if the input BAM file is sorted.
+
+
+Helpful Tips
+^^^^^^^^^^^^
+
+The output BAM file can be sorted easily by pipeline the output to "samtools sort". For example::
+
+	produse clip -i inFile.bam -o - | samtools sort > outFile.bam
+
 Additional Info
 ^^^^^^^^^^^^^^^
 
@@ -45,6 +55,6 @@ When obtaining a consensus between INDELs, the read with the lowest number of IN
 No realignment is performed.
 
 The consensus overlap is assigned to either read 1 or read 2. For the other read, the positions coresponding to the consensus are soft clipped.
-ls
+
 .. warning:: Overlap between read pairs is removed via soft-clipping. This may cause problems for some structural variant callers which examine soft-clipped bases
 

@@ -48,7 +48,6 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'ProDuSe'
-copyright = '2018, Christopher Rushton'
 author = 'Christopher Rushton'
 
 # The version info for the project you're documenting, acts as replacement for

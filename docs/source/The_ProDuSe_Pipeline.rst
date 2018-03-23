@@ -18,13 +18,13 @@ from the expected degenerate range are discarded
 
 .. _Trim: Trim.html
 
-bwa
-^^^
+Mapping
+^^^^^^^
 
 Maps provided reads to a reference genome using the Burrows-Wheeler Aligner (mem algorithm). The resulting SAM file is converted into
-a BAM file and sorted, with the FASTQ comment stored as a read tag
+a BAM file and sorted, with the FASTQ comment stored as a read tag.
 
-    - Command: bwa mem <reference> <trimmed_fastq.R1.fastq> <trimmed_fastq.R2.fastq> | samtools view -b | samtools sort > out.trimmed.bam
+    - Command: bwa mem <reference> <trimmed_fastq.R1.fastq> <trimmed_fastq.R2.fastq> | samtools view -b | samtools sort > out.trim.bam
 
 Collapse
 ^^^^^^^^
