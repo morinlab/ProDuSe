@@ -7,6 +7,18 @@ Description
 Identifies all positions which overlap inside of a given read pair. If any bases overlap, a consensus is generated
 and that consensus is assigned to only one read in the read pair.
 
+Run Using
+^^^^^^^^^
+
+::
+
+	produse clip
+
+or
+
+::
+
+	/path/to/ProDuSe/Clone/ProDuSe/ClipOverlap.py
 
 Parameters
 ^^^^^^^^^^
@@ -33,6 +45,6 @@ When obtaining a consensus between INDELs, the read with the lowest number of IN
 No realignment is performed.
 
 The consensus overlap is assigned to either read 1 or read 2. For the other read, the positions coresponding to the consensus are soft clipped.
-
+ls
 .. warning:: Overlap between read pairs is removed via soft-clipping. This may cause problems for some structural variant callers which examine soft-clipped bases
 

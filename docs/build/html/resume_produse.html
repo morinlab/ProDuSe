@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>ClipOverlap &#8212; ProDuSe 0.9.1 documentation</title>
+    <title>Resume ProDuSe &#8212; ProDuSe 0.9.1 documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -26,8 +26,8 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Call" href="Call.html" />
-    <link rel="prev" title="Collapse" href="Collapse.html" /> 
+    <link rel="next" title="Update Config" href="update_config.html" />
+    <link rel="prev" title="Call" href="Call.html" /> 
   </head>
   <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
@@ -37,10 +37,10 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="Call.html" title="Call"
+          <a href="update_config.html" title="Update Config"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="Collapse.html" title="Collapse"
+          <a href="Call.html" title="Call"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
@@ -51,20 +51,19 @@
         <div class="bodywrapper">
           <div class="body" role="main">
             
-  <div class="section" id="clipoverlap">
-<h1>ClipOverlap<a class="headerlink" href="#clipoverlap" title="Permalink to this headline">¶</a></h1>
+  <div class="section" id="resume-produse">
+<h1>Resume ProDuSe<a class="headerlink" href="#resume-produse" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="description">
 <h2>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
-<p>Identifies all positions which overlap inside of a given read pair. If any bases overlap, a consensus is generated
-and that consensus is assigned to only one read in the read pair.</p>
+<p>Restarts a previously terminated instance of <a class="reference external" href="run_produse.html">run_produse</a></p>
 </div>
 <div class="section" id="run-using">
 <h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">clip</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">resume_produse</span>
 </pre></div>
 </div>
 <p>or</p>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">Clone</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ClipOverlap</span><span class="o">.</span><span class="n">py</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">Clone</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ResumePipeline</span><span class="o">.</span><span class="n">py</span>
 </pre></div>
 </div>
 </div>
@@ -75,28 +74,24 @@ and that consensus is assigned to only one read in the read pair.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more info.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-d &#8211;produse_dir:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Path to the base ProDuSe analysis directory (usually named produse_analysis_directory)</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">An input SAM/BAM file (use &#8220;-&#8221; to read from standard in). Does not need to be sorted.</td>
-</tr>
-<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body">An output SAM/BAM file in which to write clipped reads (use &#8220;-&#8221; to write to stdout). Will be UNSORTED. The file type is determined from the file extension, or the input file type if stdout is specified.</td>
-</tr>
-<tr class="field-even field"><th class="field-name">&#8211;tag_origin:</th><td class="field-body">Add a read tag indicating which read a consensus base originated. S=Both reads agree.</td>
+<tr class="field-even field"><th class="field-name">-j &#8211;jobs:</th><td class="field-body">Number of samples to process in parallel</td>
 </tr>
 </tbody>
 </table>
 </div></blockquote>
 </div>
-<div class="section" id="additional-info">
-<h2>Additional Info<a class="headerlink" href="#additional-info" title="Permalink to this headline">¶</a></h2>
-<p>Any overlap between read pairs is determined solely using the alignments in the BAM file: No realignment is performed.
-If the bases at a position disagrees between a read pair, the base with the highest mapping quality is used. In the case of
-a tie, the base from the read which starts later is used.</p>
-<p>When obtaining a consensus between INDELs, the read with the lowest number of INDELs in the overlapping region is used as the consensus.
-No realignment is performed.</p>
-<p>The consensus overlap is assigned to either read 1 or read 2. For the other read, the positions coresponding to the consensus are soft clipped.
-ls
-.. warning:: Overlap between read pairs is removed via soft-clipping. This may cause problems for some structural variant callers which examine soft-clipped bases</p>
+<div class="section" id="additional-information">
+<h2>Additional Information<a class="headerlink" href="#additional-information" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference external" href="run_produse.html">run_produse</a> automatically generates &lt;task&gt;_Complete file when each pipeline
+component is completed for each sample. These files are placed in the &#8220;config&#8221;
+directory of the coresponding sample. This script identifies samples in which not all &lt;task&gt;_Complete files have been generated, and resumes the analysis from there.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">If you wish to re-run a stage of the pipeline, simply remove the coresponding &lt;task&gt;_Complete file</p>
+</div>
 </div>
 </div>
 
@@ -108,25 +103,25 @@ ls
         <div class="sphinxsidebarwrapper">
   <h3><a href="index.html">Table Of Contents</a></h3>
   <ul>
-<li><a class="reference internal" href="#">ClipOverlap</a><ul>
+<li><a class="reference internal" href="#">Resume ProDuSe</a><ul>
 <li><a class="reference internal" href="#description">Description</a></li>
 <li><a class="reference internal" href="#run-using">Run Using</a></li>
 <li><a class="reference internal" href="#parameters">Parameters</a></li>
-<li><a class="reference internal" href="#additional-info">Additional Info</a></li>
+<li><a class="reference internal" href="#additional-information">Additional Information</a></li>
 </ul>
 </li>
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="Collapse.html"
-                        title="previous chapter">Collapse</a></p>
-  <h4>Next topic</h4>
   <p class="topless"><a href="Call.html"
-                        title="next chapter">Call</a></p>
+                        title="previous chapter">Call</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="update_config.html"
+                        title="next chapter">Update Config</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="_sources/ClipOverlap.rst.txt"
+      <li><a href="_sources/resume_produse.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div>
@@ -151,10 +146,10 @@ ls
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="Call.html" title="Call"
+          <a href="update_config.html" title="Update Config"
              >next</a> |</li>
         <li class="right" >
-          <a href="Collapse.html" title="Collapse"
+          <a href="Call.html" title="Call"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>

@@ -46,6 +46,7 @@ Additional Commands
 .. toctree::
   :maxdepth: 1
 
+  resume_produse
   update_config
   Train
 

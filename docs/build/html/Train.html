@@ -27,7 +27,7 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="How ProDuSe Works" href="How_ProDuSe_Works.html" />
-    <link rel="prev" title="Update_Config" href="update_config.html" /> 
+    <link rel="prev" title="Update Config" href="update_config.html" /> 
   </head>
   <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
@@ -40,7 +40,7 @@
           <a href="How_ProDuSe_Works.html" title="How ProDuSe Works"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="update_config.html" title="Update_Config"
+          <a href="update_config.html" title="Update Config"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
@@ -53,7 +53,53 @@
             
   <div class="section" id="train">
 <h1>Train<a class="headerlink" href="#train" title="Permalink to this headline">¶</a></h1>
-<p>Placeholder Page</p>
+<div class="section" id="description">
+<h2>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
+<p>Trains ProDuSe&#8217;s variant calling filter using one or more sets of validated variants. A random forest
+classifier will be trained using this data</p>
+</div>
+<div class="section" id="run-using">
+<h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">train</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">Clone</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">Train</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Permalink to this headline">¶</a></h2>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">-b &#8211;bam:</th><td class="field-body">One or more post-clipoverlap BAM files, which were used for variant filtering and validations. Must be specified in an order that coresponds to the order specified by -v/&#8211;validations</td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-v &#8211;validations:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">One or more VCF files listing validated variants. The number and order of file must corespond to files specified in -b/&#8211;bam.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">-o &#8211;output:</th><td class="field-body">Output file which will store the random forest classifier</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">-r &#8211;reference:</th><td class="field-body">Reference genome, in FASTA format. An index should also be present in the same directory.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">-t &#8211;targets:</th><td class="field-body">Optional. One or more BED files specifying regions in which to restrict candidate variant identification. Must be specified in an order coresponding to the order specified in -b/&#8211;bam.</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+</div>
+<div class="section" id="additional-information">
+<h2>Additional Information<a class="headerlink" href="#additional-information" title="Permalink to this headline">¶</a></h2>
+<p>For each sample provided, ProDuSe will identify all candidate variants in a manner identical to Call.
+If a candidate variant is flagged in the validation VCF file with VALIDATED=TRUE, it will be considered
+a true variant, while variants flagged with VALIDATED=UNKNOWN will be ignored completely. All remaining
+variants will be flaged as artifacts. False variants will be randomly subset so there are the same number
+of false and true variants prior to training the variant filter.</p>
+</div>
 </div>
 
 
@@ -62,9 +108,20 @@
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Train</a><ul>
+<li><a class="reference internal" href="#description">Description</a></li>
+<li><a class="reference internal" href="#run-using">Run Using</a></li>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
+<li><a class="reference internal" href="#additional-information">Additional Information</a></li>
+</ul>
+</li>
+</ul>
+
   <h4>Previous topic</h4>
   <p class="topless"><a href="update_config.html"
-                        title="previous chapter">Update_Config</a></p>
+                        title="previous chapter">Update Config</a></p>
   <h4>Next topic</h4>
   <p class="topless"><a href="How_ProDuSe_Works.html"
                         title="next chapter">How ProDuSe Works</a></p>
@@ -99,7 +156,7 @@
           <a href="How_ProDuSe_Works.html" title="How ProDuSe Works"
              >next</a> |</li>
         <li class="right" >
-          <a href="update_config.html" title="Update_Config"
+          <a href="update_config.html" title="Update Config"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
