@@ -1,4 +1,5 @@
 sortedcontainers
+numpy
 configobj
 scikit-bio
 pyfaidx
