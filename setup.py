@@ -30,12 +30,7 @@ setup(
         "sortedcontainers",
         "scipy",
         "configobj",
-        "scikit-bio",
-        "pyfaidx",
-        "pysam<=0.13.0",
-        "fisher",
         "packaging",
-        "sklearn"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.1.tar.gz",
     license="GNU GPLv3",
