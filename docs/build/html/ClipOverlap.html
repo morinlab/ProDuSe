@@ -1,0 +1,181 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>ClipOverlap &#8212; ProDuSe 0.9.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.9.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Call" href="Call.html" />
+    <link rel="prev" title="Collapse" href="Collapse.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="Call.html" title="Call"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="Collapse.html" title="Collapse"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="clipoverlap">
+<h1>ClipOverlap<a class="headerlink" href="#clipoverlap" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="description">
+<h2>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
+<p>Identifies all positions which overlap inside of a given read pair. If any bases overlap, a consensus is generated
+and that consensus is assigned to only one read in the read pair.</p>
+</div>
+<div class="section" id="run-using">
+<h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">clip</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">Clone</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ClipOverlap</span><span class="o">.</span><span class="n">py</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Permalink to this headline">¶</a></h2>
+<blockquote>
+<div><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more info.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">An input SAM/BAM file (use &#8220;-&#8221; to read from standard in). Does not need to be sorted.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body">An output SAM/BAM file in which to write clipped reads (use &#8220;-&#8221; to write to stdout). Will be UNSORTED. The file type is determined from the file extension, or the input file type if stdout is specified.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">&#8211;tag_origin:</th><td class="field-body">Add a read tag indicating which read a consensus base originated. S=Both reads agree.</td>
+</tr>
+</tbody>
+</table>
+</div></blockquote>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">The output BAM file will be unsorted, even if the input BAM file is sorted.</p>
+</div>
+</div>
+<div class="section" id="helpful-tips">
+<h2>Helpful Tips<a class="headerlink" href="#helpful-tips" title="Permalink to this headline">¶</a></h2>
+<p>The output BAM file can be sorted easily by pipeline the output to &#8220;samtools sort&#8221;. For example:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">clip</span> <span class="o">-</span><span class="n">i</span> <span class="n">inFile</span><span class="o">.</span><span class="n">bam</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span> <span class="o">|</span> <span class="n">samtools</span> <span class="n">sort</span> <span class="o">&gt;</span> <span class="n">outFile</span><span class="o">.</span><span class="n">bam</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="additional-info">
+<h2>Additional Info<a class="headerlink" href="#additional-info" title="Permalink to this headline">¶</a></h2>
+<p>Any overlap between read pairs is determined solely using the alignments in the BAM file: No realignment is performed.
+If the bases at a position disagrees between a read pair, the base with the highest mapping quality is used. In the case of
+a tie, the base from the read which starts later is used.</p>
+<p>When obtaining a consensus between INDELs, the read with the lowest number of INDELs in the overlapping region is used as the consensus.
+No realignment is performed.</p>
+<p>The consensus overlap is assigned to either read 1 or read 2. For the other read, the positions coresponding to the consensus are soft clipped.</p>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">Overlap between read pairs is removed via soft-clipping. This may cause problems for some structural variant callers which examine soft-clipped bases</p>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">ClipOverlap</a><ul>
+<li><a class="reference internal" href="#description">Description</a></li>
+<li><a class="reference internal" href="#run-using">Run Using</a></li>
+<li><a class="reference internal" href="#parameters">Parameters</a></li>
+<li><a class="reference internal" href="#helpful-tips">Helpful Tips</a></li>
+<li><a class="reference internal" href="#additional-info">Additional Info</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="Collapse.html"
+                        title="previous chapter">Collapse</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="Call.html"
+                        title="next chapter">Call</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/ClipOverlap.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="Call.html" title="Call"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="Collapse.html" title="Collapse"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright .
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+    </div>
+  </body>
+</html>

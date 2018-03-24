@@ -17,27 +17,27 @@ setup(
     name='ProDuSe',
     version=version,
     description='Process Duplex Sequence Data',
-    author='Marco Albuquerque',
-    author_email='malbuque@sfu.ca',
-    maintainer='Christopher Rushton',
-    maintainer_email='ckrushto@sfu.ca',
+    author='Christopher Rushton',
+    author_email='ckrushto@sfu.ca',
     include_package_data=True,
     packages=["ProDuSe"],
     url='https://github.com/morinlab/ProDuSe',
     classifiers=[
-       "Programming Language :: Python :: 2.7"
+       "Programming Language :: Python :: 3"
        ],
     setup_requires=["numpy"],
     install_requires=[
+	"sortedcontainers",
         "scipy",
-        "configparser",
-        "configargparse",
-        "pysam",
-        "numpy",
-        "astropy",
-	"matplotlib"
+        "configobj",
+	"scikit-bio",
+        "pyfaidx",
+        "pysam<=0.13.0",
+	"fisher",
+	"packaging",
+	"sklearn"
         ],
-    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.2.4.tar.gz",
+    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.1.tar.gz",
     license="GNU GPLv3",
     scripts=["bin/produse"],
     data_files = [("ProDuSe", ["LICENSE.txt", "README.md"])])

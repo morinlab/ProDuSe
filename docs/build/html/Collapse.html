@@ -1,12 +1,12 @@
-
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Collapse &#8212; ProDuSe 0.2.3 documentation</title>
+    <title>Collapse &#8212; ProDuSe 0.9.1 documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
-        VERSION:     '0.2.3',
+        VERSION:     '0.9.1',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true,
@@ -26,10 +26,10 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="SplitMerge" href="SplitMerge.html" />
-    <link rel="prev" title="bwa" href="bwa.html" /> 
+    <link rel="next" title="ClipOverlap" href="ClipOverlap.html" />
+    <link rel="prev" title="Trim" href="Trim.html" /> 
   </head>
-  <body>
+  <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -37,12 +37,12 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="SplitMerge.html" title="SplitMerge"
+          <a href="ClipOverlap.html" title="ClipOverlap"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="bwa.html" title="bwa"
+          <a href="Trim.html" title="Trim"
              accesskey="P">previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.2.3 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
@@ -53,15 +53,15 @@
             
   <div class="section" id="collapse">
 <h1>Collapse<a class="headerlink" href="#collapse" title="Permalink to this headline">¶</a></h1>
-<p>Identifies the start position, adapter sequence, and mapping strand for each read in the supplied BAM file. If two or more reads share the same start position, mapping strand, and adapter sequence (within mismatch tolerance), they are merged into a single consensus sequence.
-If there is a mismatch at a given position, the most common base is used as a consensus. The quality of each base set to the highest quality base at that position. If an individual read contains too many mismatches, it is discarded prior to collapsing.</p>
+<p>Identifies the start position, barcode sequence, and mapping strand for each read pair in the supplied BAM file. If both reads in one or more reads share the same start position, mapping strand, and barcode sequence (within mismatch tolerance), they are flagged as a &#8220;family&#8221;, and merged into a single consensus sequence.
+If family members disagree at a given position, the most common base is used as a consensus.  In the case of a tie, the base with the highest aggregated quality score across all family members is used. The quality of each base set to the highest quality base at that position.</p>
 <div class="section" id="run-using">
 <h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">collapse</span>
 </pre></div>
 </div>
 <p>or</p>
-<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">collapse</span><span class="o">.</span><span class="n">py</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">Collapse</span><span class="o">.</span><span class="n">py</span>
 </pre></div>
 </div>
 </div>
@@ -72,36 +72,38 @@ If there is a mismatch at a given position, the most common base is used as a co
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c –config:</th><td class="field-body">A configuration file which can provide any of the parameters below</td>
+<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can supply any of the arguments below. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-i –input:</th><td class="field-body">Input BAM file. The name of each read must contain the adapter sequence.</td>
+<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">Input SAM/CRAM/BAM file. Each read must contain a read tag which stores adapter sequences</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-o –output:</th><td class="field-body">Path and name of output collapsed fastq files. This parameter must be specified exactly twice.
-The output fastqs can be gzipped automatically by appending “.gz” to the output name.</td>
+<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body">Output SAM/CRAM/BAM file containing collapsed reads (Use &#8220;-&#8221; for stdout). The output file format will be chosen based upon the supplied file extension, or if &#8220;-&#8221; is used, will be the same as the input file format. Will be unsorted.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-sp –strand_position:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">The positions in the adapter sequence to use when comparison adapter  sequences for reads of the same type (i.e. between forward reads, or between reverse reads).
-1=Use this position, 0=Do not use this position.</td>
+<tr class="field-even field"><th class="field-name" colspan="2">-fm &#8211;family_mask:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
+<div class="line">Positions in the barcode sequence to use when comparing barcode sequences between reads which originate from the same parental strand.</div>
+<div class="line">1=Use this position, 0=Do not use this position.</div>
+</div>
+</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-dp –duplex_position:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">The positions in the adapter sequence to use when comparing adapter sequences for reads of opposing types (i.e. forward vs reverse reads).
-1=Use this position, 0=Do not use this position.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dm &#8211;duplex_mask:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
+<div class="line">The positions in the adapter sequence to use when comparing adapter sequences for reads of opposing types (i.e. forward vs reverse reads).</div>
+<div class="line">1=Use this position, 0=Do not use this position.</div>
+</div>
+</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-amm –adapter_max_mismatch:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the expected and actual adapter sequences when comparing reads of the same type (See -sp).</td>
+<tr class="field-even field"><th class="field-name" colspan="2">-fmm &#8211;family_max_mismatch:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the barcode sequence of two read pairs before two read pairs are considered members of different families (See -fm).</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-dmm –duplex_max_mismatch:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the expected and actual adapter sequences when comparing molecules of different types (See -dp).</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dmm &#8211;duplex_max_mismatch:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the barcode sequence of two families before they are considered as not in duplex (See -dm).</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-smm –sequence_max_mismatch:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed in an individual read before it is discarded. This threshold should be adjusted based upon read length.</td>
+<tr class="field-even field"><th class="field-name">-r &#8211;reference:</th><td class="field-body">Reference genome, in FASTA format. Must be the same genome version that the reads were aligned against.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-oo –original_output:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">Path and name of fastq files to write original (i.e. pre-collapse) reads. Reads exceeding mismatch thresholds will still be discarded.
-This option must be be specified exactly twice, or not at all. These fastqs can be gzipped automatically by appending “.gz” to the output name.</td>
+<tr class="field-odd field"><th class="field-name">-t &#8211;targets:</th><td class="field-body">A BED3 file or better listing regions of interest. Any read pairs which fall entirely outside these regions will be discarded</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-sf –stats_file:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Path and name of a text file to store collapsing statistics.</td>
+<tr class="field-even field"><th class="field-name" colspan="2">&#8211;tag_family_members:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Store the original name of all reads which were incorporated into a family in the read tag &#8220;Zm&#8221;</td>
 </tr>
 </tbody>
 </table>
@@ -109,7 +111,8 @@ This option must be be specified exactly twice, or not at all. These fastqs can 
 </div>
 <div class="section" id="additional-considerations">
 <h2>Additional Considerations<a class="headerlink" href="#additional-considerations" title="Permalink to this headline">¶</a></h2>
-<p>The runtime of this script depends not only on the absolute number of reads, but the proportion of reads which are duplicates. BAM files with high duplicate rates will take significantly longer than BAM files with a lower duplicate rate.</p>
+<p>The runtime of Collapse depends not only on the absolute number of reads, but the proportion of reads which are duplicates. BAM files with high duplicate rates will take significantly longer than BAM files with a lower duplicate rate.</p>
+<p>Currently, this version of Collapse does not perform local realignment of soft-clipped regions.</p>
 </div>
 </div>
 
@@ -130,11 +133,11 @@ This option must be be specified exactly twice, or not at all. These fastqs can 
 </ul>
 
   <h4>Previous topic</h4>
-  <p class="topless"><a href="bwa.html"
-                        title="previous chapter">bwa</a></p>
+  <p class="topless"><a href="Trim.html"
+                        title="previous chapter">Trim</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="SplitMerge.html"
-                        title="next chapter">SplitMerge</a></p>
+  <p class="topless"><a href="ClipOverlap.html"
+                        title="next chapter">ClipOverlap</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
@@ -163,17 +166,17 @@ This option must be be specified exactly twice, or not at all. These fastqs can 
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="SplitMerge.html" title="SplitMerge"
+          <a href="ClipOverlap.html" title="ClipOverlap"
              >next</a> |</li>
         <li class="right" >
-          <a href="bwa.html" title="bwa"
+          <a href="Trim.html" title="Trim"
              >previous</a> |</li>
-        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.2.3 documentation</a> &#187;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
-        &#169; Copyright 2017, Christopher Rushton.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.2.
+        &#169; Copyright .
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
     </div>
   </body>
 </html>

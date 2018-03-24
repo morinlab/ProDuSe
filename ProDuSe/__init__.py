@@ -1,2 +1,1 @@
-
-__all__ = ["alignment", "position"]
+#!/usr/bin/env python

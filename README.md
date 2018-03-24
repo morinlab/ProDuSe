@@ -1,5 +1,5 @@
 # ProDuSe
-An analysis pipeline, helper scripts and Python classes to **Pro**cess **Du**plex **Se**quence data
+A variant caller designed for use with libraries generated using semi-degenerate barcoded adapters.
 
 ## Description
 
@@ -11,13 +11,11 @@ See the full wiki page for more information: http://produse.readthedocs.io/en/la
 
 You will need to install the following tools before installing the ProDuSe package:
 
-* `python>=2.7` (But not 3.1, 3.2)
-* `bwa==0.7.12`
+* `python>=3.4
+* `bwa>=0.7.0`
 * `samtools>=1.3.1`
-* `Stitcher>=5.1.3` (Can be downloaded from https://github.com/Illumina/Pisces.git)
-* `Mono>=4.6.2` (Mono Compiler)
 
-ProDuSe will check to ensure that required tools are installed prior to running the pipeline
+ProDuSe will check that a valid version of these tools are installed prior to running the pipeline
 
 To install the ProDuSe package run the following command:
 
@@ -29,48 +27,48 @@ All required python dependencies will be installed during this step
 
 ## Running ProDuSe
 
-### The Analysis Pipeline
+### The Analysis Pipeline: Very Quick Start
 
-You can view more more detailed instructions on the [wiki](http://produse.readthedocs.io/en/latest/)
+You can view more detailed instructions on the [wiki](http://produse.readthedocs.io/en/latest/)
 
-You will first need to retrieve two configuration files:
+All parameters required to run ProDuSe can be viewed using the following:
+```
+    produse run_produse -h
+```
 
-#### `produse_config.ini`
- * command line arguments for each stage in the analysis pipeline
- * retrieve a sample config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini)
+Alternatively, if you wish to run ProDuSe without installing it, you can run `ProdusePipeline.py` manually in a similar manner:
+```
+    /path/to/ProDuSe/ProdusePipeline.py -h
+```
 
-#### `sample_config.ini`
- * Path to paired fastq files for all samples you wish to run the analysis pipeline on
- * retrieve a sample sample_config.ini file [here](https://github.com/morinlab/ProDuSe/blob/master/etc/sample_config.ini)
+While these parameters can be specified individually, they can also be provided using a configuration file
 
 To run the analysis pipeline you simply need to run the following command:
 ```
     produse run_produse
-    -c config.ini
-    -sc sample_config.ini
-    -r /path/to/ref.fa
-    -x /path/to/stitcher.exe
+    -c /path/to/github/clone/etc/produse_config.ini
 ```
-Alternatively, if you wish to run ProDuSe without installing it, you can run `ProdusePipeline.py` manually in a similar manner:
+
+Alternatively:
 ```
-    /path/to/ProDuSe/ProdusePipeline.py
-    -c config.ini
-    -sc sample_config.ini
-    -r /path/to/ref.fa
-    -x /path/to/stitcher.exe
+    /path/to/ProDuSe/ProdusePipeline.py 
+    -c /path/to/github/clone/etc/produse_config.ini:
 ```
-This will run the entire ProDuSe pipeline on all samples specified in the sample_config.ini file
+
+This will run the entire ProDuSe pipeline on all samples specified in the sample_config.ini file, which can be found in 
+etc/sample_config.ini
+
 Results will be located in the following directory:
 
 ```bash
-cd /path/to/output/produse_analysis_directory
+ls ./produse_analysis_directory
 ```
 
 ### Helper Scripts
 
-The ProDuSe package includes a variety of helper scripts to aid in the analysis of duplex sequencing data.
+The ProDuSe package is comprised of several stages to aid in the analysis of duplex sequencing data.
 
-All scripts included in the current package can be found by running the following:
+These stages can be be viewed by running the following:
 
 ```bash
 produse -h
@@ -86,16 +84,3 @@ produse adapter_predict -i input1.fastq input2.fastq
 
 This tool will print a predicted adapter sequence based off of ACGT abundances at each position. It uses these observed abundances and finds the closest expected abundance for an IUPAC unambiguous or ambiguous base.
 
-### Python Classes
-
-Two major python classes are included with ProDuSe. 
-
-#### The Alignment Class
-
-The first is the alignment class. This linearly processes reads from a BAM file until both read pairs have been identified, at which point the first yield to the developer occurs.
-
-#### The Position Class
-
-The second if the position class. This class aims to create a duplex sequencing ready mpileup class.
-
-Full descriptions of two python classes can be retrieved here

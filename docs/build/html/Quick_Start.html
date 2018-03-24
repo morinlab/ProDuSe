@@ -1,0 +1,218 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Quick Start &#8212; ProDuSe 0.9.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.9.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="The ProDuSe Pipeline" href="The_ProDuSe_Pipeline.html" />
+    <link rel="prev" title="ProDuSe: Process Duplex Sequence data" href="index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="The_ProDuSe_Pipeline.html" title="The ProDuSe Pipeline"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="ProDuSe: Process Duplex Sequence data"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="quick-start">
+<h1>Quick Start<a class="headerlink" href="#quick-start" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="check-and-install-dependencies">
+<h2>Check and install dependencies<a class="headerlink" href="#check-and-install-dependencies" title="Permalink to this headline">¶</a></h2>
+<p>To run ProDuSe successfully, ensure the following non-python dependencies are installed on your system:</p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="http://samtools.sourceforge.net/">Samtools</a> (&gt;=1.3.1)</li>
+<li><a class="reference external" href="http://bio-bwa.sourceforge.net/">Burrows-Wheeler Aligner</a> (&gt;=0.7.0)</li>
+<li><a class="reference external" href="https://www.python.org/">Python</a> (&gt;=3.4)</li>
+</ul>
+</div></blockquote>
+</div>
+<div class="section" id="optional-install-produse">
+<h2>(Optional) Install ProDuSe<a class="headerlink" href="#optional-install-produse" title="Permalink to this headline">¶</a></h2>
+<p>To run ProDuSe as a command line command, install ProDuSe as follows:</p>
+<p>From the command line:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">cd</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">clone</span><span class="o">/</span>
+<span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install</span>
+</pre></div>
+</div>
+<p>This will automatically install all python dependencies.</p>
+</div>
+<div class="section" id="setup-produse-configuration">
+<h2>Setup ProDuSe configuration<a class="headerlink" href="#setup-produse-configuration" title="Permalink to this headline">¶</a></h2>
+<p>To run ProDuSe, you will need the following:</p>
+<blockquote>
+<div>1. Sequence (fastq) files from your sample of interest
+3. <a class="reference external" href="https://github.com/morinlab/ProDuSe/blob/master/etc/produse_config.ini">ProDuse configuration file</a></div></blockquote>
+<p>If you are unsure of the barcode sequence, it can be estimated using <a class="reference external" href="AdapterPredict.rst">adapter_predict</a></p>
+<p>To start, modify the ProDuSe configuration file with your sample&#8217;s information:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Pipeline</span><span class="p">]</span>
+<span class="n">barcode_sequence</span><span class="o">=</span><span class="n">NNNWSMRWSYWKMWWT</span>
+<span class="n">barcode_position</span><span class="o">=</span><span class="mi">0001111111111110</span>
+<span class="n">max_mismatch</span><span class="o">=</span><span class="mi">3</span>
+<span class="n">family_mask</span><span class="o">=</span><span class="mi">0001111111111110</span>
+<span class="n">family_mismatch</span><span class="o">=</span><span class="mi">3</span>
+<span class="n">duplex_mask</span><span class="o">=</span><span class="mi">0000000001111110</span>
+<span class="n">duplex_mismatch</span><span class="o">=</span><span class="mi">2</span>
+<span class="n">reference</span><span class="o">=</span><span class="n">test</span><span class="o">/</span><span class="n">reference</span><span class="o">/</span><span class="n">GRCh38_TNFSF14</span><span class="o">.</span><span class="n">fa</span>
+<span class="n">sample_config</span><span class="o">=</span><span class="n">etc</span><span class="o">/</span><span class="n">sample_config</span><span class="o">.</span><span class="n">ini</span>
+<span class="nb">filter</span><span class="o">=</span><span class="n">etc</span><span class="o">/</span><span class="n">default_filter</span><span class="o">.</span><span class="n">p</span>
+</pre></div>
+</div>
+<p>See <a class="reference external" href="run_produse.html">run_produse</a> for a detailed description of each argument</p>
+</div>
+<div class="section" id="id1">
+<h2>Run ProDuSe<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>Finally, run ProDuSe with the specified information.</p>
+<p>If you installed ProDuSe:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">run_produse</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">--</span><span class="n">fastqs</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
+</pre></div>
+</div>
+<p>If you did not install ProDuSe:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProdusePipleine</span><span class="o">.</span><span class="n">py</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">--</span><span class="n">fastqs</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
+</pre></div>
+</div>
+<p>All results will be placed in the current working directory (this can be changed using <cite>-d</cite>), under <cite>produse_analysis_directory</cite>.</p>
+</div>
+<div class="section" id="running-multiple-samples-at-once">
+<h2>Running multiple samples at once<a class="headerlink" href="#running-multiple-samples-at-once" title="Permalink to this headline">¶</a></h2>
+<p>ProDuSe can process multiple samples sequentially with the same command. You will need a <cite>sample configuration</cite> file to use this feature.</p>
+<p>Specify each sample in this configuration file:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Sample1</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample1</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span><span class="p">,</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample1</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
+
+<span class="p">[</span><span class="n">Sample2</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample2</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span><span class="p">,</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample2</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
+</pre></div>
+</div>
+<p>If you would like to specify different parameters for each sample, they can be specified in the sample_config file:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Sample1</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample1</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span><span class="p">,</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample1</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
+<span class="n">barcode_sequence</span><span class="o">=</span><span class="n">NNNWSMRWSYWKMWW</span>
+<span class="n">barcode_position</span><span class="o">=</span><span class="mi">000111111111111</span>
+
+<span class="p">[</span><span class="n">Sample2</span><span class="p">]</span>
+<span class="n">fastqs</span><span class="o">=/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample2</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R1</span><span class="p">,</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">Sample2</span><span class="o">/</span><span class="n">fastq</span><span class="o">.</span><span class="n">R2</span>
+<span class="n">max_mismatch</span><span class="o">=</span><span class="mi">2</span>
+</pre></div>
+</div>
+<p>Arguments specified in the sample config file will only be used for that sample</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Parameters specified in the sample configuration file take precidence for that sample</p>
+</div>
+<p>When running ProDuSe, this sample configuration file will be specified instead of fastq files.</p>
+<p>If ProDuSe is installed:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">run_produse</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">*-</span><span class="n">sc</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">sample</span><span class="o">/</span><span class="n">configuration</span><span class="o">/</span><span class="n">file</span><span class="o">*</span>
+</pre></div>
+</div>
+<p>If ProDuSe is not installed:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProDuSe</span><span class="o">/</span><span class="n">ProdusePipleine</span><span class="o">.</span><span class="n">py</span> <span class="o">-</span><span class="n">c</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">produse</span><span class="o">/</span><span class="n">config</span><span class="o">/</span><span class="n">file</span> <span class="o">*-</span><span class="n">sc</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">sample</span><span class="o">/</span><span class="n">configuration</span><span class="o">/</span><span class="n">file</span><span class="o">*</span>
+</pre></div>
+</div>
+<p>All results will be outputted in individual sample directories under &#8216;produse_analysis_directory&#8217;.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Quick Start</a><ul>
+<li><a class="reference internal" href="#check-and-install-dependencies">Check and install dependencies</a></li>
+<li><a class="reference internal" href="#optional-install-produse">(Optional) Install ProDuSe</a></li>
+<li><a class="reference internal" href="#setup-produse-configuration">Setup ProDuSe configuration</a></li>
+<li><a class="reference internal" href="#id1">Run ProDuSe</a></li>
+<li><a class="reference internal" href="#running-multiple-samples-at-once">Running multiple samples at once</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">ProDuSe: Process Duplex Sequence data</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="The_ProDuSe_Pipeline.html"
+                        title="next chapter">The ProDuSe Pipeline</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/Quick_Start.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="The_ProDuSe_Pipeline.html" title="The ProDuSe Pipeline"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="ProDuSe: Process Duplex Sequence data"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">ProDuSe 0.9.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright .
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+    </div>
+  </body>
+</html>

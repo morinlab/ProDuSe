@@ -2,8 +2,8 @@ ProDuSe: Process Duplex Sequence data
 =====================================
 
     :Authors:
-        | Marco Albuquerque
         | Christopher Rushton
+        | Marco Albuquerque
     :Contact:
         ckrushto@sfu.ca.
     :Source Code:
@@ -14,38 +14,41 @@ ProDuSe: Process Duplex Sequence data
     .. _Github: https://github.com/morinlab/ProDuSe
     .. _GNU General Public License v3.0: License.html
 
-ProDuSe is a Python command-line variant caller designed for use on Illumina sequencing data obtained from libraries constructing using barcoded adapters. Using these adapters,
-read duplicates are identified and collapsed into a single consensus sequence, correcting PCR and sequencing errors. In samples with a high duplication rate, this allows extremely rare
-variants be be called confidently.
+ProDuSe is a variant caller designed for use with libraries prepared and sequenced using `semi-degenerate barcoded adapters`_. These
+barcodes allow PCR and optical duplicates which were derived from the same starting molecule to be flagged and merged into a single
+consensus sequence. The addition of a strand-specific tag also allows molecules which are derived from different parental strands
+to be flagged, allowing variants at extremely low frequency (VAF~=0.1%) to be called confidently.
+
+.. _semi-degenerate barcoded adapters: How_ProDuSe_Works.html
 
 Quick Links
 ============
 .. toctree::
    :maxdepth: 1
 
-   Quick Start
-   The ProDuSe Pipeline
+   Quick Start <Quick_Start>
+   The ProDuSe Pipeline <The_ProDuSe_Pipeline>
 
-ProDuSe Commands
-================
+Main Commands
+=============
 .. toctree::
    :maxdepth: 1
 
-   Config
+   run_produse
+   adapter_predict
    Trim
-   bwa
    Collapse
-   SplitMerge
-   snv
-   Filter
+   ClipOverlap
+   Call
 
-Other Commands
-==============
-
+Additional Commands
+===================
 .. toctree::
-   :maxdepth: 1
+  :maxdepth: 1
 
-   Adapter Predict
+  resume_produse
+  update_config
+  Train
 
 Additional Links
 ================
@@ -53,4 +56,7 @@ Additional Links
 .. toctree::
    :maxdepth: 1
 
+   How ProDuSe Works <How_ProDuSe_Works>
+   Config Files <Config_Files>
    License
+
