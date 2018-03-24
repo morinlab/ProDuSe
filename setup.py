@@ -28,7 +28,6 @@ setup(
     setup_requires=["numpy"],
     install_requires=[
         "sortedcontainers",
-        "scipy",
         "configobj",
         "packaging",
         ],
