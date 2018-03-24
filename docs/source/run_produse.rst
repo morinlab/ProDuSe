@@ -54,6 +54,8 @@ Additional Analysis Parameters
 		Name of the directory to create inside -d/--outdir to store intermediate files and results. Default is "produse_analysis_directory".
 	:--append_to_directory:
 		If --directory_name already exists inside -d/--outdir, place the intermediate files and results for this analysis inside this directory. If any samples have the same name as those inside --directory_name, they will not be analyzed.
+	:--cleanup:
+		Following analysis, remove all files present in the "tmp" directory of each sample
 
 Barcode Trimming Parameters
 

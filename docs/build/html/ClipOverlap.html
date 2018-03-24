@@ -1,16 +1,13 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    
     <title>ClipOverlap &#8212; ProDuSe 0.9.1 documentation</title>
-    
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
@@ -29,7 +26,7 @@
     <link rel="next" title="Call" href="Call.html" />
     <link rel="prev" title="Collapse" href="Collapse.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -75,13 +72,13 @@ and that consensus is assigned to only one read in the read pair.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more info.</td>
+<tr class="field-odd field"><th class="field-name">-c –config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more info.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">An input SAM/BAM file (use &#8220;-&#8221; to read from standard in). Does not need to be sorted.</td>
+<tr class="field-even field"><th class="field-name">-i –input:</th><td class="field-body">An input SAM/BAM file (use “-” to read from standard in). Does not need to be sorted.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body">An output SAM/BAM file in which to write clipped reads (use &#8220;-&#8221; to write to stdout). Will be UNSORTED. The file type is determined from the file extension, or the input file type if stdout is specified.</td>
+<tr class="field-odd field"><th class="field-name">-o –output:</th><td class="field-body">An output SAM/BAM file in which to write clipped reads (use “-” to write to stdout). Will be UNSORTED. The file type is determined from the file extension, or the input file type if stdout is specified.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">&#8211;tag_origin:</th><td class="field-body">Add a read tag indicating which read a consensus base originated. S=Both reads agree.</td>
+<tr class="field-even field"><th class="field-name">–tag_origin:</th><td class="field-body">Add a read tag indicating which read a consensus base originated. S=Both reads agree.</td>
 </tr>
 </tbody>
 </table>
@@ -93,7 +90,7 @@ and that consensus is assigned to only one read in the read pair.</p>
 </div>
 <div class="section" id="helpful-tips">
 <h2>Helpful Tips<a class="headerlink" href="#helpful-tips" title="Permalink to this headline">¶</a></h2>
-<p>The output BAM file can be sorted easily by pipeline the output to &#8220;samtools sort&#8221;. For example:</p>
+<p>The output BAM file can be sorted easily by pipeline the output to “samtools sort”. For example:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">produse</span> <span class="n">clip</span> <span class="o">-</span><span class="n">i</span> <span class="n">inFile</span><span class="o">.</span><span class="n">bam</span> <span class="o">-</span><span class="n">o</span> <span class="o">-</span> <span class="o">|</span> <span class="n">samtools</span> <span class="n">sort</span> <span class="o">&gt;</span> <span class="n">outFile</span><span class="o">.</span><span class="n">bam</span>
 </pre></div>
 </div>
@@ -175,7 +172,7 @@ No realignment is performed.</p>
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright .
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.3.
     </div>
   </body>
 </html>

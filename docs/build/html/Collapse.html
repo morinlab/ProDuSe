@@ -1,16 +1,13 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    
     <title>Collapse &#8212; ProDuSe 0.9.1 documentation</title>
-    
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
@@ -29,7 +26,7 @@
     <link rel="next" title="ClipOverlap" href="ClipOverlap.html" />
     <link rel="prev" title="Trim" href="Trim.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -53,7 +50,7 @@
             
   <div class="section" id="collapse">
 <h1>Collapse<a class="headerlink" href="#collapse" title="Permalink to this headline">¶</a></h1>
-<p>Identifies the start position, barcode sequence, and mapping strand for each read pair in the supplied BAM file. If both reads in one or more reads share the same start position, mapping strand, and barcode sequence (within mismatch tolerance), they are flagged as a &#8220;family&#8221;, and merged into a single consensus sequence.
+<p>Identifies the start position, barcode sequence, and mapping strand for each read pair in the supplied BAM file. If both reads in one or more reads share the same start position, mapping strand, and barcode sequence (within mismatch tolerance), they are flagged as a “family”, and merged into a single consensus sequence.
 If family members disagree at a given position, the most common base is used as a consensus.  In the case of a tie, the base with the highest aggregated quality score across all family members is used. The quality of each base set to the highest quality base at that position.</p>
 <div class="section" id="run-using">
 <h2>Run Using<a class="headerlink" href="#run-using" title="Permalink to this headline">¶</a></h2>
@@ -72,38 +69,38 @@ If family members disagree at a given position, the most common base is used as 
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can supply any of the arguments below. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
+<tr class="field-odd field"><th class="field-name">-c –config:</th><td class="field-body">A configuration file which can supply any of the arguments below. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">Input SAM/CRAM/BAM file. Each read must contain a read tag which stores adapter sequences</td>
+<tr class="field-even field"><th class="field-name">-i –input:</th><td class="field-body">Input SAM/CRAM/BAM file. Each read must contain a read tag which stores adapter sequences</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body">Output SAM/CRAM/BAM file containing collapsed reads (Use &#8220;-&#8221; for stdout). The output file format will be chosen based upon the supplied file extension, or if &#8220;-&#8221; is used, will be the same as the input file format. Will be unsorted.</td>
+<tr class="field-odd field"><th class="field-name">-o –output:</th><td class="field-body">Output SAM/CRAM/BAM file containing collapsed reads (Use “-” for stdout). The output file format will be chosen based upon the supplied file extension, or if “-” is used, will be the same as the input file format. Will be unsorted.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-fm &#8211;family_mask:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-fm –family_mask:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
 <div class="line">Positions in the barcode sequence to use when comparing barcode sequences between reads which originate from the same parental strand.</div>
 <div class="line">1=Use this position, 0=Do not use this position.</div>
 </div>
 </td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-dm &#8211;duplex_mask:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dm –duplex_mask:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
 <div class="line">The positions in the adapter sequence to use when comparing adapter sequences for reads of opposing types (i.e. forward vs reverse reads).</div>
 <div class="line">1=Use this position, 0=Do not use this position.</div>
 </div>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-fmm &#8211;family_max_mismatch:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-fmm –family_max_mismatch:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the barcode sequence of two read pairs before two read pairs are considered members of different families (See -fm).</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-dmm &#8211;duplex_max_mismatch:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dmm –duplex_max_mismatch:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the barcode sequence of two families before they are considered as not in duplex (See -dm).</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-r &#8211;reference:</th><td class="field-body">Reference genome, in FASTA format. Must be the same genome version that the reads were aligned against.</td>
+<tr class="field-even field"><th class="field-name">-r –reference:</th><td class="field-body">Reference genome, in FASTA format. Must be the same genome version that the reads were aligned against.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-t &#8211;targets:</th><td class="field-body">A BED3 file or better listing regions of interest. Any read pairs which fall entirely outside these regions will be discarded</td>
+<tr class="field-odd field"><th class="field-name">-t –targets:</th><td class="field-body">A BED3 file or better listing regions of interest. Any read pairs which fall entirely outside these regions will be discarded</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">&#8211;tag_family_members:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Store the original name of all reads which were incorporated into a family in the read tag &#8220;Zm&#8221;</td>
+<tr class="field-even field"><th class="field-name" colspan="2">–tag_family_members:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Store the original name of all reads which were incorporated into a family in the read tag “Zm”</td>
 </tr>
 </tbody>
 </table>
@@ -176,7 +173,7 @@ If family members disagree at a given position, the most common base is used as 
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright .
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.3.
     </div>
   </body>
 </html>

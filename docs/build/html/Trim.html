@@ -1,16 +1,13 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    
     <title>Trim &#8212; ProDuSe 0.9.1 documentation</title>
-    
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
@@ -29,7 +26,7 @@
     <link rel="next" title="Collapse" href="Collapse.html" />
     <link rel="prev" title="Adapter Predict" href="adapter_predict.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -75,21 +72,21 @@ Reads where the barcode does not fall within specified barcode range and mismatc
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c, &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
+<tr class="field-odd field"><th class="field-name">-c, –config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-i &#8211;input:</th><td class="field-body">Two FASTQ files to be trimmed. These files may be gzipped.</td>
+<tr class="field-even field"><th class="field-name">-i –input:</th><td class="field-body">Two FASTQ files to be trimmed. These files may be gzipped.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-o &#8211;output:</th><td class="field-body"><div class="first last line-block">
+<tr class="field-odd field"><th class="field-name">-o –output:</th><td class="field-body"><div class="first last line-block">
 <div class="line">Two output FASTQ files</div>
-<div class="line">These files can automatically be gzipped by appending &#8216;.gz&#8217; to the output file name.</div>
+<div class="line">These files can automatically be gzipped by appending ‘.gz’ to the output file name.</div>
 <div class="line">The output file order corresponds with the input file order (i.e -i read1.fastq read2.fastq -&gt; -o read1.out.fastq read2.out.fastq)</div>
 </div>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-b &#8211;barcode_sequence:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">-b –barcode_sequence:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The barcode sequence range, described using IUPAC bases. Can be determined using <a class="reference external" href="adapter_predict.html">adapter_predict</a></td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-p &#8211;barcode_position:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-p –barcode_position:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
 <div class="line">The positions in the adapter sequence to consider when comparing reference (i.e. -b) and actual adapter sequences</div>
 <div class="line">0 = Do not consider this position</div>
@@ -98,18 +95,18 @@ Reads where the barcode does not fall within specified barcode range and mismatc
 </div>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">&#8211;mm &#8211;max_mismatch:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">–mm –max_mismatch:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">The maximum number of mismatches allowed between the reference and actual adapter sequences before a read pair is discarded</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">&#8212;reverse:</th><td class="field-body"><div class="first last line-block">
+<tr class="field-odd field"><th class="field-name">—reverse:</th><td class="field-body"><div class="first last line-block">
 <div class="line">Instead of discarding reads with mismatching barcode sequences, do the opposite (save mismatching reads, discard all others).</div>
 <div class="line">Useful for debugging.</div>
 </div>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name">&#8211;no_trim:</th><td class="field-body">Do not trim the adapter sequence. Only store the adapter sequence a read tag.</td>
+<tr class="field-even field"><th class="field-name">–no_trim:</th><td class="field-body">Do not trim the adapter sequence. Only store the adapter sequence a read tag.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">&#8211;trim_other_end:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">–trim_other_end:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body"><div class="first last line-block">
 <div class="line">Examine the other end of the read for barcode sequences as well.</div>
 <div class="line">Will not remove partial barcodes</div>
@@ -194,7 +191,7 @@ Note that there may be some spillover if non-barcoded reads start with a sequenc
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright .
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.3.
     </div>
   </body>
 </html>

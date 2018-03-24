@@ -1,16 +1,13 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    
     <title>Run ProDuSe &#8212; ProDuSe 0.9.1 documentation</title>
-    
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
@@ -29,7 +26,7 @@
     <link rel="next" title="Adapter Predict" href="adapter_predict.html" />
     <link rel="prev" title="The ProDuSe Pipeline" href="The_ProDuSe_Pipeline.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -75,25 +72,24 @@
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c, &#8211;config:</th><td class="field-body">An INI configuration file, which can specify any of the following
+<tr class="field-odd field"><th class="field-name">-c, –config:</th><td class="field-body">An INI configuration file, which can specify any of the following
 arguments. Any arguments passed at the command line override those specified in the configuration file, which override defaults.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">&#8211;fastqs:</th><td class="field-body">A pair of filepaths to a set of paired-end FASTQ files. Mutually
-exclusive with -sc&#8211;sample_config.</td>
+<tr class="field-even field"><th class="field-name">–fastqs:</th><td class="field-body">A pair of filepaths to a set of paired-end FASTQ files. Mutually
+exclusive with -sc–sample_config.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-sc, &#8211;sample_config:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-sc, –sample_config:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">An INI configuration file, specifying one or more samples to analyze. This file can also provide sample-specific arguments.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-d, &#8211;outdir:</th><td class="field-body">Base output directory for intermediate files and results.
-&#8211;directory_name will be created inside this directory. Default is the
+<tr class="field-even field"><th class="field-name">-d, –outdir:</th><td class="field-body">Base output directory for intermediate files and results.
+–directory_name will be created inside this directory. Default is the
 current working directory.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-r, &#8211;reference:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">A filepath to a reference genome FASTA file. Ideally, BWA and .fai
+<tr class="field-odd field"><th class="field-name">-r, –reference:</th><td class="field-body">A filepath to a reference genome FASTA file. Ideally, BWA and .fai
 indexes should be present in the same directory. If they are not, they
 will be generated automatically.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-j, &#8211;jobs:</th><td class="field-body">Number of samples to analyze in parallel. Use 0 or a negative number to
+<tr class="field-even field"><th class="field-name">-j, –jobs:</th><td class="field-body">Number of samples to analyze in parallel. Use 0 or a negative number to
 process as many samples as possible simultaneously. Default is 1.</td>
 </tr>
 </tbody>
@@ -105,15 +101,17 @@ process as many samples as possible simultaneously. Default is 1.</td>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">&#8211;bwa:</th><td class="field-body">A filepath to a bwa executable. Default is $(which bwa).</td>
+<tr class="field-odd field"><th class="field-name">–bwa:</th><td class="field-body">A filepath to a bwa executable. Default is $(which bwa).</td>
 </tr>
-<tr class="field-even field"><th class="field-name">&#8211;samtools:</th><td class="field-body">A filepath to a samtools executable. Default is $(which samtools)</td>
+<tr class="field-even field"><th class="field-name">–samtools:</th><td class="field-body">A filepath to a samtools executable. Default is $(which samtools)</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">&#8211;directory_name:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">Name of the directory to create inside -d/&#8211;outdir to store intermediate files and results. Default is &#8220;produse_analysis_directory&#8221;.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">–directory_name:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Name of the directory to create inside -d/–outdir to store intermediate files and results. Default is “produse_analysis_directory”.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">&#8211;append_to_directory:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">If &#8211;directory_name already exists inside -d/&#8211;outdir, place the intermediate files and results for this analysis inside this directory. If any samples have the same name as those inside &#8211;directory_name, they will not be analyzed.</td>
+<tr class="field-even field"><th class="field-name" colspan="2">–append_to_directory:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">If –directory_name already exists inside -d/–outdir, place the intermediate files and results for this analysis inside this directory. If any samples have the same name as those inside –directory_name, they will not be analyzed.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">–cleanup:</th><td class="field-body">Following analysis, remove all files present in the “tmp” directory of each sample</td>
 </tr>
 </tbody>
 </table>
@@ -124,16 +122,16 @@ process as many samples as possible simultaneously. Default is 1.</td>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name" colspan="2">-b, &#8211;barcode_sequence:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-b, –barcode_sequence:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">The sequence of the degenerate barcode, specified in IUPAC bases.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-p, &#8211;barcode_position:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Positions in the -b/&#8211;barcode sequence to use when comparing expected and actual barcode sequences (1=Yes, 0=No). The entire barcode will still be trimmed, regardless of which positions are flagged with 0.</td>
+<tr class="field-even field"><th class="field-name" colspan="2">-p, –barcode_position:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Positions in the -b/–barcode sequence to use when comparing expected and actual barcode sequences (1=Yes, 0=No). The entire barcode will still be trimmed, regardless of which positions are flagged with 0.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-mm, &#8211;max_mismatch:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">Maximum number of positions (specified using -p/&#8211;barcode_position) which can fall outside the expected degeneracy range before the read pair is discarded. This is the total between both the forward and reverse read.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-mm, –max_mismatch:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">Maximum number of positions (specified using -p/–barcode_position) which can fall outside the expected degeneracy range before the read pair is discarded. This is the total between both the forward and reverse read.</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">&#8211;trim_other_end:</th></tr>
+<tr class="field-even field"><th class="field-name" colspan="2">–trim_other_end:</th></tr>
 <tr class="field-even field"><td>&#160;</td><td class="field-body">Examine the end of the read for the presence of a barcode (for example, in the case of read-through). Will not remove partial barcodes</td>
 </tr>
 </tbody>
@@ -145,22 +143,22 @@ process as many samples as possible simultaneously. Default is 1.</td>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name" colspan="2">-fm, &#8211;family_mask:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-fm, –family_mask:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">Barcode positions to consider when determining if two reads are members of the same family (1=Yes, 0=No).</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-fmm, &#8211;family_mismatch:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Maximum number of mismatched positions (specified using -fm/&#8211;family_mask) permitted before two reads are considered members of different families.</td>
+<tr class="field-even field"><th class="field-name" colspan="2">-fmm, –family_mismatch:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Maximum number of mismatched positions (specified using -fm/–family_mask) permitted before two reads are considered members of different families.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-dm, &#8211;duplex_mask:</th></tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">-dm, –duplex_mask:</th></tr>
 <tr class="field-odd field"><td>&#160;</td><td class="field-body">Barcode positions to consider when determining if two families are in duplex (1=Yes, 0=No).</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">-dmm, &#8211;duplex_max_mismatch:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Maximum number of mismatched positions (specified using -dm/&#8211;duplex_mask) permitted before two families are not considered a duplex</td>
+<tr class="field-even field"><th class="field-name" colspan="2">-dmm, –duplex_max_mismatch:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Maximum number of mismatched positions (specified using -dm/–duplex_mask) permitted before two families are not considered a duplex</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-t, &#8211;targets:</th><td class="field-body">A filepath to a BED file listing the capture regions of interest. Read pairs that do not overlap these positions will be discarded</td>
+<tr class="field-odd field"><th class="field-name">-t, –targets:</th><td class="field-body">A filepath to a BED file listing the capture regions of interest. Read pairs that do not overlap these positions will be discarded</td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">&#8211;tag_family_members:</th></tr>
-<tr class="field-even field"><td>&#160;</td><td class="field-body">Store the name of each read incorporated into a family in the read tag &#8220;Zm&#8221;</td>
+<tr class="field-even field"><th class="field-name" colspan="2">–tag_family_members:</th></tr>
+<tr class="field-even field"><td>&#160;</td><td class="field-body">Store the name of each read incorporated into a family in the read tag “Zm”</td>
 </tr>
 </tbody>
 </table>
@@ -171,14 +169,14 @@ process as many samples as possible simultaneously. Default is 1.</td>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-f, &#8211;filter:</th><td class="field-body">A filepath to a pickled Random Forest Classifier, used to filter variants. Can be generated using <a class="reference external" href="Train.html">train</a></td>
+<tr class="field-odd field"><th class="field-name">-f, –filter:</th><td class="field-body">A filepath to a pickled Random Forest Classifier, used to filter variants. Can be generated using <a class="reference external" href="Train.html">train</a></td>
 </tr>
 </tbody>
 </table>
 </div></blockquote>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p class="last">If no -b/&#8211;barcode is specified for one or more samples, adapter_predict will be run on those samples automatically</p>
+<p class="last">If no -b/–barcode is specified for one or more samples, adapter_predict will be run on those samples automatically</p>
 </div>
 </div>
 <div class="section" id="pipeline-stages">
@@ -201,16 +199,16 @@ process as many samples as possible simultaneously. Default is 1.</td>
 or the main produse configuration file. This approach is recommended, as it improves reproducibility between runs.</p>
 <p>If a single argument is specified multiple times, the following orders of precedence apply:</p>
 <ol class="arabic simple">
-<li>-sc/&#8211;sample_config file</li>
+<li>-sc/–sample_config file</li>
 <li>Command line</li>
-<li>-c/&#8211;config file</li>
+<li>-c/–config file</li>
 </ol>
-<p>Arguments specified in the -sc/&#8211;sample_config file only apply to the specified sample.
+<p>Arguments specified in the -sc/–sample_config file only apply to the specified sample.
 More information on configuration files can be found <a class="reference external" href="Config_Files.html">here</a>.</p>
 </div>
 <div class="section" id="directory-layout">
 <h2>Directory Layout<a class="headerlink" href="#directory-layout" title="Permalink to this headline">¶</a></h2>
-<p>When run_produse is called, it creates a directory structure for each sample inside of &#8211;directory_name, as follows:</p>
+<p>When run_produse is called, it creates a directory structure for each sample inside of –directory_name, as follows:</p>
 <div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">directory_name</span>
         <span class="n">Sample_Name</span>
                 <span class="n">config</span>
@@ -301,7 +299,7 @@ More information on configuration files can be found <a class="reference externa
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright .
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.3.
     </div>
   </body>
 </html>

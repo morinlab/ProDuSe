@@ -1,16 +1,13 @@
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-
 
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    
     <title>Train &#8212; ProDuSe 0.9.1 documentation</title>
-    
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
@@ -29,7 +26,7 @@
     <link rel="next" title="How ProDuSe Works" href="How_ProDuSe_Works.html" />
     <link rel="prev" title="Update Config" href="update_config.html" /> 
   </head>
-  <body role="document">
+  <body>
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -55,7 +52,7 @@
 <h1>Train<a class="headerlink" href="#train" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="description">
 <h2>Description<a class="headerlink" href="#description" title="Permalink to this headline">¶</a></h2>
-<p>Trains ProDuSe&#8217;s variant calling filter using one or more sets of validated variants. A random forest
+<p>Trains ProDuSe’s variant calling filter using one or more sets of validated variants. A random forest
 classifier will be trained using this data</p>
 </div>
 <div class="section" id="run-using">
@@ -75,18 +72,18 @@ classifier will be trained using this data</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">-c &#8211;config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
+<tr class="field-odd field"><th class="field-name">-c –config:</th><td class="field-body">A configuration file which can provide any of the following arguments. See the <a class="reference external" href="Config_Files.html">config page</a> for more details.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-b &#8211;bam:</th><td class="field-body">One or more post-clipoverlap BAM files, which were used for variant filtering and validations. Must be specified in an order that coresponds to the order specified by -v/&#8211;validations</td>
+<tr class="field-even field"><th class="field-name">-b –bam:</th><td class="field-body">One or more post-clipoverlap BAM files, which were used for variant filtering and validations. Must be specified in an order that coresponds to the order specified by -v/–validations</td>
 </tr>
-<tr class="field-odd field"><th class="field-name" colspan="2">-v &#8211;validations:</th></tr>
-<tr class="field-odd field"><td>&#160;</td><td class="field-body">One or more VCF files listing validated variants. The number and order of file must corespond to files specified in -b/&#8211;bam.</td>
+<tr class="field-odd field"><th class="field-name" colspan="2">-v –validations:</th></tr>
+<tr class="field-odd field"><td>&#160;</td><td class="field-body">One or more VCF files listing validated variants. The number and order of file must corespond to files specified in -b/–bam.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-o &#8211;output:</th><td class="field-body">Output file which will store the random forest classifier</td>
+<tr class="field-even field"><th class="field-name">-o –output:</th><td class="field-body">Output file which will store the random forest classifier</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">-r &#8211;reference:</th><td class="field-body">Reference genome, in FASTA format. An index should also be present in the same directory.</td>
+<tr class="field-odd field"><th class="field-name">-r –reference:</th><td class="field-body">Reference genome, in FASTA format. An index should also be present in the same directory.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">-t &#8211;targets:</th><td class="field-body">Optional. One or more BED files specifying regions in which to restrict candidate variant identification. Must be specified in an order coresponding to the order specified in -b/&#8211;bam.</td>
+<tr class="field-even field"><th class="field-name">-t –targets:</th><td class="field-body">Optional. One or more BED files specifying regions in which to restrict candidate variant identification. Must be specified in an order coresponding to the order specified in -b/–bam.</td>
 </tr>
 </tbody>
 </table>
@@ -163,7 +160,7 @@ of false and true variants prior to training the variant filter.</p>
     </div>
     <div class="footer" role="contentinfo">
         &#169; Copyright .
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.6.3.
     </div>
   </body>
 </html>
