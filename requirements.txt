@@ -4,4 +4,4 @@ configobj
 pyfaidx
 pysam==0.13.0
 packaging
-fisher
+
