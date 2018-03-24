@@ -11,7 +11,7 @@ See the full wiki page for more information: http://produse.readthedocs.io/en/la
 
 You will need to install the following tools before installing the ProDuSe package:
 
-* `python>=3.4
+* `python>=3.4`
 * `bwa>=0.7.0`
 * `samtools>=1.3.1`
 
@@ -52,7 +52,7 @@ To run the analysis pipeline you simply need to run the following command:
 Alternatively:
 ```
     /path/to/ProDuSe/ProdusePipeline.py 
-    -c /path/to/github/clone/etc/produse_config.ini:
+    -c /path/to/github/clone/etc/produse_config.ini
 ```
 
 This will run the entire ProDuSe pipeline on all samples specified in the sample_config.ini file, which can be found in 
