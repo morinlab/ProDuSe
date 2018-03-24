@@ -66,7 +66,7 @@ def main(args=None, sysStdin=None):
 
     # If no valid samples were found, then this is not a valid analysis directory
     if len(validSamples) == 0:
-         sys.stderr.write("ERROR: Unable to find any valid sample directories in \"%s\". Check that this a directory created by \"ProDuSe Pipeline\", and that setup completed sucessfully" % args["produse_dir"] + os.linesep)
+         sys.stderr.write("ERROR: Unable to find any valid sample directories in \"%s\". Check that this a directory was created by \"run_produse\", and that configuration completed sucessfully." % args["produse_dir"] + os.linesep)
 
     # If multiple samples are to be processed in parallel
     if args["jobs"] == 0:
