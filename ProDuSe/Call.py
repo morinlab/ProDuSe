@@ -314,7 +314,7 @@ class Position:
                 inDuplex = 1
             strandBias = self.strandBias[baseIndex]
             for stat in stats:
-                stat.extend((altCount, depth, altCount/depth, strandBias, inDuplex))
+                stat.extend((altCount, strandBias, inDuplex))
                 completeStats.append(stat)
                 altBases.append(indexToBase[baseIndex])
 
@@ -518,7 +518,7 @@ class PileupEngine:
 
         return rawOutLine, passedOutLine
 
-    def filterAndWriteVariants(self, outfile, filter, unfilteredOut=None, strandBiasThreshold=0.05):
+    def filterAndWriteVariants(self, outfile, filter, unfilteredOut=None, filtThreshold=0.5):
         """
 
         Filters candidate variants based upon specified characteristics, and writes the output to the output file
@@ -527,7 +527,7 @@ class PileupEngine:
         :param outfile: A string containing a filepath to the output VCF file
         :param filter: A sklearn.ensemble.RandomForestClassifier() which is to be used to filter variants
         :param unfilteredOut: A sting containing a filepath to an output VCF file which will contain ALL variants, even those that do not pass filters
-        :param strandBiasThreshold: A float representing the strand bias p-value threshold
+        :param filtThreshold: A float representing the classification threshold in which to filter variants
         :return:
         """
 
@@ -542,11 +542,10 @@ class PileupEngine:
                 for position, stats in self.candidateVar[chrom].items():
 
                     try:
-                        posStats, altAlleles = stats.collapsePosition(strandBiasThreshold)
-
+                        posStats, altAlleles = stats.collapsePosition()
                     # A keyerror will occur if the Reference base is not an "A,C,G,T" (i.e. an "N" or "M")
                     except KeyError:
-                        continue # For now
+                        continue
 
                     if len(altAlleles) == 0:
                         continue
@@ -565,11 +564,15 @@ class PileupEngine:
 
                     # See if this variant passes filters or not
                     # Aggregate the stats required for the filter
-                    filterResults = filter.predict(posStats)  # 0=Passed filters, 1=Failed Filters
+                    filterResults = filter.predict_proba(posStats)  # A 2D array listing [[Pass, Fail], [Pass, Fail], ...]
                     # Check to see which reads passed and failed filters, and assign variants using reads which passed filters
                     passedAltAlleles = set()
-                    for altAllele, result in zip(altAlleles, filterResults):
-                        if result == 0:
+                    maxFilt = 0
+                    for altAllele, groupings in zip(altAlleles, filterResults):
+                        passConfidence = groupings[0]
+                        if passConfidence > maxFilt:
+                            maxFilt = passConfidence
+                        if passConfidence >= filtThreshold:
                             passedAltAlleles.add(altAllele)
 
                     if len(passedAltAlleles) > 0:
@@ -577,11 +580,11 @@ class PileupEngine:
                     else:
                         filterResult="FAIL"
                     # Add 1 to the position, to compensate for the fact that pysam uses 0-based indexing, while VCF files use 1-based
-                    outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(set(altAlleles)), str(stats.maxAltQual), filterResult, ";".join(infoCol)])
+                    outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(set(altAlleles)), str(stats.maxAltQual), str(maxFilt), ";".join(infoCol)])
                     u.write(outLine + os.linesep)
-                    if filter == "PASS":
+                    if filterResult == "PASS":
                         outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(passedAltAlleles),
-                                             str(stats.maxAltQual), filterResult, ";".join(infoCol)])
+                                             str(stats.maxAltQual), str(maxFilt), ";".join(infoCol)])
                         o.write(outLine + os.linesep)
 
             for chrom in self._candidateIndels:
@@ -1055,7 +1058,7 @@ class PileupEngine:
         """
         self._indelReads = []
 
-    def processRead(self, read, rCigar, mismatchMax=0.02, discardBad=False):
+    def processRead(self, read, rCigar, mismatchMax=0.04, discardBad=False):
         """
         Add all positions covered by this read to the pileup
 
@@ -1381,8 +1384,8 @@ def validateArgs(args):
                         help="A BED file containing regions in which to restrict variant calling")
     parser.add_argument("-f", "--filter", metavar="PICKLE", required=True, type=lambda x: isValidFile(x, parser),
                         help="A pickle file containing the trained filter. Can be generated using \'produse train\'")
-    parser.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float, default=0.05,
-                        help="Any variants with a strand bias above this threshold will be filtered out")
+    parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
+                        help="Classification threshold to use when filtering variants [Default: 0.33]")
     validatedArgs = parser.parse_args(listArgs)
     return vars(validatedArgs)
 
@@ -1396,7 +1399,7 @@ parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValid
 parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser), help="A BED file containing regions in which to restrict variant calling")
 parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser),
                     help="A pickle file containing a trained filter. Can be generated using \'produse train\'")
-parser.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float, help="Any variants with a strand bias above this threshold will be filtered out")
+parser.add_argument("--threshold", metavar="FLOAT", type=float, help="Classification threshold to use when filtering variants [Default: 0.33]")
 
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
@@ -1428,7 +1431,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
     # Filter variants
     with open(args["filter"], "r+b") as o:
         filterModel = pickle.load(o)
-    pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["strand_bias_threshold"])
+    pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"])
 
 
 if __name__ == "__main__":

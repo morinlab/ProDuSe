@@ -7,6 +7,8 @@ import os
 import sys
 import time
 import random
+import seaborn
+import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from configobj import ConfigObj
 try:
@@ -87,10 +89,6 @@ def loadVariants(inFile):
                     unclassifiedVariants[chrom][position] = set()
                 unclassifiedVariants[chrom][position].add(alt)
 
-        # Sanity check to ensure a sufficient number of validations are required
-        if validatedVar < 10:  # TODO:  Parameter testing to determine a minimum number
-            sys.stderr.write("ERROR: A minimum of 10 validated variants are required to train the filter.\n")
-            exit(1)
         if skippedVar > 0:
             sys.stderr.write("WARNING: Validation status was not specified for %s variants. These will be ignored.\n" % skippedVar)
 
@@ -119,7 +117,7 @@ def validateArgs(args):
         # Ignore booleans, as we will re-add them when the arguments are re-parsed
         if parameter == "True" or parameter is True:
             continue
-        # If the parameter is a list, we need to add each element seperately
+        # If the parameter is a list, we need to add each element separately
         if isinstance(parameter, list):
             for p in parameter:
                 listArgs.append(str(p))
@@ -138,6 +136,10 @@ def validateArgs(args):
                         help="Reference Genome, in FASTA format")
     parser.add_argument("-t", "--targets", metavar="BED", nargs="+", type=lambda x: isValidFile(x, parser),
                         help="A BED file containing regions in which to restrict variant calling")
+    parser.add_argument("--true_stats", metavar="TSV", type=lambda x: isValidFile(x, parser),
+                        help="An optional file to dump stats coresponding to validated variants")
+    parser.add_argument("--false_stats", metavar="TSV", type=lambda x: isValidFile(x, parser),
+                        help="An optional file to dump stats coresponding to false variants that were chosen to train the filter")
 
     args = parser.parse_args(listArgs)
     return vars(args)
@@ -150,7 +152,8 @@ parser.add_argument("-v", "--validations", metavar="VCF", type=lambda x: isValid
 parser.add_argument("-o", "--output", metavar="PICKLE", help="Output pickle file, containing the filtering classifier")
 parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser), help="Reference Genome, in FASTA format")
 parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser, allowNone=True), nargs="+", help="One or more BED file(s) containing regions in which to restrict variant calling. Must be specified in the same order as \'--bam\' (use \'None\' for no BED file)")
-
+parser.add_argument("--true_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An optional file to dump stats coresponding to validated variants")
+parser.add_argument("--false_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An optional file to dump stats coresponding to false variants that were chosen to train the filter")
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     if args is None:
@@ -200,50 +203,18 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
             for location, pos in positions.items():
 
                 try:
-                    pos.collapsePosition()
+                    posStats, altBases = pos.collapsePosition()
                 except KeyError:  # i.e. The reference based at this position is degenerate
                     continue
                 # Is this a true or false variant
-                for altAllele in pos.altAlleles:
-                    isReal = False
+                for posStat, base in zip(posStats, altBases):
 
-                    if chrom in unclassifiedVariants and location in unclassifiedVariants[chrom] and altAllele in unclassifiedVariants[chrom][location]:
+                    if chrom in unclassifiedVariants and location in unclassifiedVariants[chrom] and base in unclassifiedVariants[chrom][location]:
                         continue  # We can't train the filter based on this variant
-                    if chrom in trueVariants and location in trueVariants[chrom] and altAllele in trueVariants[chrom][location]:
-                        isReal = True
-
-                    altIndex = baseToIndex[altAllele]
-                    # Obtain constant stats for this position
-                    depth = float(pos.depth)  # Total Depth
-                    altDepth = pos.strandCounts[altIndex]
-                    altStrandBias = pos.strandBias[altIndex]
-
-                    # Does this base support an alternate allele?
-                    for base, qual, fSize, distToEnd, mismatchNum, mapQual, readID \
-                        in zip(pos.alleles, pos.qualities, pos.famSizes, pos.distToEnd, pos.mismatchNum, pos.mappingQual, pos.readNum):
-                        if base is None:  # i.e. there are no more reads that overlap this position
-                            break
-
-                        if base == altAllele:  # This allele is a variant
-                            # Check to see if this read is in duplex or not
-                            try:
-                                strands = set(pos.readParentalStrand[readID])
-                                if len(strands) > 1:
-                                    inDuplex = 0
-                                else:
-                                    inDuplex = 1
-                            except KeyError:  # i.e. reads in duplex disagree at this position
-                                continue
-
-
-                            if isReal:
-                                trueVarStats.append(
-                                    [qual, fSize, distToEnd, mismatchNum, mapQual, altDepth, depth, altDepth / depth,
-                                     altStrandBias, inDuplex])
-                            else:
-                                falseVarStats.append(
-                                    [qual, fSize, distToEnd, mismatchNum, mapQual, altDepth, depth, altDepth / depth,
-                                     altStrandBias, inDuplex])
+                    if chrom in trueVariants and location in trueVariants[chrom] and base in trueVariants[chrom][location]:
+                        trueVarStats.append(posStat)
+                    else:
+                        falseVarStats.append(posStat)
         i += 1
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Training Random Forest\n"]))
 
@@ -251,6 +222,16 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     # If there are more validated variants than false variants, do not subset
     if len(falseVarStats) > len(trueVarStats):
         falseVarStats = random.sample(falseVarStats, len(trueVarStats))
+
+    # Dump the stats used to train the filters to the specified output files
+    with open(args["true_stats"] if args["true_stats"] is not None else os.devnull, "w") as t,\
+            open(args["false_stats"] if args["false_stats"] is not None else os.devnull, "w") as f:
+        # Write the file headers
+        f.write("\t".join(["quality", "family_size", "distance_to_read_end", "number_of_read_mismatches", "mapping_qual", "alt_count", "strand_bias_p", "family_in_duplex"]))
+        for line in trueVarStats:
+            t.write("\t".join(list(str(x) for x in line)) + os.linesep)
+        for line in falseVarStats:
+            f.write("\t".join(list(str(x) for x in line)) + os.linesep)
 
     # Merge the false and true variant stats
     varStats = trueVarStats
