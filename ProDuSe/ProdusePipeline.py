@@ -202,6 +202,7 @@ def checkArgs(rawArgs):
                         help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
     parser.add_argument("--append_to_directory", action="store_true",
                         help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
+    parser.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
 
     trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
     trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
@@ -230,8 +231,8 @@ def checkArgs(rawArgs):
     callArgs = parser.add_argument_group("Arguments used when calling variants")
     callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser), required=True,
                           help="A python pickle containing a trained Random Forest variant filter")
-    callArgs.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float,
-                          help="Any variants with a strand bias above this threshold will be filtered out")
+    callArgs.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
+                          help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.33]")
 
     validatedArgs = parser.parse_args(args=listArgs)
     return vars(validatedArgs)
@@ -407,13 +408,14 @@ def runPipelineMultithread(args):
     :return:
     """
 
-    runPipeline(args[0], args[1])
+    runPipeline(args[0], args[1], args[2])
 
-def runPipeline(sampleName, sampleDir):
+def runPipeline(sampleName, sampleDir, cleanup=False):
     """
     Run all scripts in the ProDuSe pipeline on the specified sample
     :param sampleName: A string containing the sample name, for status message updates
     :param sampleDir: A string containg the filepath to the base sample directory
+    :param cleanup: A boolean indicating if temporary files should be deleted
     :return:
     """
 
@@ -548,6 +550,13 @@ def runPipeline(sampleName, sampleDir):
         # Mark this sample as fully processed
         open(pipelineDone, "w").close()
 
+    # Cleanup intermediate files (if specified)
+    if cleanup:
+        tmpDir = os.path.join(sampleDir, "tmp")
+        tmpFiles = os.listdir(tmpDir)
+        for tmpFile in tmpFiles:
+            os.remove(os.path.join(tmpDir, tmpFile))
+
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "%s: Pipeline Complete\n" % sampleName.rstrip()]))
 
 
@@ -568,6 +577,7 @@ parser.add_argument("--directory_name",
                     help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
 parser.add_argument("--append_to_directory",
                     help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
+parser.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
 
 trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
 trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
@@ -593,7 +603,7 @@ collapseArgs.add_argument("--tag_family_members", action="store_true",
                           help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
 callArgs = parser.add_argument_group("Arguments used when calling variants")
-callArgs.add_argument("--strand_bias_threshold", metavar="FLOAT", type=float, help="Any variants with a strand bias above this threshold will be filtered out")
+callArgs.add_argument("--threshold", metavar="FLOAT", type=float, help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.33]")
 callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x:isValidFile(x, parser), help="A python pickle containing a trained Random Forest variant filter")
 
 # For config parsing purposes, assign each parameter to the pipeline component from which it originates
@@ -613,7 +623,7 @@ argsToPipelineComponent = {
     "targets": ["collapse", "call"],
     "tag_family_members": ["collapse"],
     "filter" : ["call"],
-    "strand_bias_threshold": ["call"]
+    "threshold": ["call"]
 }
 
 
@@ -739,7 +749,7 @@ def main(args=None, sysStdin=None):
         # Convert the dictionary which contains the sample arguments into a list of tuples, for multithreading use
         # In addition, to keep the command line status messages semi-reasonable, normalize for sample name length
         maxLength = max(len(x) for x in samplesToProcess.keys())
-        multithreadArgs = list((x.ljust(maxLength, " "), y) for x, y in samplesToProcess.items())
+        multithreadArgs = list((x.ljust(maxLength, " "), y, args["cleanup"]) for x, y in samplesToProcess.items())
         try:
             # Run the jobs
             processPool.map(runPipelineMultithread, multithreadArgs)
@@ -753,7 +763,7 @@ def main(args=None, sysStdin=None):
     else:
         # Run each sample in series
         for sample, sampleDir in samplesToProcess.items():
-            runPipeline(sample, sampleDir)
+            runPipeline(sample, sampleDir, args["cleanup"])
 
 
 if __name__ == "__main__":
