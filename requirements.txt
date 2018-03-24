@@ -1,9 +1,7 @@
 sortedcontainers
 numpy
 configobj
-scikit-bio
 pyfaidx
 pysam==0.13.0
 packaging
-sklearn
 fisher
