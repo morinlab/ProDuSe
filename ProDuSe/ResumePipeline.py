@@ -34,6 +34,7 @@ def getArgs(stdin):
     parser = argparse.ArgumentParser(description="Resumes analysis of a previously terminated Pipeline")
     parser.add_argument("-d", "--produse_dir", type=lambda x: isValidDir(x, parser), required=True, help="An existing output directory for ProDuSe analysis")
     parser.add_argument("-j", "--jobs", metavar="INT", default=1, type=int, help="Number of samples to process in parallel")
+    parser.add_argument("--cleanup", action="store_true", help="Once a sample is analyzed, remove intermediate files")
     if stdin is None:
         return parser.parse_args()
     else:
@@ -51,7 +52,7 @@ def main(args=None, sysStdin=None):
     samples = list(os.path.join(args["produse_dir"], x) for x in os.listdir(path = args["produse_dir"]) if os.path.isdir(os.path.join(args["produse_dir"], x)))
 
     # To actually check that this is a "produse_analysis_directory", check for the required config files for each sample
-    validSamples = []
+    validSamples = {}
     requiredConfigs = ["trim_task.ini", "bwa_task.ini", "collapse_task.ini", "clipoverlap_task.ini", "call_task.ini"]
     for sample in samples:
         validSample = True
@@ -62,7 +63,8 @@ def main(args=None, sysStdin=None):
                 break
 
         if validSample:
-            validSamples.append(sample)
+            sampleName = os.path.basename(sample)
+            validSamples[sampleName] = sample
 
     # If no valid samples were found, then this is not a valid analysis directory
     if len(validSamples) == 0:
@@ -76,8 +78,9 @@ def main(args=None, sysStdin=None):
     if threads > 1 or threads is None:
         # Convert the dictionary which contains the sample arguments into a list of tuples, for multithreading use
         # In addition, to keep the command line status messages semi-reasonable, normalize for sample name length
-        maxLength = max(len(x) for x in validSamples)
-        multithreadArgs = list((x.ljust(maxLength, " "), os.path.basename(x)) for x in validSamples)
+
+        maxLength = max(len(x) for x in validSamples.keys())
+        multithreadArgs = list((x.ljust(maxLength, " "), y, args["cleanup"]) for x, y in validSamples.items())
 
         processPool = multiprocessing.Pool(processes=threads)
         try:
@@ -90,9 +93,8 @@ def main(args=None, sysStdin=None):
             processPool.join()
             raise e
     # Obtain the sample name, and re-run this sample
-    for sample in validSamples:
-        sampleName = os.path.basename(sample)
-        ProdusePipeline.runPipeline(sampleName, sample)
+    for sampleName, sPath in validSamples.items():
+        ProdusePipeline.runPipeline(sampleName, sPath)
 
 
 if __name__ == "__main__":
