@@ -334,7 +334,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
             if count % 100000 == 0:
 
                 sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
-                                            "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%",
+                                            "Discard Rate:" + str(float(discard) / float(count) * 100)[:3] + "%",
                                             "Count:" + str(count) + "\n"]))
                 # Check to see if the discard rate is excessive (>70%). If so, the barcode is probably incorrect
                 if float(discard) / float(count) > 0.70 and not discardWarning:
@@ -350,7 +350,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
     # Final messages
     if count % 100000 != 0:
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
-                                    "Discard Rate:" + str(round(float(discard) / float(count), 3) * 100) + "%",
+                                    "Discard Rate:" + str(float(discard) / float(count) * 100)[:3] + "%",
                                     "Count:" + str(count) + "\n"]))
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Trimming Complete\n"]))
 

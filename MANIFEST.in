@@ -12,4 +12,4 @@ include ProDuSe/Call.py
 include ProDuSe/ClipOverlap.py
 include ProDuSe/UpdateConfig.py
 include ProDuSe/Train.py
-include ProDuSe/ResumeProDuSe.py
+include ProDuSe/ResumePipeline.py
