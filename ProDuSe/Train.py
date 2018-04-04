@@ -7,8 +7,6 @@ import os
 import sys
 import time
 import random
-import seaborn
-import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from configobj import ConfigObj
 try:
