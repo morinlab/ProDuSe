@@ -56,7 +56,7 @@ def makeConfig(configName, configPath, arguments):
     config.write()
 
 
-def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
+def configureOutput(sampleName, sampleParameters, outDir, argsToScript, printPrefix):
     # Create a sample-specific output directory inside the specified output directory
     # Inside this directory, we are going to create seperate directories for the data,
     # intermediate files, and results
@@ -65,7 +65,6 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     # as it likely has already been processed (at least partially)
     samplePath = outDir + os.sep + sampleName
     if os.path.exists(samplePath):
-        global printPrefix
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
                                     "WARNING: A folder corresponding to \'%s\' already exists inside \'%s\'\n" % (
                                     sampleName, outDir)]))
@@ -575,7 +574,7 @@ parser.add_argument("--bwa", help="Path to bwa executable [Default: \'bwa\']")
 parser.add_argument("--samtools", help="Path to samtools executable [Default: \'samtools\']")
 parser.add_argument("--directory_name",
                     help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
-parser.add_argument("--append_to_directory",
+parser.add_argument("--append_to_directory", action="store_true",
                     help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
 parser.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
 
@@ -731,7 +730,7 @@ def main(args=None, sysStdin=None):
                 sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the resulting analysis will merge those samples\n")
 
         # Configure the output directories and config files for this sample
-        sampleDir = configureOutput(sample, runArgs, baseOutDir, argsToPipelineComponent)
+        sampleDir = configureOutput(sample, runArgs, baseOutDir, argsToPipelineComponent, printPrefix)
         # Create a sample-specific log file
         sLogName = os.path.join(sampleDir, "config", sample + "_Task.log")
         createLogFile(sLogName, runArgs, bwa=bwaVer, samtools=samtoolsVer, python=pythonVer)
