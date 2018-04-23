@@ -140,9 +140,12 @@ def combineArgs(confArgs, args):
     # config file (assuming one was provided there)
     for parameter, arg in args.items():
 
-        if arg is None and parameter in confArgs["Pipeline"]:
-            # If this parameter is specified in the config file, add it to the argument groupings
-            args[parameter] = confArgs["Pipeline"][parameter]
+        try:
+            if arg is None and parameter in confArgs["Pipeline"]:
+                # If this parameter is specified in the config file, add it to the argument groupings
+                args[parameter] = confArgs["Pipeline"][parameter]
+        except KeyError as e:
+            raise TypeError("No section named \'Pipeline\' was found in the specified config file") from e
 
     return args
 
@@ -175,6 +178,13 @@ def checkArgs(rawArgs):
 
         else:
             listArgs.append(str(parameter))
+
+    # Point to the default filter included in the distribution
+    try:  # If ProDuSe is installed
+        produsePath = ProDuSe.__path__[0]
+    except NameError:  # i.e. ProDuSe is not installed
+        produsePath = os.path.dirname(os.path.realpath(__file__))
+    defaultFilt = os.path.join(produsePath, "default_filter.pkl")
 
     # To validate the argument type, recreate the parser
     # BUT HERE, INDICATE IF AN ARGUMENT IS REQUIRED OR NOT
@@ -228,7 +238,7 @@ def checkArgs(rawArgs):
                               help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
     callArgs = parser.add_argument_group("Arguments used when calling variants")
-    callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser), required=True,
+    callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser), default=defaultFilt,
                           help="A python pickle containing a trained Random Forest variant filter")
     callArgs.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
                           help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.33]")
