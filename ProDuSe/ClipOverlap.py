@@ -432,7 +432,10 @@ class ReadIterator:
             elif read1ClipOp == 1 or read1ClipOp == 2:
                 self._trimR1 = False
             """
-            consensusSeq = "".join(consensusSeq)
+            try:
+                consensusSeq = "".join(consensusSeq)
+            except TypeError as e:
+                raise TypeError("An error was encountered while processing read pair \'%s\'. This usually indicates that this read pair has an invalid CIGAR sequence" % read1.query_name) from e
 
             # Trim read 1
             read1Qual = read1.query_qualities[:read1SeqClipPoint]
