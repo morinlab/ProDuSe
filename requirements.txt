@@ -6,4 +6,4 @@ pyfaidx
 pysam==0.13.0
 packaging
 sklearn
-fisher
+scipy

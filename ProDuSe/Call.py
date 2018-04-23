@@ -10,7 +10,8 @@ from sklearn.ensemble import RandomForestClassifier
 from skbio import alignment
 from pyfaidx import Fasta
 import time
-from fisher import pvalue
+from scipy.stats import fisher_exact
+#from fisher import pvalue
 from configobj import ConfigObj
 import bisect
 
@@ -37,6 +38,7 @@ class Position:
         self.altAlleles = set()
         self._altIndex = {}  # Used to remove altAlleles if necessary
         self.depth = 0
+        self.altDepth = 0
 
         self.skipIndexes = set()
 
@@ -74,6 +76,7 @@ class Position:
             if base not in self.altAlleles:
                 self.altAlleles.add(base)
                 self._altIndex[base] = self.depth - 1
+            self.altDepth += 1
             return True
         else:
             return False
@@ -121,10 +124,12 @@ class Position:
 
         # Remove this base from the alternate allele list, if necessary
         try:
-            if allele != self.ref and self.ref != "N" and self._altIndex[allele] == i:
-                self.altAlleles.remove(allele)
-                if not len(self.altAlleles):
-                    self.alt = False
+            if allele != self.ref:
+                self.altDepth -= 1
+                if self.ref != "N" and self._altIndex[allele] == i:
+                    self.altAlleles.remove(allele)
+                    if not len(self.altAlleles):
+                        self.alt = False
             del self.alleles[i]
         except KeyError as e:
             raise TypeError(self.readNum) from e
@@ -290,11 +295,11 @@ class Position:
                 if pMapStrand[index] + nMapStrand[index] == 0:
                     self.strandBias.append(1.0)
                 else:
-                    self.strandBias.append(pvalue(pMapStrand[index], nMapStrand[index], pMapStrand[refIndex], nMapStrand[refIndex]).two_tail)
+                    self.strandBias.append(fisher_exact([[pMapStrand[index], nMapStrand[index]], [pMapStrand[refIndex], nMapStrand[refIndex]]])[1])
         else:  # This event is a deletion
             self.strandBias = [1,1,1,1]
             self.strandBias.append(
-                pvalue(pMapStrand[4], nMapStrand[4], sum(pMapStrand[x] for x in range(0,4)), sum(nMapStrand[x] for x in range(0,4))).two_tail)
+                fisher_exact([[pMapStrand[4], nMapStrand[4]], [sum(pMapStrand[x] for x in range(0,4)), sum(nMapStrand[x] for x in range(0,4))]])[1])
         self.vafs = []
         for index in range(0,5):
             try:
@@ -324,7 +329,7 @@ class PileupEngine:
     """
     Generates a custom pileup using family characteristics
     """
-    def __init__(self, inBAM, refGenome, targetRegions, homopolymerWindow=5, noiseWindow=150, pileupWindow = 1000, printPrefix="PRODUSE-CALL\t"):
+    def __init__(self, inBAM, refGenome, targetRegions, minAltDepth=1, homopolymerWindow=5, noiseWindow=150, pileupWindow = 1000, printPrefix="PRODUSE-CALL\t"):
         self._inFile=pysam.AlignmentFile(inBAM)
         self._refGenome = Fasta(refGenome, read_ahead=20000)
         self._captureSpace = self._loadCaptureSpace(targetRegions)
@@ -332,6 +337,7 @@ class PileupEngine:
         self.pileup = {}
         self.candidateVar = {}
         self.filteredVar = {}
+        self._minAltDepth = minAltDepth
         self._homopolymerWindow = homopolymerWindow
         self._noiseWindow = noiseWindow
         # The number of positions to store before collapsing previous positions
@@ -539,8 +545,14 @@ class PileupEngine:
             self.__writeVcfHeader(u)
 
             for chrom in self.candidateVar:
-                for position, stats in self.candidateVar[chrom].items():
 
+                # To minimize memory usage as much as possible (until the improved implementation is done),
+                # create a copy of the keys in the dictionary for this chromosome, and iterate over those
+                # Then we can delete each position after it has been processed.
+                positions = self.candidateVar[chrom].keys()
+                for pos in positions:
+
+                    stats = self.candidateVar[chrom][pos]
                     try:
                         posStats, altAlleles = stats.collapsePosition()
                     # A keyerror will occur if the Reference base is not an "A,C,G,T" (i.e. an "N" or "M")
@@ -565,6 +577,7 @@ class PileupEngine:
                     # See if this variant passes filters or not
                     # Aggregate the stats required for the filter
                     filterResults = filter.predict_proba(posStats)  # A 2D array listing [[Pass, Fail], [Pass, Fail], ...]
+
                     # Check to see which reads passed and failed filters, and assign variants using reads which passed filters
                     passedAltAlleles = set()
                     maxFilt = 0
@@ -580,12 +593,15 @@ class PileupEngine:
                     else:
                         filterResult="FAIL"
                     # Add 1 to the position, to compensate for the fact that pysam uses 0-based indexing, while VCF files use 1-based
-                    outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(set(altAlleles)), str(stats.maxAltQual), str(maxFilt), ";".join(infoCol)])
+                    outLine = "\t".join([chrom, str(pos + 1), ".", stats.ref, ",".join(set(altAlleles)), str(stats.maxAltQual), str(maxFilt), ";".join(infoCol)])
                     u.write(outLine + os.linesep)
                     if filterResult == "PASS":
-                        outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(passedAltAlleles),
+                        outLine = "\t".join([chrom, str(pos + 1), ".", stats.ref, ",".join(passedAltAlleles),
                                              str(stats.maxAltQual), str(maxFilt), ";".join(infoCol)])
                         o.write(outLine + os.linesep)
+
+                    # After processing this variant, delete it to reduce memory footprint
+                    del self.candidateVar[chrom][pos]
 
             for chrom in self._candidateIndels:
 
@@ -1174,7 +1190,7 @@ class PileupEngine:
             if self._chrom in self._candidateIndels and coordinate in self._candidateIndels[self._chrom]:
                 self._candidateIndels[self._chrom][coordinate].addPos(pos)
             # Ignore non-variant positions
-            if pos.alt:
+            if pos.altDepth >= self._minAltDepth:
 
                 # Is this position within the capture space?
                 if self._captureSpace is not None:
@@ -1386,6 +1402,8 @@ def validateArgs(args):
                         help="A pickle file containing the trained filter. Can be generated using \'produse train\'")
     parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
                         help="Classification threshold to use when filtering variants [Default: 0.33]")
+    parser.add_argument("--min_alt_depth", metavar="INT", type=int, default=2,
+                        help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 2]")
     validatedArgs = parser.parse_args(listArgs)
     return vars(validatedArgs)
 
@@ -1400,6 +1418,7 @@ parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile
 parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser),
                     help="A pickle file containing a trained filter. Can be generated using \'produse train\'")
 parser.add_argument("--threshold", metavar="FLOAT", type=float, help="Classification threshold to use when filtering variants [Default: 0.33]")
+parser.add_argument("--min_alt_depth", metavar="INT", type=int, help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 2]")
 
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
@@ -1423,7 +1442,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
             exit(1)
 
     args = validateArgs(args)
-    pileup = PileupEngine(args["input"], args["reference"], args["targets"], printPrefix=printPrefix)
+    pileup = PileupEngine(args["input"], args["reference"], args["targets"], minAltDepth = args["min_alt_depth"], printPrefix=printPrefix)
 
     # Find candidate variants
     pileup.generatePileup()

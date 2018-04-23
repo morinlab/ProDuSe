@@ -33,12 +33,13 @@ setup(
         "scikit-bio",
         "pyfaidx",
         "pysam<=0.13.0",
-        "fisher",
         "packaging",
         "sklearn"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.1.tar.gz",
     license="GNU GPLv3",
     scripts=["bin/produse"],
-    data_files = [("ProDuSe", ["LICENSE.txt", "README.md"])])
+    data_files = [("ProDuSe", ["LICENSE.txt", "README.md", "etc/default_filter.pkl"])],
+    zip_safe = False
+)
 

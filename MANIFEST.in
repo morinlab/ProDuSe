@@ -13,3 +13,4 @@ include ProDuSe/ClipOverlap.py
 include ProDuSe/UpdateConfig.py
 include ProDuSe/Train.py
 include ProDuSe/ResumePipeline.py
+include ProDuSe/default_filter.pkl
