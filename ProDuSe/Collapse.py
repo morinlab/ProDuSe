@@ -460,6 +460,45 @@ class Family:
                 consensusCigar.append(2)
             refLength += 1
 
+        # To handle the extremely rare cases which may cause a consensus read to start or end with a INDEL
+        # Remove such events from the start or end of the read
+        # From the start of the read
+        i = 0
+        try:
+            while True:
+                op = consensusCigar[i]
+                if op == 0:
+                    break
+                elif op == 2:  # Remove this deletion from the start of the read
+                    consensusCigar.pop(i)
+                    startOffset += 1
+                elif op == 1:  # Remove this insertion from the sequence, quality, and cigar
+                    consensusCigar.pop(i)
+                    consensusSeq.pop(i)
+                    consensusQual.pop(i)
+                else:
+                    i += 1
+        except IndexError:  # The entire read is soft clipped
+            pass
+        # From the back of the read
+        i = -1
+        try:
+            while True:
+                op = consensusCigar[i]
+                if op == 0:
+                    break
+                elif op == 2:  # Remove this deletion from the start of the read
+                    consensusCigar.pop(i)
+                    refLength -= 1
+                elif op == 1:  # Remove this insertion from the sequence, quality, and cigar
+                    consensusCigar.pop(i)
+                    consensusSeq.pop(i)
+                    consensusQual.pop(i)
+                else:
+                    i -= 1
+        except IndexError:  # The entire read is soft clipped
+            pass
+
         # If this read is mapped to the reverse strand, and thus we are collapsing from the back, account for the
         # case where the start position changes due to differences between the consensus length and the "seed" read length
         if reverseClip:
