@@ -404,34 +404,6 @@ class ReadIterator:
         # Assign the consensus generated to one of two reads
         if consensusSeq:
 
-            """
-            # To ensure a valid record is produced for downstream tools, check to see if the clip point of either
-            # read coresponds to an INDEL. if it does, we need to add the consensus to that sequence, to ensure a valid
-            # record is generated
-            if read1CigarClipPoint == 0:
-                read1ClipOp = None  # This is the cigar operator at the proposed clip point
-            else:
-                read1ClipOp = read1Cigar[read1CigarClipPoint]
-            try:
-                read2ClipOp = read2Cigar[r2CigarIndex]
-            except IndexError:
-                read2ClipOp = None
-            if read2ClipOp == 1 or read2ClipOp == 2:
-                # If the clip point of both reads is an INDEL, trim back read 1 until there is no longer an indel
-                if read1ClipOp == 2:  # Simplest case. Trim back the deletion
-                    while read1ClipOp == 2:
-                        read1CigarClipPoint -= 1
-                        read1ClipOp = read1Cigar[read1CigarClipPoint]
-                elif read1ClipOp == 1: # Trim back the insertion
-                    while read1ClipOp == 1:
-                        read1CigarClipPoint -= 1
-                        read1SeqClipPoint -= 1
-                        read1ClipOp = read1Cigar[read1CigarClipPoint]
-
-                self._trimR1 = True
-            elif read1ClipOp == 1 or read1ClipOp == 2:
-                self._trimR1 = False
-            """
             try:
                 consensusSeq = "".join(consensusSeq)
             except TypeError as e:
@@ -447,8 +419,124 @@ class ReadIterator:
             read2.query_sequence = read2.query_sequence[read2Index:]
             read2Cigar = read2Cigar[r2CigarIndex:]
 
-            # Add the consensus sequence and qualities to both reads, but soft-clip the overlap
-            if self._generateTag:  # Add a tag indicating from which read a base was generated from
+            # Add the consensus to the specified read
+            # We alternate the sequence that is clipped to minimize the likelihood of strand bias filtering
+            # will remove a variant if it was actually supported by both reads (the overlap)
+
+            # To improve compatibility with tools that require a non-soft clipped sequence in both reads, add
+            # one base from the consensus to the read that will be clipped (here, is is read 1)
+            # But make sure this doesn't cause the clipping point to impact an INDEL
+            try:
+                if self._trimR1:
+                    conCigarClipPoint = 0
+                    conSeqClipPoint = 0
+                    clipOffset = 0
+                    while True:
+                        clippedCigar = consensusCigar[conCigarClipPoint]
+                        if clippedCigar == 0:
+                            conSeqClipPoint += 1
+                            conCigarClipPoint += 1
+                            clipOffset += 1
+                            if consensusCigar[conCigarClipPoint] == 0 or consensusCigar[conCigarClipPoint] == 4:  # The next position is also a match. Split between these two
+                                break
+                            else:
+                                continue
+                        elif clippedCigar == 2:  # Deletion, no sequence consumed
+                            conCigarClipPoint += 1
+                            clipOffset += 1
+                        elif clippedCigar == 1:  # Insertion, start position not affected
+                            conCigarClipPoint += 1
+                            conSeqClipPoint += 1
+                        else:
+                            raise TypeError(
+                                "An error occured while splitting the consensus sequence. Cigar operator encountered: %s" % clippedCigar)
+                else:
+                    conCigarClipPoint = -1
+                    conSeqClipPoint = -1
+                    clipOffset = -1
+                    while True:
+                        clippedCigar = consensusCigar[conCigarClipPoint]
+                        if clippedCigar == 0:  # This position is a normal mapping
+                            conCigarClipPoint -= 1
+                            conSeqClipPoint -= 1
+                            clipOffset -= 1
+                            if consensusCigar[conCigarClipPoint] == 0 or consensusCigar[conCigarClipPoint] == 4:  # i.e. the next position is also a match. We should split between these two
+                                break
+                            else:
+                                continue
+                        elif clippedCigar == 2:  # Deletion, no sequence consumed
+                            conCigarClipPoint -= 1
+                            clipOffset -= 1
+                        elif clippedCigar == 1:  # Insertion, start position not affected
+                            conCigarClipPoint -= 1
+                            conSeqClipPoint -= 1
+                        else:
+                            raise TypeError(
+                                "An error occured while splitting the consensus sequence. Cigar operator encountered: %s" % clippedCigar)
+            except IndexError:  # Only a single base overlaps
+                # Don't do anything special with the overlap
+                # This shouldn't cause any problems. If it does, then for some reason the BAM file has a read that is only a single
+                # nucleotide long, and if that's the case, there are FAR bigger problems than the possible incompatabilities
+                # that this will cause
+                pass
+
+            # Add the consensus to read 1
+            # Sequence
+            try:
+                read1.query_sequence = read1.query_sequence + consensusSeq[:conSeqClipPoint]
+            except TypeError:  # Because pysam converts "" into None
+                read1.query_sequence = consensusSeq[:conSeqClipPoint]
+            # Quality score
+            read1Qual.extend(consensusQual[:conSeqClipPoint])
+            read1.query_qualities = read1Qual
+            # Cigar string
+            read1Cigar.extend(consensusCigar[:conCigarClipPoint])
+
+            # Add the consensus to read 2
+            # Sequence
+            try:
+                read2.query_sequence = consensusSeq[conSeqClipPoint:] + read2.query_sequence
+            except TypeError:  # Because pysam converts "" into None
+                read2.query_sequence = consensusSeq[conSeqClipPoint:]
+            # Quality
+            consensusQual = consensusQual[conSeqClipPoint:]
+            consensusQual.extend(read2Qual)
+            read2.query_qualities = consensusQual
+            # Cigar
+            consensusCigar = consensusCigar[conCigarClipPoint:]
+            consensusCigar.extend(read2Cigar)
+            read2Cigar = consensusCigar
+
+            # Start position of read2
+            read2.reference_start = read2.reference_start + clipOffset
+            if not self._trimR1:
+                read2.reference_start += read2StartOffset
+            read1.next_reference_start = read2.reference_start
+
+            if self._generateTag:  # Add a tag indicating from which read a base originated from
+                try:
+                    tag = "".join(assignedBases[conSeqClipPoint:]) + read2Type * len(read2.query_sequence)
+                except TypeError:
+                    tag = "".join(assignedBases)
+                read2.set_tag("co", tag)
+
+                try:
+                    tag = read1Type * len(read1.query_sequence) + "".join(assignedBases[:conSeqClipPoint])
+                except TypeError:
+                    tag = "".join(assignedBases[:conSeqClipPoint])
+                read1.set_tag("co", tag)
+
+            read1.cigartuples = self.listToCigar(read1Cigar)
+            read2.cigartuples = self.listToCigar(read2Cigar)
+
+            # Finally, update the mate cigar tags with the new cigar sequences
+            read1.set_tag("MC", read2.cigarstring)
+            read2.set_tag("MC", read1.cigarstring)
+
+            self._trimR1 = not self._trimR1
+            """
+            # Add a tag indicating from which read a base was generated from
+            if self._generateTag:
                 try:
                     read1Tag = read1Type * len(read1.query_sequence) + "".join(assignedBases)
                 except TypeError:
@@ -479,9 +567,13 @@ class ReadIterator:
             read1.query_qualities = read1Qual
             read2.query_qualities = consensusQual  # Actually read2Qual
 
-            # Modify the cigar string to extend
+            # Modify the cigar string to account for the soft-clipping
             if self._trimR1:
                 read1Cigar.extend([4]*len(consensusSeq))
+
+                # To avoid problems with downstream tools that require a non-soft clipped sequence, add one base of the
+                # consensus to the other read
+                
                 consensusCigar.extend(read2Cigar)
                 read2Cigar = consensusCigar
             else:
@@ -496,7 +588,7 @@ class ReadIterator:
             read2.cigartuples = self.listToCigar(read2Cigar)
 
             self._trimR1 = not self._trimR1
-
+            """
     def next(self):
         return self.__iter__()
 
