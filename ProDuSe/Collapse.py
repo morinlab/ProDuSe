@@ -539,13 +539,15 @@ class Family:
 
         self.R1.query_name = self.name
         self.R1.reference_start = self.R1start
-        if tagOrig:
-            self.R1.set_tag("Zm", ",".join(self.members))
-
         self.R2.query_name = self.name
         self.R2.reference_start = self.R2start
         if tagOrig:
+            self.R1.set_tag("Zm", ",".join(self.members))
             self.R2.set_tag("Zm", ",".join(self.members))
+
+        # Remove the barcode tag, as it is no longer required
+        self.R1.set_tag("BC", None)
+        self.R2.set_tag("BC", None)
 
         # Un-reverse the sequence of the reverse-strand-mapped, so the sequences will be in the expected format
         if self.R1.is_reverse:
@@ -569,6 +571,9 @@ class Family:
         self.R1.next_reference_start = self.R2.reference_start
         self.R2.next_reference_start = self.R1.reference_start
 
+        # Update the mate cigar string
+        self.R1.set_tag("MC", self.R2.cigarstring)
+        self.R2.set_tag("MC", self.R1.cigarstring)
 
 
 class Position:
