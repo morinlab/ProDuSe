@@ -478,7 +478,10 @@ class ReadIterator:
                 # This shouldn't cause any problems. If it does, then for some reason the BAM file has a read that is only a single
                 # nucleotide long, and if that's the case, there are FAR bigger problems than the possible incompatabilities
                 # that this will cause
-                pass
+                conSeqClipPoint = -1
+                conCigarClipPoint = -1
+                clipOffset = -1
+                self._trimR1 = False
 
             # Add the consensus to read 1
             # Sequence
