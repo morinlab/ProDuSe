@@ -47,7 +47,7 @@ class Family:
         # Obtain the family name for this read pair (from the barcode)
         self.invalidBarcode = False
         try:
-            self.familyName = R1.get_tag("BC")
+            self.familyName = R1.get_tag("OX")
             if len(self.familyName) != barcodeLength:
                 self.invalidBarcode = True
         except KeyError:
@@ -546,8 +546,8 @@ class Family:
             self.R2.set_tag("Zm", ",".join(self.members))
 
         # Remove the barcode tag, as it is no longer required
-        self.R1.set_tag("BC", None)
-        self.R2.set_tag("BC", None)
+        self.R1.set_tag("OX", None)
+        self.R2.set_tag("OX", None)
 
         # Un-reverse the sequence of the reverse-strand-mapped, so the sequences will be in the expected format
         if self.R1.is_reverse:
@@ -1139,7 +1139,7 @@ class FamilyCoordinator:
 
             # Print out a status (or error) message, briefly summarizing the overall collapse
             if self.missingBarcode > 0 and self.familyCounter == 0:
-                sys.stderr.write("ERROR: Unable to find a \'BC\' tag, which contains the degenerate barcode, for any read in the input BAM file\n")
+                sys.stderr.write("ERROR: Unable to find a \'OX\' tag, which contains the degenerate barcode, for any read in the input BAM file\n")
                 sys.stderr.write(
                     "Check that BWA was run using the \'-C\' option\n")
 

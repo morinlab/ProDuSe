@@ -254,8 +254,8 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
 
             # Remove the Illumina tag from the reads, since BWA's -C option will add that tag to the BAM file as well
             # which will corrupt the output SAM
-            r1name = r1name.split(" ")[0].rstrip() + "\tBC:Z:" + familyBarcode + os.linesep
-            r2name = r2name.split(" ")[0].rstrip() + "\tBC:Z:" + familyBarcode + os.linesep
+            r1name = r1name.split(" ")[0].rstrip() + "\tOX:Z:" + familyBarcode + os.linesep
+            r2name = r2name.split(" ")[0].rstrip() + "\tOX:Z:" + familyBarcode + os.linesep
 
             # Second, determine if the barcode sequences fall within the mismatch theshold
             # Obtain the positions that will actually be compared
