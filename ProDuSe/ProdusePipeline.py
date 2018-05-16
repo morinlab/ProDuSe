@@ -65,11 +65,8 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript, printPre
     # as it likely has already been processed (at least partially)
     samplePath = outDir + os.sep + sampleName
     if os.path.exists(samplePath):
-        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
-                                    "WARNING: A folder corresponding to \'%s\' already exists inside \'%s\'\n" % (
-                                    sampleName, outDir)]))
-        sys.stderr.write(
-            "We are not going to process the existing sample, but we will try to finish running the existing sample\n")
+        sys.stderr.write("WARNING: A folder corresponding to \'%s\' already exists inside \'%s\'.\n" % (sampleName, outDir))
+        sys.stderr.write("We will attempt to finish analyzing this sample using the existing configuration.\n")
         return samplePath
 
     os.mkdir(samplePath)
