@@ -18,10 +18,12 @@ before_install:
     - sudo make install
     - cd ..
 
-install: "pip install -r requirements.txt"
+install: 
+    - "pip install -r requirements.txt"
+    - python setup.py install
 
-script: "python ProDuSe/ProdusePipeline.py -c etc/produse_config.ini"
-script: "python ProDuSe/ProdusePipeline.py -c etc/produse_config.ini -j 2 --directory_name Multithread --bwa $(which bwa) --samtools $(which samtools) --cleanup"
-script: "python setup.py install"
-script: "produse run_produse -c etc/produse_config.ini --directory_name Installed -j 4 --trim_other_end"
-script: "produse resume_produse -d Installed"
+script:
+    - "python ProDuSe/ProdusePipeline.py -c etc/produse_config.ini"
+    - "python ProDuSe/ProdusePipeline.py -c etc/produse_config.ini -j 2 --directory_name Multithread --bwa $(which bwa) --samtools $(which samtools) --cleanup"
+    - "produse run_produse -c etc/produse_config.ini --directory_name Installed -j 4 --trim_other_end"
+    - "produse resume_produse -d Installed"
