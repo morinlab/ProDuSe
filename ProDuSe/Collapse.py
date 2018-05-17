@@ -49,7 +49,7 @@ class Family:
         try:
             self.familyName = R1.get_tag("OX")
             if len(self.familyName) != barcodeLength:
-                self.invalidBarcode = True
+                raise TypeError("The read pair barcode \'%s\' for pair \'%s\' is not compatible with the specified mask" % (self.familyName, R1.query_name))
         except KeyError:
             self.familyName = None
             self.invalidBarcode = True
