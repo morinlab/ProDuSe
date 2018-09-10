@@ -183,10 +183,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
         reverseBarcode = barcodeBases[::-1]
         reverseBarcode = tuple(compliment[x] for x in reverseBarcode)
 
-    # Check to ensure that the user actually provided positions to be compared
-    if len(barcodeIndexes) == 0:
-        parser.error("The barcode mask \'%s\' was provided, and no positions were specified to be compared")
-
     # Open the input and output fastq files for reading/writing
     # Determine if the input files are gzipped, and open appropriately
     if args["input"][0].split(".")[-1] == "gz":
