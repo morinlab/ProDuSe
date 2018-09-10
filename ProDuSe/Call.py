@@ -8,12 +8,46 @@ import sortedcontainers
 import pickle
 from sklearn.ensemble import RandomForestClassifier
 from skbio import alignment
+from scipy.stats import ttest_ind
 from pyfaidx import Fasta
 import time
-from scipy.stats import fisher_exact
-#from fisher import pvalue
+from fisher import pvalue as fisher_exact
+from statistics import mean
 from configobj import ConfigObj
 import bisect
+
+# Multiprocessing
+import inspect
+import multiprocessing
+
+# Import version number
+try:
+    import __version as pVer
+    import ProDuSeExceptions as pe
+except ImportError:
+    from ProDuSe import __version as pVer
+    from ProDuSe import ProDuSeExceptions as pe
+
+
+class Haplotype:
+    """
+    TODO: An object that stores an aligned sequence ("Haplotype"), it's differences relative to the reference, and
+    the NGS reads which support this haplotype
+
+    A haplotype is generated from reads which contain indels, and represents that indel
+    """
+
+    def __init__(self, seq=None, eventFromRef=None):
+        """
+
+        :param seq: A string containing a nucleotide sequence which coresponds to the assembled haplotype
+        :param support: A list containing strings coresponding to the reads which support this event
+        :param eventFromRef: A cigar string containing the distance from this alignment to the reference
+        """
+        self.seq = seq
+        self.support = []
+        self.eventFromRef=eventFromRef
+        self.alignmentStructure=alignment.StripedSmithWaterman(seq, mismatch_score=-3, match_score=1)
 
 
 class Position:
@@ -21,10 +55,17 @@ class Position:
     Stores the allele counts and associated characteristics at this position
     """
 
+    # Reduce memory footprint
+    __slots__ = ("alleles", "qualities", "famSizes", "posParent", "mapStrand", "distToEnd", "mismatchNum",
+                 "mappingQual", "readNum", "readName", "alt", "altAlleles", "depth", "altDepth",
+                 "leftWindow", "ref", "rightWindow", "nearbyVar", "nWindow", "baseCounts",
+                 "alleleStrongCounts", "strandCounts", "posMolec", "negMolec", "pMapStrand", "nMapStrand",
+                 "alleleMapQual", "alleleBaseQual", "alleleStrandBias", "alleleVafs", "molecDepth", "alleleMismatch",
+                 "alleleAvFamSize", "alleleEndDist", "duplexCounts")
     def __init__(self, refBase):
         self.ref = refBase
 
-        # Pre-initialize these lists to a sensible size to improve performance in high-depth regions
+        # Pre-initialize these lists to a sensible size to improve performance in low-depth regions
         self.alleles = [None] * 5
         self.qualities = [None] * 5
         self.famSizes = [None] * 5
@@ -34,17 +75,13 @@ class Position:
         self.mismatchNum = [None] * 5
         self.mappingQual = [None] * 5
         self.readNum = [None] * 5
+        self.readName = [None] * 5
         self.alt = False
-        self.altAlleles = set()
-        self._altIndex = {}  # Used to remove altAlleles if necessary
+        self.altAlleles = {}
         self.depth = 0
         self.altDepth = 0
 
-        self.skipIndexes = set()
-
-        # Statistics when summarizing variants
-
-    def add(self, base, qual, size, posParent, mapStrand, dist, mapQual, readNum):
+    def add(self, base, qual, size, posParent, mapStrand, dist, mapQual, readNum, readName):
 
         # Add a new base, as well as the corresponding characteristics, to this position
         try:
@@ -59,6 +96,7 @@ class Position:
             self.mismatchNum.extend([None] * 150)
             self.mappingQual.extend([None] * 150)
             self.readNum.extend([None] * 150)
+            self.readName.extend([None] * 150)
             self.alleles[self.depth] = base
         self.qualities[self.depth] = qual
         self.famSizes[self.depth] = size
@@ -67,279 +105,748 @@ class Position:
         self.distToEnd[self.depth] = dist
         self.mappingQual[self.depth] = mapQual
         self.readNum[self.depth] = readNum
-
+        self.readName[self.depth] = readName
         self.depth += 1
 
         # Does this base support a variant?
         if self.ref != "N" and self.ref != base:
             self.alt = True
-            if base not in self.altAlleles:
-                self.altAlleles.add(base)
-                self._altIndex[base] = self.depth - 1
+            try:
+                self.altAlleles[base] += 1
+            except KeyError:
+                self.altAlleles[base] = 1
             self.altDepth += 1
             return True
         else:
             return False
 
-    def addPos(self, position):
-        """
-        Merges the statistics of another position into this one
-        :param position: Another Position object
-        :return:
-        """
-
-        # Remove the Nones from the lists
-        self.qualities = self.qualities[:self.depth]
-        self.famSizes = self.famSizes[:self.depth]
-        self.posParent = self.posParent[:self.depth]
-        self.mapStrand = self.mapStrand[:self.depth]
-        self.distToEnd = self.distToEnd[:self.depth]
-        self.mappingQual = self.mappingQual[:self.depth]
-        self.readNum = self.readNum[:self.depth]
-
-        # Add the other position
-        self.depth += position.depth
-        self.qualities.extend(position.qualities)
-        self.famSizes.extend(position.famSizes)
-        self.posParent.extend(position.posParent)
-        self.mapStrand.extend(position.mapStrand)
-        self.distToEnd.extend(position.distToEnd)
-        self.mappingQual.extend(position.mappingQual)
-        self.readNum.extend(position.readNum)
-
-
-    def removeLast(self):
-
-        # Remove the last base stored at this position
-        i = self.depth - 1
-        del self.qualities[i]
-        del self.famSizes[i]
-        del self.posParent[i]
-        del self.mapStrand[i]
-        del self.distToEnd[i]
-        del self.mappingQual[i]
-        del self.readNum[i]
-        del self.mismatchNum[i]
-        allele = self.alleles[i]
-
-        # Remove this base from the alternate allele list, if necessary
-        try:
-            if allele != self.ref:
-                self.altDepth -= 1
-                if self.ref != "N" and self._altIndex[allele] == i:
-                    self.altAlleles.remove(allele)
-                    if not len(self.altAlleles):
-                        self.alt = False
-            del self.alleles[i]
-        except KeyError as e:
-            raise TypeError(self.readNum) from e
-        self.depth -= 1
-
     def addMismatchNum(self, misMatchNum):
-        self.mismatchNum[self.depth -1] = misMatchNum
+        self.mismatchNum[self.depth - 1] = misMatchNum
 
-    def processVariant(self, refWindow, nearbyVariants, nWindow):
-        self.refWindow = refWindow
+    def processVariant(self, leftWindow, rightWindow, nearbyVariants, nWindow):
+        self.leftWindow = leftWindow
+        self.rightWindow = rightWindow
         self.nearbyVar = nearbyVariants
         self.nWindow = nWindow  # How many positions were examined to find nearby variants?
 
-    def collapsePosition(self, minDepth=0, minAltDepth=0, strandBiasThreshold=0, strongMoleculeThreshold=3):
+    def summarizeVariant(self, minAltDepth=4, strongMoleculeThreshold=3):
         """
-        Merges variant stats at a given position
-
+        Aggregate all statistics at this position
+        :param strongMoleculeThreshold:
         :return:
         """
 
-        self.baseCounts = { "DPN":  [0, 0, 0, 0, 0],
-                            "DpN":  [0, 0, 0, 0, 0],
-                            "DPn":  [0, 0, 0, 0, 0],
-                            "Dpn":  [0, 0, 0, 0, 0],
-                            "SN" :  [0, 0, 0, 0, 0],
-                            "SP" :  [0, 0, 0, 0, 0],
-                            "Sp" :  [0, 0, 0, 0, 0],
-                            "Sn" :  [0, 0, 0, 0, 0]
+        # Molecule counts and type
+        self.baseCounts =  {"DPN": {"A": 0, "C": 0, "G": 0, "T": 0},
+                            "DpN": {"A": 0, "C": 0, "G": 0, "T": 0},
+                            "DPn": {"A": 0, "C": 0, "G": 0, "T": 0},
+                            "Dpn": {"A": 0, "C": 0, "G": 0, "T": 0},
+                            "SN" : {"A": 0, "C": 0, "G": 0, "T": 0},
+                            "SP" : {"A": 0, "C": 0, "G": 0, "T": 0},
+                            "Sp" : {"A": 0, "C": 0, "G": 0, "T": 0},
+                            "Sn" : {"A": 0, "C": 0, "G": 0, "T": 0}
                             }
-        self.strandCounts = [0.0, 0.0, 0.0, 0.0, 0.0]
-        self.posMolec = [0, 0, 0, 0, 0]
-        self.negMolec = [0, 0, 0, 0, 0]
-        self.disagreeingDuplexes = [0, 0, 0, 0, 0]
+        self.strandCounts = {"A": 0, "C": 0, "G":0, "T": 0}
+        self.alleleStrongCounts = {"A": 0, "C": 0, "G":0, "T": 0}
+        self.duplexCounts = {"A": 0, "C": 0, "G":0, "T": 0}
 
-        baseToIndex = {"A": 0, "C": 1, "G": 2, "T": 3, "-": 4}
-        indexToBase = {0: "A", 1: "C", 2: "G", 3: "T", 4: "-"}
+        # Parental strand counts
+        self.posMolec = {"A": 0, "C": 0, "G": 0, "T": 0}
+        self.negMolec = {"A": 0, "C": 0, "G": 0, "T": 0}
 
-        pMapStrand = [0, 0, 0, 0, 0]
-        nMapStrand = [0, 0, 0, 0, 0]
+        # Map strand counts, for strand bias calculations
+        self.pMapStrand = {"A": 0, "C": 0, "G": 0, "T": 0}
+        self.nMapStrand = {"A": 0, "C": 0, "G": 0, "T": 0}
+
+        # Handle overlapping read pairs
+        readNameIndex = {}
+        readNameBaseIndex = {"A": {}, "C": {}, "G": {}, "T": {}}
+
+        # Identify and flag reads in duplex
+        # If a read ID occurs once, that read is a singleton
+        # If that read ID occurs twice, that read is in duplex
+        singletonIndex = {}
+        duplexIDs = {}
+        depth = 0
+
+        # Since the features of this position are "paired" (i.e. index 0 of each list corresponds to the statistics
+        # of the same read), cycle through all stored attributes
+        i = -1
+        for base, qual, famSize, posParent, map, distToEnd, mismatchNum, mapQual, readID, readName \
+                in zip(self.alleles, self.qualities, self.famSizes, self.posParent, self.mapStrand, self.distToEnd,
+                       self.mismatchNum, self.mappingQual, self.readNum, self.readName):
+
+            i += 1
+            # If the base in "None", then we have started reading into the buffer. There are no more
+            # positions to process
+            if base is None:
+                break
+
+            # What strand do these reads map to? Used to calculate strand bias info later
+            if map:  # Negative map strand
+                self.nMapStrand[base] += 1
+            else:
+                self.pMapStrand[base] += 1
+
+            # Have we examined another read with the same name?
+            if readName in readNameIndex:
+                # If so, this read pair overlaps
+                # In this case, only use the base with the highest quality score
+                otherIndex = readNameIndex[readName]
+                otherQual = self.qualities[otherIndex]  # Obtain the other quality score
+                otherBase = self.alleles[otherIndex]  # The other base
+                if qual > otherQual:  # This read has a higher quality score
+                    # Use this read instead of the other read
+                    readNameIndex[readName] = i
+                    del readNameBaseIndex[otherBase][readName]
+                    readNameBaseIndex[base][readName] = i
+                    depth -= 1
+                elif qual < otherQual:  # The other read has a higher quality score. Ignore this one
+                    continue
+                else:
+                    # In the case of a tie, use the read with the largest family size
+                    otherFSize = self.famSizes[otherIndex]
+                    if otherFSize > famSize:
+                        continue
+                    elif otherFSize < famSize:
+                        readNameIndex[readName] = i
+                        del readNameBaseIndex[otherBase][readName]
+                        readNameBaseIndex[base][readName] = i
+                        depth -= 1
+                    else:
+                        # In the case of a tie, use the reference base to be conservative
+                        if otherBase == self.ref:
+                            continue
+                        elif base == self.ref:
+                            readNameIndex[readName] = i
+                            del readNameBaseIndex[otherBase][readName]
+                            readNameBaseIndex[base][readName] = i
+                            depth -= 1
+                        else:  # Both bases have the same quality score, and support different alternate alleles
+                            # Choose the alternate allele with the most support
+                            try:
+                                otherWeight = self.altAlleles[otherBase]
+                            except KeyError:
+                                otherWeight = 0
+                            try:
+                                weight = self.altAlleles[base]
+                            except KeyError:
+                                weight = 0
+                            if otherWeight > weight:
+                                continue
+                            elif weight > otherWeight:
+                                readNameIndex[readName] = i
+                                del readNameBaseIndex[otherBase][readName]
+                                readNameBaseIndex[base][readName] = i
+                                depth -= 1
+                            else:
+                                # These bases have the same quality score, and support different alternate alleles which
+                                # are equally supported
+                                # I give up. Just take the first read encountered
+                                continue
+
+            else:
+                # This is the first time we have encountered this read name. Store it, in case we encounter the mate
+                readNameIndex[readName] = i
+                readNameBaseIndex[base][readName] = i
+
+            # Handle duplexes
+            # Check if there is another read with this ID
+            if readID in singletonIndex:  # This read is in duplex
+                # Store this duplex
+                duplexIDs[readID] = (readName, self.readName[singletonIndex[readID]])  # Store the readNames
+                del singletonIndex[readID]
+            else:  # We have not encountered a read with this ID as of yet
+                singletonIndex[readID] = i
+                depth += 1  # Total molecule count
+
+
+        # Process duplexes
+        for duplexName1, duplexName2 in duplexIDs.values():
+            index1 = readNameIndex[duplexName1]
+            index2 = readNameIndex[duplexName2]
+
+            base1 = self.alleles[index1]
+            base2 = self.alleles[index2]
+
+            # If the bases disagree, then we should discard this duplex
+            if base1 != base2:
+                del readNameIndex[duplexName1]
+                del readNameIndex[duplexName2]
+                del readNameBaseIndex[base1][duplexName1]
+                del readNameBaseIndex[base2][duplexName2]
+
+                # Update strand and molecule counts
+                depth -= 1
+                continue
+
+            # What type of duplex is this?
+            posStrong = False
+            negStrong = False
+            if self.posParent[index1]:  # Read 1 of the duplex is from the positive parental strand
+                if self.famSizes[index1] > strongMoleculeThreshold:
+                    posStrong = True
+            else:  # Read 1 of the duplex is from the negative parental strand
+                if self.famSizes[index1] > strongMoleculeThreshold:
+                    negStrong = True
+            # Repeat for the second read
+            if self.posParent[index2]:  # Read 2 of the duplex is from the positive parental strand
+                if self.famSizes[index2] > strongMoleculeThreshold:
+                    posStrong = True
+            else:  # Read 2 of the duplex is from the negative parental strand
+                if self.famSizes[index2] > strongMoleculeThreshold:
+                    negStrong = True
+
+            # Add the duplex to the count
+            if posStrong and negStrong:
+                self.baseCounts["DPN"][base1] += 1
+            elif posStrong:
+                self.baseCounts["DPn"][base1] += 1
+            elif negStrong:
+                self.baseCounts["DpN"][base1] += 1
+            else:
+                self.baseCounts["Dpn"][base1] += 1
+
+            self.posMolec[base1] += 1
+            self.negMolec[base1] += 1
+
+            self.duplexCounts[base1] += 1
+            # To prevent this duplex from being double-counted downstream, remove one of the reads from processing
+            # and keep the read with the largest family size
+            if self.famSizes[index1] > self.famSizes[index2]:
+                del readNameIndex[duplexName2]
+                del readNameBaseIndex[base2][duplexName2]
+            else:
+                del readNameIndex[duplexName1]
+                del readNameBaseIndex[base1][duplexName1]
+
+        # Process singletons
+        for readName, index in singletonIndex.items():
+
+            base = self.alleles[index]
+            # What type of molecule is this?
+            # What type of molecule is this?
+            if self.posParent[index]:
+                self.posMolec[base] += 1
+                if self.famSizes[index] > strongMoleculeThreshold:
+                    self.baseCounts["SP"][base] += 1
+                else:
+                    self.baseCounts["Sp"][base] += 1
+            else:
+                self.negMolec[base] += 1
+                if self.famSizes[index] > strongMoleculeThreshold:
+                    self.baseCounts["SN"][base] += 1
+                else:
+                    self.baseCounts["Sn"][base] += 1
+
+        # Generate summary stats
+        self.alleleMapQual = {}
+        self.alleleBaseQual = {}
+        self.alleleStrandBias = {}
+        self.alleleVafs = {}
+        self.molecDepth = sum(len(readNameBaseIndex[x]) for x in readNameBaseIndex)
+        self.alleleMismatch = {}
+        self.alleleAvFamSize = {}
+        self.alleleEndDist = {}
+
+        # Process each variant allele individually
+        for base, reads in readNameBaseIndex.items():
+            if not reads:  # i.e. the dictionary is empty. There are no reads which support this allele. Use placeholder values
+                self.alleleMapQual[base] = (0)
+                self.alleleBaseQual[base] = (0)
+                self.alleleStrandBias[base] = 1
+                self.alleleVafs[base] = 0
+                self.alleleMismatch[base] = (0)
+                self.alleleAvFamSize[base] = (0)
+                self.alleleEndDist[base] = (0)
+            else:
+                self.alleleMapQual[base] = tuple(self.mappingQual[x] for x in reads.values())
+                self.alleleBaseQual[base] = tuple(self.qualities[x] for x in reads.values())
+                self.alleleMismatch[base] = tuple(self.mismatchNum[x] for x in reads.values())
+                self.alleleAvFamSize[base] = tuple(self.famSizes[x] for x in reads.values())
+                self.alleleEndDist[base] = tuple(self.distToEnd[x] for x in reads.values())
+                # Calculate strand bias
+                self.alleleStrandBias[base] = fisher_exact(self.pMapStrand[base], self.nMapStrand[base],
+                                                      sum(self.pMapStrand[x] for x in ("A", "C", "G", "T")),
+                                                       sum(self.nMapStrand[x] for x in ("A", "C", "G", "T"))).two_tail
+
+                counts = len(reads.values())
+                self.strandCounts[base] = counts
+                self.alleleVafs[base] = counts / self.molecDepth
+
+
+        # If no alternate alleles pass the minimum depth filter, than this position is not a real variant
+        failedDepth = []
+        for allele in self.altAlleles.keys():
+            if self.strandCounts[allele] < minAltDepth:
+                failedDepth.append(allele)
+        for allele in failedDepth:
+            del self.altAlleles[allele]
+        if not self.altAlleles:
+            return False
+        return True
+
+    def leftFlankProp(self, base):
+        """
+        Calculates the proportion of bases upstream of this variant that which are "base"
+
+        :param base: The nucleotide to use "A,C,G,T"
+        :return: A float indication the proportion of flanking bases that are "base"
+
+        Note: For performance reasons, this will not check that base is a nucleotide
+        """
+
+        i = 0.0
+        for b in self.leftWindow:
+            if b == base:
+                i += 1
+
+        return i / len(self.leftWindow)
+
+    def rightFlankProp(self, base):
+        """
+        Calculates the proportion of bases downstream of this variant that which are "base"
+
+        :param base: The nucleotide to use "A,C,G,T"
+        :return: A float indication the proportion of right-flanking bases that are "base"
+
+        Note: For performance reasons, this will not check that base is a nucleotide
+        """
+
+        i = 0.0
+        for b in self.rightWindow:
+            if b == base:
+                i += 1
+
+        return i / len(self.rightWindow)
+
+
+class IndelPos:
+    """
+    Similar to a position object, but stores indel events, rather than SNV/SNPs
+
+    Only stores variant positions, not reference positions
+    """
+
+    __slots__ = ("alleles", "qualities", "famSizes", "posParent", "mapStrand", "distToEnd", "mismatchNum",
+                 "mappingQual", "readNum", "readName", "alt", "altAlleles", "depth", "altDepth",
+                 "leftWindow", "ref", "rightWindow", "nearbyVar", "nWindow", "baseCounts",
+                 "alleleStrongCounts", "strandCounts", "posMolec", "negMolec", "pMapStrand", "nMapStrand",
+                 "alleleMapQual", "alleleBaseQual", "alleleStrandBias", "alleleVafs", "molecDepth", "alleleMismatch",
+                 "alleleAvFamSize", "alleleEndDist", "type", "length", "alt", "disagreeingDuplexes", "duplexCounts")
+
+    def __init__(self, type, length, alt=None):
+
+        self.type = type  # Is this an insertion or deletion?
+        self.length = length  # How long is this event?
+
+        self.ref = None
+        self.alt = alt
+
+        # Statistics coresponding to the reads which support this event
+        self.alleles = [None] * 5
+        self.qualities = [None] * 5
+        self.famSizes = [None] * 5
+        self.posParent = [None] * 5
+        self.mapStrand = [None] * 5
+        self.distToEnd = [None] * 5
+        self.mismatchNum = [None] * 5
+        self.mappingQual = [None] * 5
+        self.readNum = [None] * 5
+        self.readName = [None] * 5
+        self.depth = 0
+        self.altDepth = 0
+
+    def add(self, allele, qual, posParent, famSize, mapStrand, mapQual, dist, readNum, readName, isAlt=False):
+
+        # Add a new base, as well as the corresponding characteristics, to this position
+        try:
+            self.alleles[self.depth] = allele
+        except IndexError:  # We have exceeded the current max buffered positions. Increase the buffer
+            self.alleles.extend([None] * 100)
+            self.qualities.extend([None] * 100)
+            self.famSizes.extend([None] * 100)
+            self.posParent.extend([None] * 100)
+            self.mapStrand.extend([None] * 100)
+            self.distToEnd.extend([None] * 100)
+            self.mismatchNum.extend([None] * 100)
+            self.mappingQual.extend([None] * 100)
+            self.readNum.extend([None] * 100)
+            self.readName.extend([None] * 100)
+            self.alleles[self.depth] = allele
+        self.qualities[self.depth] = qual
+        self.famSizes[self.depth] = famSize
+        self.posParent[self.depth] = posParent
+        self.mapStrand[self.depth] = mapStrand
+        self.distToEnd[self.depth] = dist
+        self.mappingQual[self.depth] = mapQual
+        self.readNum[self.depth] = readNum
+        self.readName[self.depth] = readName
+        self.depth += 1
+
+        if isAlt:
+            self.altDepth += 1
+
+    def addMismatchNum(self, misMatchNum):
+        self.mismatchNum[self.depth - 1] = misMatchNum
+
+    def processVariant(self, leftFlank, rightFlank, nearbyVar, noiseWindow):
+        """
+        Store some basic statistics about this position
+
+        :param leftFlank: A list containing the nucleotides upstream of this position
+        :param rightFlank: A list containing the nucleotides downstream of this position
+        :param nearbyVar: A list storing all adjacent indels that fall within noiseWindow
+        :param noiseWindow: How many bases upstream and downstream were searched for nearby indels
+        :return:
+        """
+
+        self.leftWindow = leftFlank
+        self.rightWindow = rightFlank
+        self.nearbyVar = nearbyVar
+        self.nWindow = noiseWindow
+
+    def summarizeVariant(self, minAltDepth=4, strongMoleculeThreshold=3):
+
+
+        # Data structures to hold the various summary statistics
+        self.baseCounts =  {"DPN": {"ALT": 0, "REF": 0},
+                            "DpN": {"ALT": 0, "REF": 0},
+                            "DPn": {"ALT": 0, "REF": 0},
+                            "Dpn": {"ALT": 0, "REF": 0},
+                            "SN" : {"ALT": 0, "REF": 0},
+                            "SP" : {"ALT": 0, "REF": 0},
+                            "Sp" : {"ALT": 0, "REF": 0},
+                            "Sn" : {"ALT": 0, "REF": 0}
+                            }
+        self.strandCounts = {"ALT": 0, "REF": 0}
+        self.posMolec = {"ALT": 0, "REF": 0}
+        self.negMolec = {"ALT": 0, "REF": 0}
+        self.disagreeingDuplexes = {"ALT": 0, "REF": 0}
+        self.duplexCounts = {"ALT": 0, "REF": 0}
+
+        self.pMapStrand = {"ALT": 0, "REF": 0}
+        self.nMapStrand = {"ALT": 0, "REF": 0}
 
         depth = 0.0
-        # What is the maximum quality of the alternate allele?
-        self.maxQual = [0, 0, 0, 0, 0]
+
+        # If clipOverlap was not run on the BAM file, than we need to account for cases where a single read pair overlaps
+        # Store the index of each read name here
+        readNameIndex = {}
+        readNameBaseIndex = {"ALT": {}, "REF": {}}
 
         # We need to identify and flag reads that are in duplex
         # Count the number of times each read number "A counter that is unique to each read, generated by collapse" occurs
         # If it occurs once, the read is a singleton. If it occurs twice, it is a duplex
-        # That said, we also need to handle the case whereby clipoverlap was NOT run on the input BAM file. A read pair
-        # will have the same number
-        # To deal with this, create a dictionary which will store both the parental strand, and index, as well as the index and base for that strand
-        self.readParentalStrand = {}
-        readBaseIndex = {}
-
-        # Aggregate the stats for each read for filtering
-        readStats = {}
+        singletonIndex = {}
+        duplexIDs = {}
 
         # Since the characteristics of each read is in order (i.e. index 0 corresponds to the first read that overlaps
         # this position for every list, cycle through all stored attributes
-        for base, qual, fSize, posParent, map, distToEnd, mismatchNum, mapQual, readID \
-                in zip(self.alleles, self.qualities, self.famSizes, self.posParent, self.mapStrand, self.distToEnd, self.mismatchNum, self.mappingQual, self.readNum):
+        i = -1
+        for base, qual, fSize, posParent, map, distToEnd, mismatchNum, mapQual, readID, readName \
+                in zip(self.alleles, self.qualities, self.famSizes, self.posParent, self.mapStrand, self.distToEnd, self.mismatchNum, self.mappingQual, self.readNum, self.readName):
 
             # If this base is None, then we have started reading into the buffer, and should stop processing bases
             if base is None:
                 break
 
-            try:
-                baseIndex = baseToIndex[base]
-            except KeyError:
+            i += 1
 
-                # Handle insertions
-                if len(base) > 1:
-                    baseIndex = 4
-                    baseToIndex[base] = 4
-                elif base == "-":
-                    baseIndex = 4  # We can use the same index, since an insertion and deletion will never be listed by the same variant
-                    baseToIndex["-"] = 4
-                else:
-                    # i.e. There is an odd base here. Probably an "N". In this case, ignore it
-                    continue
-
-            if qual > self.maxQual[baseIndex]:
-                self.maxQual[baseIndex] = qual
-            # What type of read is this, in terms of parental strand
-            if posParent:
-                if fSize >= strongMoleculeThreshold:
-                    pType = "P"
-                else:
-                    pType = "p"
-                self.posMolec[baseIndex] += 1
+            # Does this base support the indel?
+            # Bases which support indels will have a quality score that is a list, instead of an int
+            supportsIndel = isinstance(qual, list)
+            if supportsIndel:
+                alt = "ALT"
             else:
-                if fSize >= strongMoleculeThreshold:
-                    pType = "N"
-                else:
-                    pType = "n"
-                self.negMolec[baseIndex] += 1
+                alt = "REF"
 
             # Calculate Strand bias info
-            if map == "S":  # This base is a consensus from both the strand mapped to the (+) and (-) strand
-                pMapStrand[baseIndex] += 1
-                nMapStrand[baseIndex] += 1
-            elif map== "F":
-                pMapStrand[baseIndex] += 1
+            if map:  # i.e. this base originated from a read that mapped to the negative strand
+                self.nMapStrand[alt] += 1
             else:
-                nMapStrand[baseIndex] += 1
+                self.pMapStrand[alt] += 1
+
+
+            # Check to see if there is already a read with the same name at this position
+            # If this is the case, then there is an overlapping read pair.
+            # We should take the consensus of this overapping read pair
+            if readName in readNameIndex:
+                # If one of these reads does not support the indel, discard the read supporting the indel, as
+                # it is likely the result of sequencing error
+                if not supportsIndel:
+                    readNameIndex[readName] = i
+                    readNameBaseIndex["REF"][readName] = i
+                    try:
+                        depth -= 1
+                        del readNameBaseIndex["ALT"][readName]
+                    except KeyError:
+                        pass
+                else:
+                    continue
+
+            else:
+                readNameIndex[readName] = i
+                readNameBaseIndex[alt][readName] = i
 
             # Check to see if there is another read that is the duplex mate of this read
-            if readID in self.readParentalStrand:  # There is another read in duplex
-                if readBaseIndex[readID] != baseToIndex[base]:  # i.e. the base at this position disagrees between the duplex. Discard this duplex
-                    otherBaseIndex = readBaseIndex[readID]
-                    self.disagreeingDuplexes[otherBaseIndex] += 1
-                    self.disagreeingDuplexes[baseToIndex[base]] += 1
-                    depth -= 1
-                    self.strandCounts[otherBaseIndex] -= 1
-                    del self.readParentalStrand[readID]
-                    del readBaseIndex[readID]
-                    if readID in readStats:
-                        del readStats[readID]
-                else:  # The bases agree between the two parental molecules. They are a valid duplex
-                    self.readParentalStrand[readID] = self.readParentalStrand[readID] + pType
-                    if base != self.ref:
-                        readStats[readID].append([qual, fSize, distToEnd, mismatchNum, mapQual])  # TODO: Make this implementation less hacky
+            if readID in singletonIndex:  # There is another read with this ID. It is in duplex
+                # Store the read names. We will determine which index these corespond to once all overlaps are resolved
+                duplexIDs[readID] = (readName, self.readName[singletonIndex[readID]])
+                del singletonIndex[readID]
             else:
-                self.readParentalStrand[readID] = pType
-                readBaseIndex[readID] = baseToIndex[base]
-                self.strandCounts[baseIndex] += 1
+                singletonIndex[readID] = i
                 # Total molecule count (for VAF)
                 depth += 1
-                if base != self.ref:
-                    readStats[readID] = [[qual, fSize, distToEnd, mismatchNum, mapQual]]
 
-        # Generate a count of each parental molecule at this position
-        for readID, pStrand in self.readParentalStrand.items():
-            baseIndex = readBaseIndex[readID]
-            pStrand = set(pStrand)  # To deal with cases where ClipOverlap was NOT run, and there is double-counting
-            if pStrand == {"N"}:
-                self.baseCounts["SN"][baseIndex] += 1
-            elif pStrand == {"P"}:
-                self.baseCounts["SP"][baseIndex] += 1
-            elif pStrand == {"n"}:
-                self.baseCounts["Sn"][baseIndex] += 1
-            elif pStrand == {"p"}:
-                self.baseCounts["Sp"][baseIndex] += 1
-            elif pStrand == {"P", "N"} or pStrand == {"N", "P"}:
-                self.baseCounts["DPN"][baseIndex] += 1
-            elif pStrand == {"P", "n"} or pStrand == {"n", "P"}:
-                self.baseCounts["DPn"][baseIndex] += 1
-            elif pStrand == {"p", "N"} or pStrand == {"N", "p"}:
-                self.baseCounts["DpN"][baseIndex] += 1
-            elif pStrand == {"p", "n"} or pStrand == {"n", "p"}:
-                self.baseCounts["Dpn"][baseIndex] += 1
+        # Now that all duplexes and overlapping read pairs have been identified, sum molecule counts
+        for duplexRead1, duplexRead2 in duplexIDs.values():
+            index1 = readNameIndex[duplexRead1]
+            index2 = readNameIndex[duplexRead2]
+
+            base1 = self.alleles[index1]
+            base2 = self.alleles[index2]
+
+            # Does this support an insertion, or deletion?
+            if isinstance(self.qualities[index1], int):
+                alt1 = "REF"
             else:
-                raise TypeError("It seems the developer messed up. You should send him an angry e-mail! (Mentioning this message please)")
+                alt1 = "ALT"
 
-        # Calculate maximum alt quality
-        self.maxAltQual = max(self.maxQual[baseToIndex[x]] for x in self.altAlleles)
+            if isinstance(self.qualities[index2], int):
+                alt2 = "REF"
+            else:
+                alt2 = "ALT"
 
-        # Calculate strand bias
-        self.strandBias = []
-        if len(self.ref) == 1:
-            refIndex = baseToIndex[self.ref]
-            for index in range(0, 5):
+            # If the bases between the duplexes disagree, then discard the duplex, as it is unreliable
+            if alt1 != alt2:
+                del readNameIndex[duplexRead1]
+                del readNameIndex[duplexRead2]
+                del readNameBaseIndex[alt1][duplexRead1]
+                del readNameBaseIndex[alt2][duplexRead2]
+                depth -= 1
+                continue
+            posStrong = False
+            negStrong = False
+            # What type of duplex is this?
+            if self.posParent[index1]:
+                if self.famSizes[index1] > strongMoleculeThreshold:
+                    posStrong = True
+            else:
+                if self.famSizes[index1] > strongMoleculeThreshold:
+                    negStrong = True
+            if self.posParent[index2]:
+                if self.famSizes[index2] > strongMoleculeThreshold:
+                    posStrong = True
+            else:
+                if self.famSizes[index2] > strongMoleculeThreshold:
+                    negStrong = True
 
-                if pMapStrand[index] + nMapStrand[index] == 0:
-                    self.strandBias.append(1.0)
+            base = self.alleles[index1]
+            if posStrong and negStrong:
+                self.baseCounts["DPN"][alt1] += 1
+            elif posStrong:
+                self.baseCounts["DPn"][alt1] += 1
+            elif negStrong:
+                self.baseCounts["DpN"][alt1] += 1
+            else:
+                self.baseCounts["Dpn"][alt1] += 1
+
+            self.posMolec[alt1] += 1
+            self.negMolec[alt1] += 1
+
+
+            # Count this duplex
+            self.duplexCounts[alt1] += 1
+
+            # To avoid double-counting this molecule during downstream processing, remove one of the read names from
+            # the read ID index
+            # Use the family with the largest size
+            if self.famSizes[index1] > self.famSizes[index2]:
+                del readNameIndex[duplexRead2]
+                del readNameBaseIndex[alt2][duplexRead2]
+
+            else:
+                del readNameIndex[duplexRead1]
+                del readNameBaseIndex[alt1][duplexRead1]
+
+        # Add singleton counts
+        for readName, index in singletonIndex.items():
+            alt = "REF" if isinstance(self.qualities[index], int) else "ALT"
+
+            # What type of molecule is this?
+            if self.posParent[index]:
+                self.posMolec[alt] += 1
+                if self.famSizes[index] > strongMoleculeThreshold:
+                    self.baseCounts["SP"][alt] += 1
                 else:
-                    self.strandBias.append(fisher_exact([[pMapStrand[index], nMapStrand[index]], [pMapStrand[refIndex], nMapStrand[refIndex]]])[1])
-        else:  # This event is a deletion
-            self.strandBias = [1,1,1,1]
-            self.strandBias.append(
-                fisher_exact([[pMapStrand[4], nMapStrand[4]], [sum(pMapStrand[x] for x in range(0,4)), sum(nMapStrand[x] for x in range(0,4))]])[1])
-        self.vafs = []
-        for index in range(0,5):
-            try:
-                self.vafs.append(self.strandCounts[index]/depth)
-            except ZeroDivisionError:  # The only reads which overlapped this position were in duplex, and disagreed at this position
-                self.vafs = [0,0,0,0,0]
-
-        # Finalize the filtering stats
-        completeStats = []
-        altBases = []
-        for readID, stats in readStats.items():
-            baseIndex = readBaseIndex[readID]
-            altCount = self.strandCounts[baseIndex]
-            if len(stats) == 2:
-                inDuplex = 0
+                    self.baseCounts["Sp"][alt] += 1
             else:
-                inDuplex = 1
-            strandBias = self.strandBias[baseIndex]
-            for stat in stats:
-                stat.extend((altCount, strandBias, inDuplex))
-                completeStats.append(stat)
-                altBases.append(indexToBase[baseIndex])
+                self.negMolec[alt] += 1
+                if self.famSizes[index] > strongMoleculeThreshold:
+                    self.baseCounts["SN"][alt] += 1
+                else:
+                    self.baseCounts["Sn"][alt] += 1
 
-        return completeStats, altBases
+        # Generate summary stats
+        self.alleleMapQual = {}
+        self.alleleBaseQual = {}
+        self.alleleStrandBias = {}
+        self.alleleVafs = {}
+        self.alleleMismatch = {}
+        self.alleleAvFamSize = {}
+        self.alleleEndDist = {}
+        self.molecDepth = depth
+        # Since this is an indel, we need to generate a consensus for the indel sequence
+        # The consensus will be the most frequent size, and the consensus sequence (insertions only)
+        refSeq = ""
+        altSeq = ""
+        altQual = []
+
+        for base, reads in readNameBaseIndex.items():
+
+            if not reads:  # i.e. the dictionary is empty. There are no values to process
+                self.alleleMapQual[base] = (0)
+                self.alleleBaseQual[base] = (0)
+                self.alleleStrandBias[base] = 1
+                self.alleleVafs[base] = 0
+                self.alleleMismatch[base] = (0)
+                self.alleleAvFamSize[base] = (0)
+                self.alleleEndDist[base] = (0)
+            else:
+                if base == "ALT":
+                    # Is this an insertion? Or deletion
+                    if self.type == "D":  # Deletion
+                        # The reference sequence is stored in "alleles"
+                        # Find an instance where the reference seq is long enough
+                        for index in reads.values():
+                            try:
+                                refSeq = self.alleles[index][0:self.length]
+                                break
+                            except IndexError:
+                                continue
+                        self.alleleBaseQual[base] = 0
+                    else:  # Insertion
+                        # The inserted seq is stored in "alleles"
+                        # Generate a consensus
+                        consensus = []
+                        consensusQual = []
+                        for index in reads.values():  # Loop through each read and summarize all the stats
+                            i = 0
+                            for b, q in zip(self.alleles[index], self.qualities[index]):
+                                if i == len(consensus):
+                                    consensus.append(sortedcontainers.SortedDict())
+                                    consensusQual.append(sortedcontainers.SortedDict())
+                                if b not in consensus[i]:
+                                    consensus[i][b] = 1
+                                    consensusQual[i][b] = q
+                                else:
+                                    consensus[i][b] += 1
+                                    if q > consensusQual[i][b]:
+                                        consensusQual[i][b] = q
+                                i += 1
+                        # Now use the most frequent base at each index as the consensus for the insertion
+                        try:
+                            for i in range(0, self.length):
+                                maxBase = ""
+                                maxCount = 0
+                                for iBase, count in consensus[i].items():
+                                    if count > maxCount:
+                                        maxBase = iBase
+                                        maxCount = count
+                                altSeq += maxBase
+                                altQual.append(consensusQual[i][maxBase])
+                        except IndexError:  # i.e. the reads which supported the indel were not counted, likely due to duplex handling
+                            return False
+                        # Take an average of the quality scores
+                        self.alleleBaseQual[base] = int(mean(altQual))
+                else:
+                    self.alleleBaseQual[base] = tuple(self.qualities[x] for x in reads.values())
+                self.alleleMapQual[base] = tuple(self.mappingQual[x] for x in reads.values())
+
+                # Calculate strand bias
+                self.alleleStrandBias[base] = fisher_exact(self.pMapStrand[base], self.nMapStrand[base], sum(self.pMapStrand[x] for x in ("ALT", "REF")), sum(self.nMapStrand[x] for x in ("ALT", "REF"))).two_tail
+
+                counts = len(reads.values())
+                self.strandCounts[base] = counts
+                self.alleleVafs[base] = counts / depth
+
+                # Aggregate remaining stats
+                self.alleleMismatch[base] = tuple(self.mismatchNum[x] for x in reads.values())
+                self.alleleAvFamSize[base] = tuple(self.famSizes[x] for x in reads.values())
+                self.alleleEndDist[base] = tuple(self.distToEnd[x] for x in reads.values())
+
+        # Finally, finalize the reference and alternate alleles for this event
+        if self.type == "D":
+            # A deletion
+            self.alt = self.ref
+            self.ref = self.ref + refSeq
+        else:
+            # An insertion
+            self.alt = self.ref + altSeq
+
+        # Basic depth filtering
+        if self.strandCounts["ALT"] < minAltDepth:
+            return False
+        return True
+
+    def leftFlankProp(self, base):
+        """
+        Calculates the proportion of bases upstream of this variant that which are "base"
+
+        :param base: The nucleotide to use "A,C,G,T"
+        :return: A float indication the proportion of flanking bases that are "base"
+
+        Note: For performance reasons, this will not check that base is a nucleotide
+        """
+
+        i = 0.0
+        for b in self.leftWindow:
+            if b == base:
+                i += 1
+
+        return i / len(self.leftWindow)
+
+    def rightFlankProp(self, base):
+        """
+        Calculates the proportion of bases downstream of this variant that which are "base"
+
+        :param base: The nucleotide to use "A,C,G,T"
+        :return: A float indication the proportion of right-flanking bases that are "base"
+
+        Note: For performance reasons, this will not check that base is a nucleotide
+        """
+
+        i = 0.0
+        for b in self.rightWindow:
+            if b == base:
+                i += 1
+
+        return i / len(self.rightWindow)
+
 
 class PileupEngine:
     """
     Generates a custom pileup using family characteristics
     """
-    def __init__(self, inBAM, refGenome, targetRegions, minAltDepth=1, homopolymerWindow=5, noiseWindow=150, pileupWindow = 1000, printPrefix="PRODUSE-CALL\t"):
-        self._inFile=pysam.AlignmentFile(inBAM)
+
+    def __init__(self, inBAM, refGenome, targetRegions, minAltDepth=1, homopolymerWindow=7, noiseWindow=150,
+                 pileupWindow=1000, oBAM=None, printPrefix="PRODUSE-CALL\t", softClipUntilIndel=25):
+        try:
+            self._inFile = pysam.AlignmentFile(inBAM, require_index=True)
+        except FileNotFoundError as e:
+            raise pe.IndexNotFound("Unable to locate BAM index \'%s.bai\': No such file or directory" % inBAM) from e
         self._refGenome = Fasta(refGenome, read_ahead=20000)
         self._captureSpace = self._loadCaptureSpace(targetRegions)
-        self._candidateIndels = {}
+        self.candidateIndels = {}
+        self.rawIndels = {}
         self.pileup = {}
         self.candidateVar = {}
         self.filteredVar = {}
         self._minAltDepth = minAltDepth
         self._homopolymerWindow = homopolymerWindow
         self._noiseWindow = noiseWindow
+        self._softClipUntilIndel = softClipUntilIndel  # How many bases must be consecutively soft clipped before realignment is performed?
         # The number of positions to store before collapsing previous positions
         # Reduce this number to lower memory footprint, but be warned that, if this falls below the length of a read,
         # Some positions may not be tallied correctly
@@ -349,9 +856,26 @@ class PileupEngine:
         self._chrom = None
         self._refWindow = ""
 
-        self._indelReads = []
+        self._bufferPos = 0
+        self._realignBuffer = 600
 
+        # For local realignment
+        self._indelReads = []
+        self._bufferedReads = []
+
+        # Debugging
+        if oBAM is not None:
+            self._oBAM = pysam.AlignmentFile(oBAM, mode="wb", template=self._inFile)
+        else:
+            self._oBAM = None
+
+        # Status updates
         self._printPrefix = printPrefix
+        self.readCount = 0
+        self.varCount = 0
+
+        # Output vcf genotype fields
+        self._genotypeFormat = "DP:AD:ADF:ADR"
 
     def _loadCaptureSpace(self, file):
         """
@@ -397,7 +921,7 @@ class PileupEngine:
                     if start > end:
                         sys.stderr.write(
                             "ERROR: The start position \'%s\' is greater than the end position \'%s\'\n" % (
-                            start, end))
+                                start, end))
                         exit(1)
             # Finally, to speed up access, convert each list into a tuple
             for chrom, locations in targets.items():
@@ -408,7 +932,7 @@ class PileupEngine:
             sys.stderr.write("Ensure the file is a valid BED file, and try again\n")
             exit(1)
 
-    def _insideCaptureSpace(self, read):  # TODO: Once INDELS are handled, reconsider this to include reads which may contain an INDEL at the capture space boundry
+    def _insideCaptureSpace(self, read):
         """
         Does this read fall within our capture space? Note that this excludes soft-clipping
         :param read: A pysam.AlignedSegment() object, coresponding to the read of interest
@@ -428,14 +952,17 @@ class PileupEngine:
             return False
         return True
 
-    def __writeVcfHeader(self, file):
+    def _writeVcfHeader(self, file):
         """
         Prints a VCF header to the specified file
 
         :param file: A file object, open to writing
         """
 
-        header = ["##fileformat=VCFv4.3",
+        header = ["##fileformat=VCFv4.3",  # Mandatory
+                  "##source=ProDuSe",
+                  "##source_version=" + pVer.__version__,
+                  "##analysis_date=" + time.strftime('%Y%m%d'),
                   "##reference=" + self._refGenome.filename]
 
         # Add the contig information
@@ -444,637 +971,294 @@ class PileupEngine:
             header.append(line)
 
         # Add the info field info
-        header.append('##INFO=<ID=DPN,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Strong Negative Consensus">')
-        header.append('##INFO=<ID=DPn,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Weak Negative Consensus">')
-        header.append('##INFO=<ID=DpN,Number=R,Type=Integer,Description="Duplex Support with Weak Positive and Strong Negative Consensus">')
-        header.append('##INFO=<ID=Dpn,Number=R,Type=Integer,Description="Duplex Support with Weak Positive and Weak Negative Consensus">')
-        header.append('##INFO=<ID=SP,Number=R,Type=Integer,Description="Singleton Support with Strong Positive Consensus">')
-        header.append('##INFO=<ID=Sp,Number=R,Type=Integer,Description="Singleton Support with Weak Positive Consensus">')
-        header.append('##INFO=<ID=SN,Number=R,Type=Integer,Description="Singleton Support with Strong Negative Consensus">')
-        header.append('##INFO=<ID=MC,Number=R,Type=Integer,Description="Total Molecule counts for Each Allele">')
-        header.append('##INFO=<ID=STP,Number=R,Type=Float,Description="Probability of Strand Bias during sequencing for each Allele">')
-        header.append('##INFO=<ID=PC,Number=R,Type=Integer,Description="Positive Strand Molecule Counts">')
-        header.append('##INFO=<ID=NC,Number=R,Type=Integer,Description="Negative Strand Molecule Counts">')
-        header.append('##INFO=<ID=VAF,Number=R,Type=Float,Description="Variant allele fraction of alternate allele(s) at this locus">')
+        header.extend([
+            '##INFO=<ID=DPN,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Strong Negative Consensus">',
+            '##INFO=<ID=DPn,Number=R,Type=Integer,Description="Duplex Support with Strong Positive and Weak Negative Consensus">',
+            '##INFO=<ID=DpN,Number=R,Type=Integer,Description="Duplex Support with Weak Positive and Strong Negative Consensus">',
+            '##INFO=<ID=Dpn,Number=R,Type=Integer,Description="Duplex Support with Weak Positive and Weak Negative Consensus">',
+            '##INFO=<ID=SP,Number=R,Type=Integer,Description="Singleton Support with Strong Positive Consensus">',
+            '##INFO=<ID=Sp,Number=R,Type=Integer,Description="Singleton Support with Weak Positive Consensus">',
+            '##INFO=<ID=SN,Number=R,Type=Integer,Description="Singleton Support with Strong Negative Consensus">',
+            '##INFO=<ID=MC,Number=R,Type=Integer,Description="Total Molecule counts for Each Allele">',
+            '##INFO=<ID=STP,Number=R,Type=Float,Description="Probability of Strand Bias during sequencing for each Allele">',
+            '##INFO=<ID=PC,Number=R,Type=Integer,Description="Positive Strand Molecule Counts">',
+            '##INFO=<ID=NC,Number=R,Type=Integer,Description="Negative Strand Molecule Counts">',
+            '##INFO=<ID=VAF,Number=R,Type=Float,Description="Variant allele fraction of alternate allele(s) at this locus">'
+            ])
 
-        header.append("\t".join(["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO\n"]))
+        # Genotype fields
+        header.append('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total molecule count">')
+        header.append('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Total number of molecules supporting each allele">')
+        header.append('##FORMAT=<ID=ADF,Number=R,Type=Integer,Description="Number of reads mapped to the forward strand for each allele">')
+        header.append('##FORMAT=<ID=ADR,Number=R,Type=Integer,Description="Number of reads mapped to the reverse strand for each allele">')
+
+        header.append("\t".join(["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "TUMOR" + os.linesep]))
         file.write(os.linesep.join(header))
 
-    def _processDeletion(self, delPos, moleculeTypes, chrom, position):
+
+    def varToFilteringStats(self, pos, allele):
         """
-        Merge positions that support a deletion into a consensus
-        :param delPos: An iterable containing one or more position objects which overlap the deletion
-        :return: outLine: A string representing a VCF entry for this deletion
+        Summarizes various statistics that a variant is to be filtered based upon
+
+        :param pos: A Position or IndelPos object to be filtered
+        :param allele: A string containing a nucleotide, or (for IndelPos) "REF" or "ALT", which is the allele to be filtered
+        :return: A tuple containing the various variant stats
         """
-        def _generateInfoCol(startPos, endPos):
-            infoCol = []
-            for molecule in moleculeTypes:
-                x = molecule + "=" + ",".join(
-                    str(int((x + y) / 2)) for x, y in zip(startPos.baseCounts[molecule], endPos.baseCounts[molecule]))
-                infoCol.append(x)
 
-            infoCol.append("MC=" + ",".join(str(int((x + y) / 2)) for x, y in
-                                            zip(startPos.strandCounts, endPos.strandCounts)))  # Parental Strand counts
-            infoCol.append("STP=" + ",".join(
-                str((x + y) / 2) for x, y in zip(startPos.strandBias, endPos.strandBias)))  # Strand bias
-            infoCol.append("PC=" + ",".join(str((x + y) / 2) for x, y in zip(startPos.posMolec, endPos.posMolec)))
-            infoCol.append("NC=" + ",".join(str((x + y) / 2) for x, y in zip(startPos.negMolec, endPos.negMolec)))
-            infoCol.append("VAF=" + ",".join(str((x + y) / 2) for x, y in zip(startPos.vafs, endPos.vafs)))  # VAF
-            return infoCol
-
-
-        # My general strategy here is to use an average of the boundries of the deletion to obtain molecule counts
-
-        # First, generate the reference base
-        refSeq = "".join(x.ref for x in delPos)
-
-
-        # Next, average the molecule counts on either side of the deletion, and use those for the output
-        # Generate the info column
-        infoCol = _generateInfoCol(delPos[0], delPos[-1])
-
-        # Next, process the portion of this deletion which passed filters
-        startIndex = 0
-        endIndex = len(delPos) - 1
-        delLength = len(delPos)
-        while not delPos[startIndex].delPassedFilters and startIndex < delLength - 1:
-            startIndex += 1
-        while not delPos[endIndex].delPassedFilters and endIndex >= 0:
-            endIndex -= 1
-        endIndex += 1
-
-        # If this deletion failed filters, we don't need to do anything else except state the reason why it failed filters
-        if startIndex >= endIndex:
-            # Use the reason listed at the first position
-            fail = delPos[0].delFailReason
+        # If this is an indel, we need to set the reference base as "REF"
+        if isinstance(pos, IndelPos):
+            ref = "REF"
+            baseQualBias = 1  # Isn't really applicable for indels
+            meanBaseQual = 38  # Since a deletion does not have a base quality, and base quality doesn't apply for indels either
         else:
-            fail = "PASS"
-        rawOutLine = "\t".join([chrom, str(position + 1), ".", refSeq, "-", ".", fail, ";".join(infoCol)])
+            ref = pos.ref
 
-        # If this variant passed filters, we need to generate a new record for the passed deletion if it is not the same
-        # as the old one
-        if fail != "PASS":
-            passedOutLine = None
-        elif startIndex == 0 and endIndex == len(delPos):
-            passedOutLine = rawOutLine
-        else:
-            refSeq = "".join(x.ref for x in delPos[startIndex:endIndex])
-            infoCol = _generateInfoCol(delPos[startIndex], delPos[endIndex - 1])
-            passedOutLine = "\t".join([chrom, str(position + startIndex + 1), ".", refSeq, "-", ".", "PASS", ";".join(infoCol)])
+            # Mean base quality
+            meanBaseQual = mean(pos.alleleBaseQual[allele])
+            # Calculate differences in base quality btwn reference and alternate alleles
+            try:
+                baseQualBias = ttest_ind(pos.alleleBaseQual[ref], pos.alleleBaseQual[allele], equal_var=False).pvalue
+                if baseQualBias != baseQualBias:  #i.e the base quality bias is NaN. Set it to 1
+                    baseQualBias = 1
+            except FloatingPointError:
+                baseQualBias = 1
 
-        return rawOutLine, passedOutLine
+        # Calculate differences in read mapping quality between reference and alternate alleles
+        try:
+            mapQualBias = ttest_ind(pos.alleleMapQual[ref], pos.alleleMapQual[allele], equal_var=False).pvalue
+            if mapQualBias != mapQualBias:
+                mapQualBias = 1
+        except FloatingPointError:
+            mapQualBias = 1
 
-    def filterAndWriteVariants(self, outfile, filter, unfilteredOut=None, filtThreshold=0.5):
+        # Quantify differences in the number of mismatches supported by each read
+        try:
+            mismatchBias = ttest_ind(pos.alleleMismatch[ref], pos.alleleMismatch[allele], equal_var=False).pvalue
+            if mismatchBias != mismatchBias:
+                mismatchBias = 1
+        except FloatingPointError:
+            mismatchBias = 1
+
+        # Quantify differences between the family size supporting the reference and alternate alleles
+        try:
+            fSizeBias = ttest_ind(pos.alleleAvFamSize[ref], pos.alleleAvFamSize[allele], equal_var=False).pvalue
+            if fSizeBias != fSizeBias:
+                fSizeBias = 1
+        except FloatingPointError:
+            fSizeBias = 1
+
+        posStats = (
+            pos.strandCounts[allele],
+            pos.alleleStrandBias[allele],  # Strand bias pVal
+            meanBaseQual,  # Average base qual
+            baseQualBias,
+            mean(pos.alleleMapQual[allele]),  # Average read mapping quality
+            mapQualBias,
+            pos.molecDepth,
+            pos.leftFlankProp(allele),
+            pos.rightFlankProp(allele),
+            len(pos.nearbyVar) / pos.nWindow,
+            mean(pos.alleleMismatch[allele]),
+            mismatchBias,
+            mean(pos.alleleAvFamSize[allele]),
+            fSizeBias,
+            mean(pos.alleleEndDist[allele]),
+            pos.duplexCounts[allele]
+        )
+
+        return posStats
+
+    def filterAndWriteVariants(self, outFile, filter, unfilteredOut=None, filtThreshold=0.5, writeHeader=False):
         """
 
         Filters candidate variants based upon specified characteristics, and writes the output to the output file
         This is a placeholder for the real filter, which will be developed at a later time
 
-        :param outfile: A string containing a filepath to the output VCF file
+        :param outFile: A string containing a filepath to the output VCF file, to which variants will be written
         :param filter: A sklearn.ensemble.RandomForestClassifier() which is to be used to filter variants
         :param unfilteredOut: A sting containing a filepath to an output VCF file which will contain ALL variants, even those that do not pass filters
         :param filtThreshold: A float representing the classification threshold in which to filter variants
+        :param writeHeader: A boolean. If true, any existing file outFile will be overwritten, and a VCF header will be added to the file
         :return:
         """
 
-        sys.stderr.write(
-            "\t".join([self._printPrefix, time.strftime('%X'), "Filtering Candidate Variants\n"]))
-        moleculeTypes = ("DPN", "DPn", "DpN", "Dpn", "SP", "Sp", "SN", "Sn")
-        with open(outfile, "w") as o, open(unfilteredOut, "w") if unfilteredOut is not None else open(os.devnull, "w") as u:
-            self.__writeVcfHeader(o)
-            self.__writeVcfHeader(u)
+        def _generateVCFEntry(pos, chrom, start, filterCon):
+            """
+            Generates a VCF entry of the specified variant
 
-            for chrom in self.candidateVar:
+            See https://samtools.github.io/hts-specs/VCFv4.3.pdf for more details
 
-                # To minimize memory usage as much as possible (until the improved implementation is done),
-                # create a copy of the keys in the dictionary for this chromosome, and iterate over those
-                # Then we can delete each position after it has been processed.
-                positions = self.candidateVar[chrom].keys()
-                for pos in positions:
+            :param pos: A Position or IndelPos object
+            :param chrom: A string containing the reference name (i.e. chromosome) of this variant
+            :param start: An int corresponding to the start position of this variant
+            :param filterCon: A float indicating how confident the filter is that this variant is real (btwn 0 and 1)
+            :return: A string coresponding to the VCF entry of the provided position
+            """
 
-                    stats = self.candidateVar[chrom][pos]
+            # Is this an indel?
+            if isinstance(pos, IndelPos):
+                # If so, we only need to examine one variant
+                qual = pos.alleleBaseQual["ALT"]
+                alleles = ("REF", "ALT")
+                alt = pos.alt
+            else:
+                # Otherwise, we need to arrange the alternate alleles by their frequency
+                altAlleles = []
+                altWeight = []
+                for allele in pos.altAlleles.keys():
+                    weight = pos.strandCounts[allele]
+                    if not altWeight:  # This is the first allele we are examining
+                        altAlleles.append(allele)
+                        altWeight.append(weight)
+                    else:
+                        # Otherwise, sort the alternate alleles
+                        i = 0
+                        for oWeight in altWeight:
+                            if weight > oWeight:
+                                break
+                            i += 1
+                        altWeight.insert(i, weight)
+                        altAlleles.insert(i, allele)
+                alt = ",".join(altAlleles)
+                alleles = [pos.ref]
+                alleles.extend(altAlleles)
+                qual = int(mean(pos.alleleBaseQual[altAlleles[0]]))
+
+            # Generate an info column for this variant
+            info = []
+            for molecule, counts in pos.baseCounts.items():
+                molecFields = molecule + "=" + ",".join(str(counts[x]) for x in alleles)
+                info.append(molecFields)
+
+            info.append("STP=" + ",".join(str(pos.alleleStrandBias[x]) for x in alleles))  # Strand bias
+            info.append("VAF=" + ",".join(str(pos.alleleVafs[x])[:6] for x in alleles))  # VAF, truncate to 4 decimal places
+
+            # Generate genotype fields
+            genotype = [
+                str(int(pos.molecDepth)),
+                ",".join(str(pos.strandCounts[x]) for x in alleles),
+                ",".join(str(pos.pMapStrand[x]) for x in alleles),
+                ",".join(str(pos.nMapStrand[x]) for x in alleles)
+            ]
+            variant =   [chrom,  # CHROM
+                        str(start + 1),   # POS, add 1 to account for differences in indexing btwn pysam and vcf spec
+                        ".",     # ID  (No ID)
+                        pos.ref, # REF
+                        alt,  # ALT
+                        str(qual),     # QUAL
+                        filterCon,   # FILTER
+                        ";".join(info)  ,   # INFO
+                         self._genotypeFormat,  # Genotype format field
+                         ":".join(genotype) # GENOTYPE
+                        ]
+
+            return "\t".join(variant) + os.linesep
+
+        if writeHeader:
+            mode = "w"  # i.e. overwrite existing files
+        else:
+            mode = "a"
+
+        with open(outFile, mode) as o, open(unfilteredOut if unfilteredOut is not None else os.devnull, mode) as u:
+
+            if writeHeader:
+                # Write the standard VCF file header to the output file(s)
+                self._writeVcfHeader(o)
+                self._writeVcfHeader(u)
+
+            # Start processing variants
+            for chrom, positions in self.candidateVar.items():
+                loci = tuple(positions.keys())
+                for position in loci:
+                    candidateSNV = positions[position]
+                    # Is there an indel that occurs before this variant? If so, we should process that
+                    # to maintain sorted order of the output VCF files
                     try:
-                        posStats, altAlleles = stats.collapsePosition()
-                    # A keyerror will occur if the Reference base is not an "A,C,G,T" (i.e. an "N" or "M")
-                    except KeyError:
-                        continue
-
-                    if len(altAlleles) == 0:
-                        continue
-
-                    # Generate the info column
-                    infoCol = []
-                    for molecule in moleculeTypes:
-                        x = molecule + "=" + ",".join(str(x) for x in stats.baseCounts[molecule])
-                        infoCol.append(x)
-
-                    infoCol.append("MC=" + ",".join(str(int(x)) for x in stats.strandCounts))  # Parental Strand counts
-                    infoCol.append("STP=" + ",".join(str(x) for x in stats.strandBias))  # Strand bias
-                    infoCol.append("PC=" + ",".join(str(x) for x in stats.posMolec))
-                    infoCol.append("NC=" + ",".join(str(x) for x in stats.negMolec))
-                    infoCol.append("VAF=" + ",".join(str(x) for x in stats.vafs))  # VAF
-
-                    # See if this variant passes filters or not
-                    # Aggregate the stats required for the filter
-                    filterResults = filter.predict_proba(posStats)  # A 2D array listing [[Pass, Fail], [Pass, Fail], ...]
-
-                    # Check to see which reads passed and failed filters, and assign variants using reads which passed filters
-                    passedAltAlleles = set()
-                    maxFilt = 0
-                    for altAllele, groupings in zip(altAlleles, filterResults):
-                        passConfidence = groupings[0]
-                        if passConfidence > maxFilt:
-                            maxFilt = passConfidence
-                        if passConfidence >= filtThreshold:
-                            passedAltAlleles.add(altAllele)
-
-                    if len(passedAltAlleles) > 0:
-                        filterResult="PASS"
-                    else:
-                        filterResult="FAIL"
-                    # Add 1 to the position, to compensate for the fact that pysam uses 0-based indexing, while VCF files use 1-based
-                    outLine = "\t".join([chrom, str(pos + 1), ".", stats.ref, ",".join(set(altAlleles)), str(stats.maxAltQual), str(maxFilt), ";".join(infoCol)])
-                    u.write(outLine + os.linesep)
-                    if filterResult == "PASS":
-                        outLine = "\t".join([chrom, str(pos + 1), ".", stats.ref, ",".join(passedAltAlleles),
-                                             str(stats.maxAltQual), str(maxFilt), ";".join(infoCol)])
-                        o.write(outLine + os.linesep)
-
-                    # After processing this variant, delete it to reduce memory footprint
-                    del self.candidateVar[chrom][pos]
-
-            for chrom in self._candidateIndels:
-
-                for position, stats in self._candidateIndels[chrom].items():
-
-                    filtersFailed = stats.summarizeVariant(minMolecules, minAltMolecules, strandBiasThreshold)
-
-                    # Generate the info column
-                    infoCol = []
-                    for molecule in moleculeTypes:
-                        x = molecule + "=" + ",".join(str(x) for x in stats.baseCounts[molecule])
-                        infoCol.append(x)
-
-                    infoCol.append("MC=" + ",".join(str(int(x)) for x in stats.strandCounts))  # Parental Strand counts
-                    infoCol.append("STP=" + ",".join(str(x) for x in stats.strandBias))  # Strand bias
-                    infoCol.append("PC=" + ",".join(str(x) for x in stats.posMolec))
-                    infoCol.append("NC=" + ",".join(str(x) for x in stats.negMolec))
-                    infoCol.append("VAF=" + ",".join(str(x) for x in stats.vafs))  # VAF
-
-                    failedFilters = False
-                    if len(filtersFailed) == 0:
-                        filter = "PASS"
-                    else:
-                        filter = ",".join(filtersFailed)
-                        failedFilters = True
-
-                    # Add 1 to the position, to compensate for the fact that pysam uses 0-based indexing, while VCF files use 1-based
-                    outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(stats.altAlleles), str(stats.maxAltQual), filter, ";".join(infoCol)])
-                    u.write(outLine + os.linesep)
-                    if not failedFilters:
-                        outLine = "\t".join([chrom, str(position + 1), ".", stats.ref, ",".join(stats.passedAltAlleles),
-                                             str(stats.maxPassedAltQual), filter, ";".join(infoCol)])
-                        o.write(outLine + os.linesep)
-
-        sys.stderr.write(
-            "\t".join([self._printPrefix, time.strftime('%X'), "Variant Calling Complete\n"]))
-
-    def _indelFromRealignment(self, origRead, realignRead):
-        """
-        Obtains INDEL positions a read realigned via SSW
-
-        :param origRead: A pysam.AlignedSegment object
-        :param realignRead: A skbio.alignment.AlignmentStrcture generated using the origRead.query_sequence
-        :return:
-        """
-        insPos = {}
-        delPos = {}
-        length = ""
-        currentPos = realignRead.query_begin
-        seqPos = realignRead.target_begin
-        for char in realignRead.cigar:
-            if char.isdigit():
-                length = length + char
-            else:
-                opLength = int(length)
-                if char == "M":
-                    currentPos += opLength
-                    seqPos += opLength
-                elif char == "D":  # This is actually an insertion in terms of the read (the cigar is relative to the reference)
-                    insPos[currentPos] = realignRead.target_sequence[seqPos: seqPos + opLength + 1]
-                    seqPos += opLength
-                elif char == "I":  # Reversed due to cigar being relative to the reference
-                    delPos[currentPos] = opLength
-                    currentPos += opLength
-                else:
-                    raise TypeError("Unknown operator returned by skbio.alignment.AlignmentStructure: \"%s\". "
-                                    "It is likely that skbio's API has been updated since this code was written "
-                                    "(Generated for skbio=0.5.1)" % char)
-                length = ""
-
-        """
-        outCigar = []
-        insPos = {}
-        delPos = {}
-        
-        
-        # Where was this read expected to start?
-        expectedStart = origRead.reference_start - self._refStart # Start of this read, relative to the reference window
-        if origRead.cigartuples[0][0] == 4:
-            expectedStart -= origRead.cigartuples[0][1]
-
-        assert realignRead.query_start >= expectedStart
-        outCigar.append((4, realignRead.target_begin))
-        # Convert the alignmentStructure cigar string to a cigar tuple
-
-        length = ""
-        foundIndel = False
-        currentPos = realignRead.query_start
-        for char in realignRead.cigar:
-            if char.isdigit():
-                length = length + char
-            else:
-                opLength = int(length)
-                if char == "M":
-                    currentPos += opLength
-                    outCigar.append((0, opLength))
-                elif char == "D":
-                    delPos[currentPos] = currentPos
-                    outCigar.append((1, opLength))  # Invert operator, since this is the cigar of the reference sequence
-                    currentPos += opLength
-                    foundIndel = True
-                elif char == "I":
-                    outCigar.append((2, opLength))  # Invert operator, since this is the cigar of the reference sequence
-                    foundIndel = True
-                else:
-                    raise TypeError("Unknown operator returned by skbio.alignment.AlignmentStructure: \"%s\". "
-                                    "It is likely that skbio's API has been updated since this code was written "
-                                    "(Generated for skbio=0.5.1)" % char)
-                length = ""
-
-        # Add any trailing soft-clipping
-        expectedEnd = len(origRead.query_sequence)
-        assert expectedEnd >= realignRead.target_end_optimal
-        outCigar.append((4, expectedEnd - realignRead.target_end_optimal))
-
-        return outCigar, foundIndel
-        """
-        return delPos, insPos
-
-    def cigarToTuple(self, cigarTuples):
-        """
-        Converts a pysam-style cigar tuples into a regular tuple, where 1 operator = 1 base
-
-        Ignores soft-clipping, and flags a
-        :param cigarTuples: A list of tuples
-        :return: A tuple listing expanded cigar operators, as well as a boolean indicating if there is an INDEL in this read
-        """
-
-        cigarList = []
-        hasIndel = False
-        for cigarElement in cigarTuples:
-            cigOp = cigarElement[0]
-            # Ignore soft-clipped bases
-            if cigOp == 4:
-                continue
-            # If there is an insertion or deletion in this read, indicate that
-            if cigOp == 1 or cigOp == 2:
-                hasIndel = True
-            cigarList.extend([cigOp] * cigarElement[1])
-
-        return tuple(cigarList), hasIndel
-
-    def _combineIndel(self, events):
-        """
-        Attempt to combine multiple INDEL events
-
-        :param events: A distionary containing a dictionary of reference sequences supporting the event
-        :return:
-        """
-
-        # Generate a baseline k-mer index
-        # refKmers = IndelUtils.SeqIndexSet(self._refWindow)
-
-        refAlign = alignment.StripedSmithWaterman(self._refWindow)
-
-        distToRef = sortedcontainers.SortedDict()
-
-        # For each event, obtain a baseline score relative to the reference
-        # We will use this to perform a comparison later with all other events
-        for pos, eventsAtPos in events.items():
-            for eventKey, event in eventsAtPos.items():
-                mapping = refAlign(event)
-
-                # Is there already an event with the same mapping score?
-                # If so, see if they are smiliar enough that they can be combined
-                refScore = mapping.optimal_alignment_score
-                if refScore in distToRef:
-                    readAlign = alignment.StripedSmithWaterman(event)
-                    canMerge = False
-                    for altEvent in distToRef[refScore]:
-                        altSeq = events[altEvent[0]][altEvent[1]]
-                        altMapping = readAlign(altSeq)
-
-                        # If this current event is closer to this event than the reference, we can just use the
-                        # existing alternate seq as a template, and thus merge these events
-                        if altMapping.optimal_alignment_score < refScore:
-                            canMerge = True
-                            break
-
-                    if canMerge:
-                        continue
-                    else:
-                        distToRef[refScore].append((pos, eventKey))
-                else:
-                    distToRef[refScore] = [(pos, eventKey)]
-
-        collapsedEvents = {}
-        # Now that we have the distance from the reference for each event, work outwards
-        # compare the event closest to the ref with all other events, and see if they be merged
-        for distance, altEvents in distToRef.items():
-            for location in altEvents:
-                # Create a mapping for this event
-                altSeq = events[location[0]][location[1]]
-                mapping = alignment.StripedSmithWaterman(altSeq)
-
-                distToDelete = []
-                # Compare this event to all other events, and see if they can be merged
-                for otherDistance, otherAltEvents in distToRef.items():
-                    i = 0
-                    posToDelete = sortedcontainers.SortedList()
-                    for otherLocation in otherAltEvents:
-                        # If this event is currently being processed, ignore it
-                        if distance == otherDistance and location == otherLocation:
-                            continue
-
-                        otherAltSeq = events[otherLocation[0]][otherLocation[1]]
-                        altMap = mapping(otherAltSeq)
-                        if altMap.optimal_alignment_score < distance:
-                            posToDelete.add(i)
-                        i += 1
-
-                    # Delete any events that are no longer needed
-                    for i in reversed(posToDelete):
-                        otherAltEvents.pop(i)
-                        if len(otherAltEvents) == 0:
-                            distToDelete.append(otherDistance)
-
-                # Delete and reference distances which are to be collapsed
-                for i in distToDelete:
-                    del distToRef[i]
-
-                # Now that all possible events have been collapsed into this one, store this event
-                if location[0] not in collapsedEvents:
-                    collapsedEvents[location[0]] = {}
-                collapsedEvents[location[0]][location[1]] = events[location[0]][location[1]]
-
-        return collapsedEvents
-
-    def _getAltSeq(self):
-        """
-        Identify the sequence indicated by each INDEL event.
-        If possible, combine multiple sequences into a consensus
-
-        :return:
-        """
-
-        indels = {}
-        refRealign = None
-
-        # In the easiest case, the aligner has already marked each event for us, and we can just use those
-        for read in self._indelReads:
-            eventStart = read.reference_start - self._refStart
-            readStart = 0
-            delEvents = {}
-            insEvents = {}
-            numEvents = 0
-            for operation, length in read.cigartuples:
-
-                if operation == 0:  # Add this offset to the event start
-                    eventStart += length
-                    readStart += length
-                elif operation == 4:  # Soft clipping is not included in the offset
-                    readStart += length
-                elif operation == 2:  # This event is a deletion
-                    delEvents[eventStart] = length
-                    eventStart += length
-                    numEvents += 1
-                elif operation == 1:  # This event is an insertion
-                    insEvents[eventStart] = read.query_sequence[readStart: readStart + length + 1]
-                    numEvents += 1
-                    readStart += length
-
-            # If there were several events, or the aligner didn't find any, perform local realignment
-            if numEvents != 1:  # We could possibly find a simplier solution if more than one indel was called
-                if refRealign is None:  # Generate a SW object from the reference, if one does not exist already
-                    refRealign = alignment.StripedSmithWaterman(self._refWindow)
-                readRealign = refRealign(read.query_sequence)
-                delEvents, insEvents = self._indelFromRealignment(read, readRealign)
-
-            # Store these events
-            for position, event in delEvents.items():  # Store deletions
-                delKey = "-" * event
-                if position in indels:
-                    # See if this deletion is the same as any other deletions at this position
-                    if event not in indels[position]:  # Add a reference which contains this event
-                        indels[position][delKey] = self._refWindow[:position] + self._refWindow[position + event:]
-                else:
-                    indels[position] = {}
-                    indels[position][delKey] = self._refWindow[:position] + self._refWindow[position + event:]
-
-            for position, event in insEvents.items():  # Store insertions
-                if position in indels:
-                    # See if this insertion is the same as any other insertion
-                    if event not in indels[position]:
-                        indels[position][event] = self._refWindow[:position] + event + self._refWindow[position:]
-                else:
-                    indels[position] = {}
-                    indels[position][event] = self._refWindow[:position] + event + self._refWindow[position:]
-
-        return indels
-
-    def _cigarFromRealignment(self, realignStructure, read, eventPos, event):
-        """
-        Obtains a new pysam style cigar tuple from a SSW alignment structure
-
-        :param realignStructure: A SSW alignment structure
-        :param read: A pysam.AlignedSegment()
-        """
-
-        cigarToOp = {"M": 0, "D": 1, "I": 2}  # Reversed, as the SSW cigar is actually relative to the reference
-        outCigar = []
-        # If there was no soft-clipping, where would this read start?
-        startPos = read.reference_start
-        # Compensate for leading soft clipping in the original alignment
-        if read.cigartuples[0][0] == 4:
-            startPos -= read.cigartuples[0][1]
-
-        # How much soft clipping is in the original alignment?
-        startSoftClip = realignStructure.target_begin
-        if startSoftClip != 0:
-            outCigar.append((4, startSoftClip))
-            startPos += startSoftClip
-            # If the event is inside the soft-clipped region, then something catastophic happened...
-            # In this case, preserve the validity of the original alignment
-
-        cigarPos = startPos - self._refStart  # Use this to add the event back into the coresponding position
-        if cigarPos >= eventPos:
-            raise TypeError("ERROR during INDEL realignment")
-        # Process the cigar
-        length = ""
-        for char in realignStructure.cigar:
-            if char.isdigit():
-                length = length + char
-            else:
-                opLength = int(length)
-                if cigarPos < eventPos and cigarPos + opLength > eventPos:  # Aka the event itself falls within this region
-                    x = eventPos - cigarPos
-                    outCigar.append((cigarToOp[char], x))
-                    # Add this event to the cigar
-                    if set(event) == {"-"}:  # This event is a deletion
-                        outCigar.append((2, len(event)))
-                        x = cigarPos + opLength - eventPos
-                    else:
-                        outCigar.append((1, len(event)))
-                        x = cigarPos + opLength - eventPos - len(event)
-
-                        outCigar.append((cigarToOp[char], x))
-                elif opLength > 0:
-                    outCigar.append((cigarToOp[char], opLength))
-                length = ""
-                if char != "D":  # Insertions do not consume reference positions, so do not add to the counter
-                    cigarPos += opLength
-
-        # Compensate for any trailing soft-clipping
-        endSoftClip = len(realignStructure.target_sequence) - realignStructure.target_end_optimal - 1
-        if endSoftClip != 0:
-            outCigar.append((4, endSoftClip))
-
-        return tuple(outCigar), startPos
-
-    def _mapReadsToIndels(self, events, realignWindow=500):
-        """
-        Map all reads which may contain an INDEL to the collapsed INDELs
-
-        TODO: Handle reads which support more than one event
-        :param events: A dictionary storing positions: events
-        :param realignWindow: How close to the start of a read an event must be before it is considered for ealignment
-        :return:
-        """
-        sswStructures = {}
-        # Create a SSW alignment structure for each alternate allele to improve performance
-        for position, eventAtPos in events.items():
-            sswStructures[position] = {}
-            for event, seq in eventAtPos.items():
-                sswStructures[position][event] = alignment.StripedSmithWaterman(seq)
-
-        refAlignment = alignment.StripedSmithWaterman(self._refWindow)
-
-        indelVar = {}
-
-        for read in self._indelReads:
-            # Obtain a baseline measure of how well this read compares to the reference
-            mapping = refAlignment(read.query_sequence)
-            bestScore = mapping.optimal_alignment_score
-            bestReadCigar = read.cigartuples
-            bestStart = read.reference_start
-            bestEvent = None
-            bestPosition = None
-
-
-            # Map this read to each INDEL, and see which one it aligns to best
-            for position, eventAtPos in events.items():
-                if position - realignWindow > read.reference_start or position + realignWindow < read.reference_start:
-                    continue
-                for event in eventAtPos.keys():
-                    altAlignment = sswStructures[position][event](read.query_sequence)
-
-                    if altAlignment.optimal_alignment_score > bestScore:
-                        # This event is now the best event
-                        bestScore = altAlignment.optimal_alignment_score
-                        # bestReadCigar, bestStart = self._cigarFromRealignment(altAlignment, read, position, event)
-                        bestEvent = event
-                        bestPosition = position
-            # Now that we have the best event for this read, add this read to the variant, and assign the new cigar to the read
-            if bestEvent is not None:  # This read supports a non-reference event
-                isDel = set(bestEvent) == {"-"}
-                refPos = bestPosition + self._refStart
-                # Modify the read
-                # read.reference_start = bestStart
-                # read.cigartuples = bestReadCigar
-
-                if self._chrom not in self._candidateIndels:
-                    self._candidateIndels[self._chrom] = sortedcontainers.SortedDict()
-
-                if refPos not in self._candidateIndels[self._chrom]:  # This event has not been flagged as a variant yet
-                    # Create a position object which will store this INDEL
-                    if isDel:  # Obtain the reference window for this deletion
-                        ref = self._refWindow[bestPosition:bestPosition + len(bestEvent) + 1]
-                    else:
-                        ref = self._refWindow[bestPosition]
-                    self._candidateIndels[self._chrom][refPos] = Position(ref)
-
-                if isDel:
-                    alt = "-"
-                    qual = 0
-                else:
-                    alt = self._candidateIndels[self._chrom][refPos].ref + bestEvent
-                    readIndelPos = refPos - read.reference_start
-                    qual = int(sum(x for x in read.query_alignment_qualities[readIndelPos: readIndelPos + len(alt)]) / len(alt))
-
+                        posToDelete = []
+                        for iPos in self.candidateIndels[chrom].irange(maximum = position, inclusive=(True, False)):
+                            indel = self.candidateIndels[chrom][iPos]
+                            altAllele = indel.summarizeVariant()
+
+                            if altAllele:  # Passed basic alt depth filters
+
+                                # Filter indel
+                                stats = [self.varToFilteringStats(indel, "ALT")]
+                                filterResults = filter.predict_proba(stats)[0][0]
+
+                                # Write out the unfiltered variant
+                                vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults))
+                                u.write(vcfEntry)
+
+                                if filterResults > filtThreshold:
+                                    o.write(vcfEntry)
+
+                            posToDelete.append(iPos)
+                            self.varCount += 1
+                            if self.varCount % 10000 == 0:
+                                sys.stderr.write(
+                                    "\t".join([self._printPrefix, time.strftime('%X'),
+                                               chrom + ":Positions Filtered:" + str(self.varCount) + "\n"]))
+
+                        # Delete to reduce memory usage
+                        for iPos in posToDelete:
+                            del self.candidateIndels[chrom][iPos]
+                    except KeyError as e:  # i.e. There are no indels on this chromosome
+                        pass
+
+                    altAllele = candidateSNV.summarizeVariant()
+                    self.varCount += 1
+                    if altAllele:
+
+                        # Summarize the filter stats of each allele
+                        alleleStats = tuple(self.varToFilteringStats(candidateSNV, allele) for allele in candidateSNV.altAlleles.keys())
+
+                        filterResults = filter.predict_proba(alleleStats)
+
+                        vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, ",".join(list(str(x[0]) for x in filterResults)))
+                        u.write(vcfEntry)
+
+                        # Filter alleles
+                        failedAlleles = []
+                        for result, allele in zip(filterResults, candidateSNV.altAlleles.keys()):
+                            if result[0] < filtThreshold:
+                                failedAlleles.append(allele)
+
+                        # Remove failed alleles
+                        for fAllele in failedAlleles:
+                            del candidateSNV.altAlleles[fAllele]
+
+                        # If any alt alleles passed filters, print them out
+                        if candidateSNV.altAlleles:
+                            vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, ",".join(list(str(x[0]) for x in filterResults if x[0] > filtThreshold)))
+                            o.write(vcfEntry)
+
+                    del positions[position]  # Delete variants after processing them to reduce memory consumption
+
+                    # Status messages
+                    if self.varCount % 10000 == 0:
+                        sys.stderr.write(
+                            "\t".join([self._printPrefix, time.strftime('%X'),
+                                       chrom + ":Positions Filtered:" + str(self.varCount) + "\n"]))
+                # Process any remaining indels
                 try:
-                    nameElements = read.query_name.split(":")
-                    # Barcode is element 1. This is no longer needed, so ignore it
-                    # Parental strand is element 2.
-                    assert nameElements[1] == "+" or nameElements[1] == "-"
-                    rPosParent = nameElements[1] == "+"
-                    # Family size is element 3
-                    rFSize = int(nameElements[2])
-                    # Counter is 4. This is used to identify duplexes
-                    counter = nameElements[3]
+                    for iPos, indel in self.candidateIndels[chrom].items():
+                        indel.summarizeVariant()
+                        # Filter indel
+                        stats = [self.varToFilteringStats(indel, "ALT")]
+                        filterResults = filter.predict_proba(stats)[0][0]
 
-                except (TypeError, IndexError, AssertionError):
-                    sys.stderr.write(
-                        "ERROR: The names of the reads in this BAM file are not consistent with those generated by ProDuSe Collapse\n")
-                    sys.stderr.write(
-                        "We expected something line \'TAATGCATCTTGATTTGGTTGCGAGTTGCAAT:+:207:0\', and instead saw %s\n" % (
-                            read.query_name))
-                    exit(1)
-                # Obtain generic read characteristics
-                # If clipoverlap was run on this BAM file, the originating strand of each base will be stored in a tag
-                try:  # Just in case this read does not contain that tag
-                    rMapStrand = read.get_tag("co")
-                except KeyError:  # i.e. The required tag is not present. Either these reads do not overlap at all, or clipoverlap was never run on the input BAM file
-                    if read.is_reverse:
-                        rMapStrand = ["R"] * len(read.query_sequence)
-                    else:
-                        rMapStrand = ["F"] * len(read.query_sequence)
+                        vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults))
+                        u.write(vcfEntry)
 
-                rMapStrand = rMapStrand[refPos - read.reference_start]
-                rMappingQual = read.mapping_quality
+                        if filterResults > filtThreshold:
+                            o.write(vcfEntry)
 
-                # Read stats for this event
-                dist = min(refPos - read.reference_start, read.reference_end - refPos)
-                self._candidateIndels[self._chrom][refPos].add(alt, qual, rFSize, rPosParent, rMapStrand, dist, rMappingQual, counter)
+                    del self.candidateIndels[chrom]
+                except KeyError:
+                    pass
+            self.candidateVar = {}
 
-    def _findIndels(self):
-
-        # We need to find what Insertion and Deletions are represented by these reads
-        """
-        events = self._getAltSeq()  # Obtain INDELs
-        if len(events) != 0:
-            events = self._combineIndel(events)  # Combine INDELs
-
-            # Perform local realignment of reads, and identify what INDELs are supported
-            self._mapReadsToIndels(events)
-        # Finally, map the rest of these reads back to the reference
-        for read in self._indelReads:
-            rCigar, hasIndel = self.cigarToTuple(read.cigartuples)
-            self.processRead(read, rCigar, mismatchMax=1.1)
-        """
-        self._indelReads = []
-
-    def processRead(self, read, rCigar, mismatchMax=0.04, discardBad=False):
+    def processRead(self, read, rCigar):
         """
         Add all positions covered by this read to the pileup
 
@@ -1083,10 +1267,8 @@ class PileupEngine:
         :param mismatchMax: The lead length multiplied this is the maximum number of mismatched permitted before the read is flagged as supporting an indel
         """
 
-        maxMismatch = len(read.query_alignment_sequence) * mismatchMax + 1
-        if maxMismatch < 5:
-            maxMismatch = 5
-
+        if self._oBAM:
+            self._oBAM.write(read)
         # Is this read valid? Check the naming scheme of the read, and identify each feature stored in the name
         try:
             nameElements = read.query_name.split(":")
@@ -1104,19 +1286,15 @@ class PileupEngine:
                 "ERROR: The names of the reads in this BAM file are not consistent with those generated by ProDuSe Collapse\n")
             sys.stderr.write(
                 "We expected something line \'TAATGCATCTTGATTTGGTTGCGAGTTGCAAT:+:207:0\', and instead saw %s\n" % (
-                read.query_name))
+                    read.query_name))
             exit(1)
 
         # Obtain generic read characteristics
         # If clipoverlap was run on this BAM file, the originating strand of each base will be stored in a tag
-        try:  # Just in case this read does not contain that tag
-            rMapStrand = read.get_tag("co")
-        except KeyError:  # i.e. The required tag is not present. Either these reads do not overlap at all, or clipoverlap was never run on the input BAM file
-            if read.is_reverse:
-                rMapStrand = ["R"] * len(read.query_alignment_sequence)
-            else:
-                rMapStrand = ["F"] * len(read.query_alignment_sequence)
-
+        # TODO: FIX THIS!!!!!!!!!!
+        #try:  # Just in case this read does not contain that tag
+        #    rMapStrand = read.get_tag("co")
+        #except KeyError:  # i.e. The required tag is not present. Either these reads do not overlap at all, or clipoverlap was never run on the input BAM file
         rMappingQual = read.mapping_quality
 
         # All positions covered by this read
@@ -1127,123 +1305,599 @@ class PileupEngine:
 
         # Iterate through all bases and cigar indexes
         cigarIndex = 0  # Keep this seperate to account for deletions
-        readIterator = zip(read.query_alignment_sequence, read.query_alignment_qualities,
-                           rMapStrand)  # TODO: Fix this
+        readIterator = zip(read.query_sequence, read.query_qualities)
         position = read.reference_start
+
+        # Indel attributes
+        indelPos = 0
+        indelType = None
+        indelQual = []
+        lastCigar = 0
+        indelSeq = ""
+        indelEndDist = []
+        indelRef = ""  # Ref base where the indel starts
 
         try:
             while True:
                 # for base, cigar, qual, mapStrand in zip(read.query_alignment_sequence, rCigar, read.query_alignment_qualities, rMapStrand):
                 cigar = rCigar[cigarIndex]
                 cigarIndex += 1
-                if cigar == 1:
+
+                if cigar == 0:  # Matched base
+                    # This is the most common case by far
+                    base, qual = next(readIterator)
+                    distFromEnd = min(abs(position - read.reference_start), abs(read.reference_end - position))
+
+                    if lastCigar != 1:
+                        # If this position overlaps a candidate indel, we also need to add this position to those indels
+                        # But don't do this if the last position was an insertion, as we do not want to double-count this read
+                        try:
+                            if position in self.rawIndels[self._chrom]:
+                                for indel in self.rawIndels[self._chrom][position ].values():
+                                    indel.add(base, qual, rPosParent, rFSize, read.is_reverse, rMappingQual,
+                                              distFromEnd,
+                                              counter,
+                                              read.query_name)
+                                    positions.append(indel)
+                        except KeyError:
+                            pass
+
+                    # If the previous event was an indel, we need to process that, as we have reached the end of the indel
+                    if lastCigar != 0:
+                        # Add the indel as a candidate indel
+                        try:
+                            self.rawIndels[self._chrom][indelPos][indelType].add(indelSeq, indelQual, rPosParent,
+                                                                                 rFSize, read.is_reverse, rMappingQual,
+                                                                                 indelEndDist, counter, read.query_name,
+                                                                                 isAlt=True)
+                            positions.append(self.rawIndels[self._chrom][indelPos][indelType])
+                            if self.rawIndels[self._chrom][indelPos][indelType].ref is None:
+                                self.rawIndels[self._chrom][indelPos][indelType].ref = indelRef
+                        except KeyError:  # No indel was discovered here during haplotype reassembly. This is likely (?) an artifact?
+                            pass
+                        # Clear the indel buffer
+                        # It will actually be overwritten, so we don't need to do anything except reset the quality list
+                        indelQual = []
+                        lastCigar = 0
+
+                    # Obtain the pileup object corresponding to this position
+                    # If this position has not been covered before, we need to generate a new pileup at this position
+                    if position not in self.pileup[self._chrom]:
+                        refBase = self._refWindow[position - self._refStart]
+                        self.pileup[self._chrom][position] = Position(refBase)
+
+                    pileupPos = self.pileup[self._chrom][position]
+                    position += 1
+
+                    # Ignore bases that are "N"
+                    if base == "N":
+                        continue
+                    isAlt = pileupPos.add(base, qual, rFSize, rPosParent, read.is_reverse, distFromEnd, rMappingQual,
+                                          counter,
+                                          read.query_name)
+
+                    # Check to see if this position now has evidence of a variant
+                    if isAlt:
+                        numMismatch += 1
+                    positions.append(pileupPos)
+
+                elif cigar == 4:  # Soft clipped. Ignore this
                     next(readIterator)
                     continue
-                elif cigar == 2:
+                elif cigar == 2:  # A deletion
+
+                    # Was the last cigar operator a normal match?
+                    if lastCigar == 0:
+                        # Create a new indel
+                        lastCigar = 2
+                        indelPos = position
+                        indelSeq = self._refWindow[position - self._refStart]
+                        indelType = "D"
+                        indelQual.append(None)
+                        indelEndDist = min(abs(position - read.reference_start), abs(read.reference_end - position))
+                        indelRef = self._refWindow[position - self._refStart]
+                    elif lastCigar == 2:
+                        # Continue the previous deletion
+                        indelSeq += self._refWindow[position - self._refStart]
+                        indelQual.append(None)
+                    elif lastCigar == 1:
+                        # This is an alignment artifact caused by skbio's SSW algorithm. Skip it
+                        indelPos = 0
+                        indelType = None
+                        indelQual = []
+                        lastCigar = 0
+                        indelSeq = ""
+                        indelEndDist = 0
                     position += 1
                     continue
-
-                # If this position has not been covered before, we need to generate a new pileup at this position
-                if position not in self.pileup[self._chrom]:
-                    refBase = self._refWindow[position - self._refStart]
-                    self.pileup[self._chrom][position] = Position(refBase)
-
-                pileupPos = self.pileup[self._chrom][position]
-                position += 1
-
-                base, qual, mapStrand = next(readIterator)
-
-                distFromEnd = min(position - read.reference_start, read.reference_end - position)
-
-                # Ignore bases that are "N"
-                if base == "N":
+                elif cigar == 1:  # An insertion.
+                    base, qual = next(readIterator)
+                    distFromEnd = min(abs(position - read.reference_start), abs(read.reference_end - position))
+                    # Was the last operator a normal match?
+                    if lastCigar == 0:
+                        # Create a new indel
+                        lastCigar = 1
+                        indelPos = position
+                        indelSeq = base
+                        indelType = "I"
+                        indelQual.append(qual)
+                        indelEndDist = distFromEnd
+                        indelRef = self._refWindow[position - self._refStart - 1]
+                    elif lastCigar == 1:  # We are continuing the previous insertion
+                        indelSeq += base
+                        indelQual.append(qual)
+                    elif lastCigar == 2:
+                        # This is an alignment artifact caused by local realignment. Skip it
+                        indelPos = 0
+                        indelType = None
+                        indelQual = []
+                        lastCigar = 0
+                        indelSeq = ""
+                        indelEndDist = 0
                     continue
-                isAlt = pileupPos.add(base, qual, rFSize, rPosParent, mapStrand, distFromEnd, rMappingQual, counter)
 
-                # Check to see if this position now has evidence of a variant
-                if isAlt:
-                    numMismatch += 1
-                positions.append(pileupPos)
 
         except IndexError:
             pass
         except StopIteration as e:
-            print(read)
-            raise TypeError("Malformed Read Detected: %s" % read.query_name) from e
+            raise pe.MalformedReadException("\'%s\' appears to be malformed" % read.query_name) from e
 
-        # If this read has too many mismatches, it might have an indel which was not called.
-        # Remove this read from the pileup
-        if numMismatch > maxMismatch:
-            for pos in positions:
-                pos.removeLast()
-            self._indelReads.append(read)
+        # Store the number of total mismatches for this read at each variant
+        for pos in positions:
+            pos.addMismatchNum(numMismatch)
+
+    def generateHaplotypes(self, softclippingBuffer=100):
+        """
+        Generate a reference using all reads which contain an indel
+
+        :return: A tuple of reference haplotypes, or None if there are no alternative haplotypes
+        """
+
+        # If no reads in this window support an indel, then there are no alternative haplotypes
+        if not self._indelReads:
+            return None
+
+        if not self._bufferedReads or self._indelReads[0].reference_start < self._bufferedReads[0].reference_start:
+            self._bufferPos = self._indelReads[0].reference_start - softclippingBuffer
+            if self._bufferPos < 0:
+                self._bufferPos = 0
+            refStart = self._bufferPos - self._refStart
         else:
-            # Store the number of total mismatches for this read at each variant
-            for pos in positions:
-                pos.addMismatchNum(numMismatch)
+            self._bufferPos = self._bufferedReads[0].reference_start - softclippingBuffer
+            if self._bufferPos < 0:
+                self._bufferPos = 0
+            refStart = self._bufferPos - self._refStart
 
-    def generatePileup(self, windowBuffer = 200):
+        # What is the general length of each read?
+        readLength = self._indelReads[-1].query_alignment_length
+        refEnd = refStart + self._realignBuffer + softclippingBuffer + readLength
 
-        def processWindow(pos, coordinate):
+        referenceSeq = self._refWindow[refStart:refEnd]
+        refHaplotype = Haplotype(referenceSeq, None)
 
-            # If this position is an INDEL, add the statistics from this position to that INDEL
-            if self._chrom in self._candidateIndels and coordinate in self._candidateIndels[self._chrom]:
-                self._candidateIndels[self._chrom][coordinate].addPos(pos)
+        candidateHaplotypes = {referenceSeq: refHaplotype}
+
+        # First pass: Align all reads against the reference haplotype using SW-alignment to identify any differences
+        # between this read and the reference
+        for read in self._indelReads:
+
+            # Align this read against the reference
+            altAlignment = refHaplotype.alignmentStructure(read.query_sequence)
+            altHaplotype = []
+            # Generate a haplotype for this alignment
+            # Also determine the location of any alternative events
+            i = altAlignment.query_begin - 1
+            eventSize = 0
+            eventType = None
+            eventLoc = sortedcontainers.SortedDict()
+            for b1, b2 in zip(altAlignment.aligned_query_sequence, altAlignment.aligned_target_sequence):
+                i += 1
+                if b2 == "-" and b1 == "-":
+                    i -= 1
+                elif b2 == "-": # Deletion
+                    eventSize += 1
+                    eventType = "D"
+                elif b1 == "-": # Insertion
+                    altHaplotype.append(b2)
+                    eventType = "I"
+                    eventSize += 1
+                else:  # Match/mismatch. Use the reference base
+                    altHaplotype.append(b1)
+                    if eventType:
+                        eventLoc[i-eventSize] = [eventSize, eventType]
+                        eventType = None
+                        eventSize = 0
+
+            altAssembledHaplotype = referenceSeq[:altAlignment.query_begin] + "".join(altHaplotype) + referenceSeq[altAlignment.query_end+1:]
+            if altAssembledHaplotype not in candidateHaplotypes:  # This haplotype does not match an existing haplotype perfectly
+                # See if this haplotype matches any other haplotype
+                altMatchFound = False
+                for name, haplotype in candidateHaplotypes.items():
+                    alignBtwnHap = haplotype.alignmentStructure(altAssembledHaplotype)
+                    if "I" not in alignBtwnHap.cigar and "D" not in alignBtwnHap.cigar:  # i.e. there are no indels between these two haplotypes. They are likely the same
+                        altMatchFound = True
+                        break
+
+                if not altMatchFound:
+                    # Store this new haplotype
+                    candidateHaplotypes[altAssembledHaplotype] = Haplotype(altAssembledHaplotype, eventLoc)
+
+        return tuple(candidateHaplotypes.values())
+
+    def _cigarFromAlignment(self, align, haplotypeDist):
+        """
+        For a given read (query sequence), generate a pysam-style cigar tuple
+        Incorperate any differences between this haplotype and the reference as well
+        :return:
+        """
+
+        cigarLength = align.target_begin
+        cigar = [4] * align.target_begin
+        length = ""
+
+        for x in align.cigar:
+            if x == "M":
+                l = int(length)
+                cigar.extend([0] * l)
+                cigarLength += l
+                length = ""
+            elif x == "D":
+                l = int(length)
+                cigar.extend([1] * int(length))  # Switch operators because the output cigar will refer to the read, not the reference
+                # Since insertions do not consume reference positions, we need to start an offset here
+                cigarLength += l
+                length = ""
+            elif x == "I":
+                cigar.extend([2] * int(length))
+                length = ""
+            else:
+                length += x
+
+        # Add trailing soft clipping
+        if cigarLength < len(align.target_sequence):
+            cigar.extend([4] * (len(align.target_sequence) - cigarLength))
+
+
+        readStartOffset = 0
+        # Add the event that is represented by this haplotype
+        for index in reversed(haplotypeDist):
+            event = haplotypeDist[index]
+            try:
+                index = index - align.query_begin + align.target_begin
+                length, type = event
+
+                # Ignore events at the start or end of the read (including soft-clipping
+                # If these events actually existed, they would be flanked by mapped bases in the cigar
+                if index <= 0:
+                    if type == "D":  # This is a deletion which consumes reference positions
+                        readStartOffset += length
+                    elif type == "I":  # This is an insertion which does not consume reference positions
+                        readStartOffset -= length
+                    continue
+                elif cigar[index + 1] == 4:
+                    continue
+
+                if cigar[index] != 4:  # i.e. this base is not soft clipped
+                    if type == "D":  # This event is a deletion. We need to insert it into the cigar
+                        # Since skbio's implementation of SSW isn't the most reliable thing, in some cases inferior
+                        # alignments can be given a higher score (somehow)
+                        # If this is the case, correct the cigar
+                        for i in range(0, length):
+                            if cigar[i + index] == 1:
+                                cigar[i + index] = 0
+                            else:
+                                cigar.insert(i + index, 2)
+                    else:  # This event is an insertion. We need to replace the existing cigar operators
+                        for i in range(0, length):
+                            # Once again, account for skbio being weird
+                            if cigar[i+index] == 2:
+                                del cigar[i + index]
+                            elif cigar[i+index] == 1:  # i.e. There is already an insertion here.
+                                # We need to find a mapped base. The location of this shouldn't matter
+                                try:
+                                    iIndex = index
+                                    while True:
+                                        iIndex += 1
+                                        x = cigar[i+iIndex]
+                                        if x == 0:  # A mapped base! Just make sure the next base is not soft-clipped
+                                            if cigar[i+iIndex+1] == 4:  # It's soft-clipped. Try the other end
+                                                raise IndexError
+                                            cigar[i + iIndex] = 1
+                                            break
+                                        elif x == 4:  # We have ended up in soft-clipping
+                                            raise IndexError
+                                except IndexError:
+                                    # We reached the end of the read when looking in the forward direction. Try the reverse
+                                    try:
+                                        iIndex = index
+                                        while True:
+                                            iIndex -= 1
+                                            x = cigar[i + iIndex]
+                                            if x == 0:  # A mapped base! Just make sure the next base is not soft-clipped
+                                                if cigar[i + iIndex - 1] == 4:  # It's soft-clipped. Try the other end
+                                                    raise IndexError
+                                                cigar[i + iIndex] = 1
+                                                break
+                                            elif x == 4:  # We have ended up in soft-clipping
+                                                raise IndexError
+                                    except IndexError:
+                                        pass  # This read will be malformed, but there is no way to generate a valid alignment from it
+                                        # This SHOULD never occur
+                            else:
+                                cigar[i+index] = 1
+            except IndexError:
+                continue
+
+        # Convert the cigar list to a pysam-style list of tuples
+        length = 0
+        oldOp = None
+        pysamCigar = []
+        for op in cigar:
+            if op != oldOp:
+                if oldOp is not None:
+                    pysamCigar.append((oldOp, length))
+                length = 1
+                oldOp = op
+            else:
+                length += 1
+        pysamCigar.append((op, length))
+
+        return pysamCigar, cigar, readStartOffset
+
+    def _realign(self, haplotypes, endPoint, indelWindow = 200):
+        """
+        Realign all reads stored in the buffer against these haplotypes, and add the realigned reads to the pileip
+
+        :param haplotypes: A list of Haplotype objects, which will be aligned against
+        :param endPoint: An integer. If the reference_start position of the read is greater than this, the read will not be processed
+        :param indelWindow: An integer specifying a window offset to be applied when processing indel reads.
+
+        To account for the situtation whereby a haplotype may not be generated because all reads that supported that
+        haplotype were processed in an earlier window, don't process all indel-supporting reads in the earlier window
+        :return:
+        """
+
+        def readToIndel(pos, event, length, read):
+
+            # Add position
+            if pos not in self.rawIndels[read.reference_name]:
+                self.rawIndels[read.reference_name][pos] = {}
+            # Add event
+            if event not in self.rawIndels[read.reference_name][pos]:
+                self.rawIndels[read.reference_name][pos][event] = IndelPos(event, length)
+
+        i = 0
+        for read in self._indelReads:
+
+            if endPoint is not None and read.reference_start > endPoint - indelWindow:  # i.e. we have processed all the reads we need to so far.
+                break
+            maxScore = 0
+            maxAlignment = None
+            maxHap = None
+            # Find the best haplotype mapping for this read
+            for hap in haplotypes:
+                align = hap.alignmentStructure(read.query_sequence)
+                if align.optimal_alignment_score > maxScore:
+                    maxScore = align.optimal_alignment_score
+                    maxAlignment = align
+                    maxHap = hap
+
+            # If the best haplotype mapping is the reference, keep the original alignment
+            if maxHap.eventFromRef:
+                # Use the alt alignment
+                pysamCigar, listCigar, startOffset = self._cigarFromAlignment(maxAlignment, maxHap.eventFromRef)
+                maxHap.support.append(read)
+
+                # Update read statistics
+                read.reference_start = maxAlignment.query_begin + self._bufferPos + startOffset
+                read.cigartuples = pysamCigar
+
+                # Create an indel position for these events, if it does not exist already
+                for pos, event in maxHap.eventFromRef.items():
+
+                    length, indelType = event
+                    # Where is this event?
+                    pos = self._bufferPos + pos
+
+                    readToIndel(pos, indelType, length, read)
+
+            else:
+                # For reads in which we are using the original alignment, generate a cigar list for easy processing
+                listCigar = self.cigarToTuple(read.cigartuples)
+            # Add this realigned read to the pileup
+            self.processRead(read, listCigar)
+
+            i += 1
+
+        # Remove all reads that have been processed from the indel buffer
+        self._indelReads = self._indelReads[i:]
+
+        i = 0
+        # Now, process all normal reads
+        for read in self._bufferedReads:
+            # Don't process all reads, in case reads near the end of the buffer map to a haplotype that doesn't exist yet
+            if endPoint is not None and read.reference_start > endPoint:
+                break
+            maxScore = 0
+            maxAlignment = None
+            maxHap = None
+            for hap in haplotypes:
+                align = hap.alignmentStructure(read.query_sequence)
+                if align.optimal_alignment_score > maxScore:
+                    maxScore = align.optimal_alignment_score
+                    # Bias in favor of the reference alignment, since skbio's implementation of SSW does strange things
+                    if maxHap is None:
+                        maxScore += 2
+                    maxAlignment = align
+                    maxHap = hap
+
+            # If the best haplotype mapping is the reference, keep the original alignment
+            if maxHap.eventFromRef:
+                pysamCigar, listCigar, startOffset = self._cigarFromAlignment(maxAlignment, maxHap.eventFromRef)
+                maxHap.support.append(read)
+
+                # Update read statistics
+                read.reference_start = maxAlignment.query_begin + self._bufferPos + startOffset
+                read.cigartuples = pysamCigar
+
+                # Create an indel position for these events, if it does not exist already
+                for pos, event in maxHap.eventFromRef.items():
+                    length, indelType = event
+                    # Where is this event?
+                    pos = self._bufferPos + pos
+
+                    readToIndel(pos, indelType, length, read)
+            else:
+                # For reads in which we are using the original alignment, generate a cigar list for easy processing
+                listCigar = self.cigarToTuple(read.cigartuples)
+            # Add this realigned read to the pileup
+            self.processRead(read, listCigar)
+            i += 1
+        # Remove all realigned reads from the buffer
+        self._bufferedReads = self._bufferedReads[i:]
+
+    def cigarToTuple(self, cigarTuples):
+        """
+        Converts a pysam-style cigar tuples into a regular tuple, where 1 operator = 1 base
+
+        :param cigarTuples: A list of tuples
+        :return: A tuple listing expanded cigar operators
+        """
+
+        cigarList = []
+        for cigarElement in cigarTuples:
+            cigOp = cigarElement[0]
+            # Ignore soft-clipped bases
+            cigarList.extend([cigOp] * cigarElement[1])
+
+        return tuple(cigarList)
+
+    def generatePileup(self, chrom=None, readProcessBuffer=300):
+        """
+
+        :param chrom: A string indicating which contig to process. If None, all contigs will be processed
+        :param readProcessBuffer:An int specifying how large (in terms of genomic coordinates) the read buffer should be before reads are added to the pileup
+        Since this is (probably) cfDNA, fragment sizes are smaller and the buffer could be made smaller, but I am playing it safe here
+        :return:
+        """
+        def processWindow(pos, coordinate, coordinateEnd, candidateVar):
+
             # Ignore non-variant positions
             if pos.altDepth >= self._minAltDepth:
 
                 # Is this position within the capture space?
                 if self._captureSpace is not None:
-                    if self._chrom not in self._captureSpace or bisect.bisect_right(self._captureSpace[self._chrom], coordinate) % 2 != 1:
+                    if self._chrom not in self._captureSpace or bisect.bisect_right(self._captureSpace[self._chrom],
+                                                                                    coordinate) % 2 != 1:
                         return  # This position does not fall within the capture space. Ignore it
 
                 # If there is a variant, we need to obtain some general characteristics to be used for filtering
                 # First, store the sequence of the surrounding bases. This will be used to identify errors
                 # due to homopolymers
-                homoWindow = []
+                leftFlank = []
+                rightFlank = []
 
-                windowPos = coordinate - self._refStart # Where, relative to the reference window, are we located?
-                for j in range(windowPos - self._homopolymerWindow, windowPos + self._homopolymerWindow):
-                    if windowPos == j:  # i.e. We are at the position we are currently examining, flag it so we have a reference point
-                        homoWindow.append("M")  # It's me!
-                    else:
+                windowPos = coordinate - self._refStart  # Where, relative to the reference window, are we located?
+                windowPosEnd = coordinateEnd - self._refStart
+                if windowPos < 0 :  # i.e. we are processing bases outside the current window position
+                    # This is ugly, but we need to parse the reference sequence directly from the FASTA file
+                    # Thus, we need to parse the sequence here
+                    for j in range(coordinate - self._homopolymerWindow, coordinate):
+                        leftFlank.append(self._refGenome[self._chrom][j].seq)
+                    for j in range(coordinateEnd + 1, coordinateEnd + self._homopolymerWindow + 1):
+                        rightFlank.append(self._refGenome[self._chrom][j].seq)
+                else:
+                    # Obtain the sequence from the left flank
+                    for j in range(windowPos - self._homopolymerWindow, windowPos):
                         try:
-                            homoWindow.append(self._refWindow[j])
+                            leftFlank.append(self._refWindow[j])
                         except IndexError:  # In the rare case where we overflow outside the window
-                            homoWindow.append(self._refGenome[self._chrom][j + self._refStart])
+                            leftFlank.append(self._refGenome[self._chrom][j + self._refStart].seq)
+                    # Obtain the right flank sequence
+                    for j in range(windowPosEnd + 1, windowPosEnd + self._homopolymerWindow + 1):
+                        try:
+                            rightFlank.append(self._refWindow[j])
+                        except IndexError:  # We overflowed outside the window. This case is a lot more likely for the right window
+                            rightFlank.append(self._refGenome[self._chrom][j + self._refStart].seq)
+
 
                 # Next, examine how "noisy" the neighbouring region is (i.e. how many candidiate variants there are)
                 # Flag all nearby candidate variants. To avoid flagging the same variant twice, add this
                 # candidate variant position to all variants behind it, and vise-versa
-                if self._chrom not in self.candidateVar:
-                    self.candidateVar[self._chrom] = sortedcontainers.SortedDict()
+                if self._chrom not in candidateVar:
+                    candidateVar[self._chrom] = sortedcontainers.SortedDict()
 
                 nearbyVar = []
-                for j in self.candidateVar[self._chrom].irange(coordinate - self._noiseWindow):
-                    self.candidateVar[self._chrom][j].nearbyVar.append(pos)
-                    nearbyVar.append(self.candidateVar[self._chrom][j])
+                for j in candidateVar[self._chrom].irange(coordinate - self._noiseWindow):
+                    candidateVar[self._chrom][j].nearbyVar.append(pos)
+                    nearbyVar.append(candidateVar[self._chrom][j])
 
                 # Finally, save all these stats we have just generated inside the variant, to be examined during
                 # filtering
-                pos.processVariant(homoWindow, nearbyVar, self._noiseWindow)
-                self.candidateVar[self._chrom][coordinate] = pos
+                pos.processVariant(leftFlank, rightFlank, nearbyVar, self._noiseWindow)
+                candidateVar[self._chrom][coordinate] = pos
 
+        def realignReadsAndPileup(windowEndPoint=None):
+            """
+            Add all reads stored in the buffer to the pileup
 
-        # Print status messages
-        sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Starting...\n"]))
-        sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Finding Candidate Variants\n"]))
-        readsProcessed = 0
+            First, generate all possible haplotypes for this region using the reads which contain an indel
+            Next, realign ALL buffered reads in this region against this indel and the normal reference
+            Finally, process all reads, and generate a pileup from the positions
+            :return:
+            """
+            # First, generate the haplotypes using reads with INDELs
+            haplotypes = self.generateHaplotypes()
+            # Map all reads in the buffer against these haplotypes
+            if haplotypes is not None:
+                self._realign(haplotypes, windowEndPoint)
+
+                # Next, generate an indel position object for each haplotype
+                for hap in haplotypes:
+                    if len(hap.support) < self._minAltDepth:
+                        continue
+
+            # If there are no alternative haplotypes, just add all reads to the pileup
+            else:
+                i = 0
+                for read in self._indelReads:
+                    if windowEndPoint is not None and read.reference_start > windowEndPoint:  # i.e. we have processed all the reads we need to so far.
+                        break
+                    cigarTuple = self.cigarToTuple(read.cigartuples)
+                    self.processRead(read, cigarTuple)
+                    i += 1
+                self._indelReads = self._indelReads[i:]
+                i = 0
+                for read in self._bufferedReads:
+                    if windowEndPoint is not None and read.reference_start > windowEndPoint:  # i.e. we have processed all the reads we need to so far.
+                        break
+                    cigarTuple = self.cigarToTuple(read.cigartuples)
+                    self.processRead(read, cigarTuple)
+                    i += 1
+                self._bufferedReads = self._bufferedReads[i:]
+            # Finally, move the alignment buffer up to reflect the window that was just processed
+            self._bufferPos = windowEndPoint
+
         lastPos = -1
 
-        for read in self._inFile:
+        # Sanity check that the realignment buffer is larger than the actual processing buffer, to ensure that
+        # we are confident of the haplotypes that have been generated
+        if self._realignBuffer < readProcessBuffer:
+            raise AttributeError("Based on the current buffer sizes, reads will be added to the pileup before they are properly realigned")
+
+        for read in self._inFile.fetch(contig=chrom):
 
             # Prior to adding each base in this read onto the pileup, we need to analyze the current read,
             # and obtain general characteristics (family size, mapping quality etc)
 
             # Print out status messages
-            readsProcessed += 1
-            if readsProcessed % 100000 == 0:
-                sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Reads Processed:%s\n" % readsProcessed]))
+            self.readCount += 1
+            if self.readCount % 100000 == 0:
+                if chrom is not None:
+                    sys.stderr.write(
+                    "\t".join([self._printPrefix, time.strftime('%X'), chrom + ":Reads Processed:%s\n" % self.readCount]))
+                else:                    sys.stderr.write(
+                    "\t".join([self._printPrefix, time.strftime('%X'), "Reads Processed:%s\n" % self.readCount]))
 
             # Ignore unmapped reads
             if read.is_unmapped:
@@ -1253,14 +1907,17 @@ class PileupEngine:
             if not read.cigartuples:
                 continue
 
+            # Ignore reads that are secondary or supplemental alignments
+            if read.is_secondary or read.is_supplementary:
+                continue
+
             # Have we advanced positions? If so, we may need to change the loaded reference window, and process
             # positions which no more reads will be mapped to
             if read.reference_name != self._chrom or read.reference_start != lastPos:
 
                 # Sanity check that the input BAM is sorted
                 if read.reference_name == self._chrom and read.reference_start < lastPos:
-                    sys.stderr.write("ERROR: The input BAM file does not appear to be sorted\n")
-                    exit(1)
+                    raise pe.UnsortedInputException("Input SAM/BAM file does not appear to be sorted")
 
                 # Process positions at which no more reads are expected to map to (assuming the input is actually sorted)
                 # We do this to drastically reduce the memory footprint of the pileup, since we don't care about non-variant
@@ -1268,47 +1925,70 @@ class PileupEngine:
                 try:
                     if read.reference_name != self._chrom and self._chrom is not None:
 
-                        # We need to process all remaining reads which support an INDEL
-                        self._findIndels()
                         # If we have switched chromosomes, process all variants stored on the previous chromosome
+                        # First, assemble haplotypes for the reads aligned in this region
+                        realignReadsAndPileup(None)
+                        assert not self._bufferedReads
+                        self._bufferPos = read.reference_start
+
+                        # Process SNVs
                         posToProcess = self.pileup[self._chrom].keys()
                         for coordinate in posToProcess:
-                            processWindow(self.pileup[self._chrom][coordinate], coordinate)
+                            processWindow(self.pileup[self._chrom][coordinate], coordinate, coordinate, self.candidateVar)
                         del self.pileup[self._chrom]
+
+                        # Process indels
+                        # We only need to do this once per chromosome, as there are a lot less indels than possible SNVs
+                        posToProcess = self.rawIndels[self._chrom].keys()
+                        for coordinate in posToProcess:
+
+                            for type, indelObj in self.rawIndels[self._chrom][coordinate].items():
+                                # What is the end position of this indel?
+                                # If it's an insertion, the start and end points are the same
+                                if type == "I":
+                                    endPos = coordinate
+                                else: # If it's a deletion, add the length of the deletion
+                                    endPos = coordinate + indelObj.length  # Add the length of the deletion at this position
+
+                                processWindow(indelObj, coordinate, endPos, self.candidateIndels)
+                        del self.rawIndels[self._chrom]
+
                         # Since this is the first read we are processing from this chromosome, we need to create the dictionary which
                         # will store all bases on this chromosome
                         self.pileup[read.reference_name] = sortedcontainers.SortedDict()
+                        self.rawIndels[read.reference_name] = sortedcontainers.SortedDict()
 
                     # Otherwise, check to see if previous positions fall outside the buffer window. If so, process them
-                    elif self._chrom is not None:
-
-                        # We need to process all remaining reads which support an INDEL
-                        self._findIndels()
-                        posToProcess = tuple(self.pileup[self._chrom].irange(minimum=None, maximum=read.reference_start - self._pileupWindow))
+                    elif self._chrom is not None and read.reference_start > self._bufferPos + self._realignBuffer:
+                        realignReadsAndPileup(read.reference_start - readProcessBuffer)
+                        posToProcess = tuple(self.pileup[self._chrom].irange(minimum=None,
+                                                                             maximum=read.reference_start - self._realignBuffer))
                         for coordinate in posToProcess:
-                            processWindow(self.pileup[self._chrom][coordinate], coordinate)
+                            processWindow(self.pileup[self._chrom][coordinate], coordinate, coordinate, self.candidateVar)
                         for coordinate in posToProcess:
                             del self.pileup[self._chrom][coordinate]
                     elif self._chrom is None:
                         self.pileup[read.reference_name] = sortedcontainers.SortedDict()
+                        self.rawIndels[read.reference_name] = sortedcontainers.SortedDict()
+                        self._bufferPos = read.reference_start
 
-                except KeyError:  # i.e. All reads which mapped to this contig or previous positions failed QC. There are no positions to process
+                except KeyError as e:  # i.e. All reads which mapped to this contig or previous positions failed QC. There are no positions to process
                     pass
 
                 # Load the current reference window and it's position
                 # If we have switched contigs, or moved outside the window that is currently buffered,
                 # we need to re-buffer the reference
-                readWindowStart = read.reference_start - windowBuffer
+                readWindowStart = read.reference_start - self._realignBuffer
                 if readWindowStart < 0:
                     readWindowStart = 0
-                readWindowEnd = read.reference_end + windowBuffer  #TODO: Don't estimate soft-clipping, but instead calculate it
+                readWindowEnd = read.reference_end + self._realignBuffer
 
                 if read.reference_name != self._chrom or readWindowStart < self._refStart or readWindowEnd > refEnd:
                     # To reduce the number of times this needs to be performed, obtain a pretty large buffer
-                    self._refStart = readWindowStart - self._pileupWindow - self._homopolymerWindow
+                    self._refStart = readWindowStart - self._realignBuffer - self._homopolymerWindow
                     if self._refStart < 0:
                         self._refStart = 0
-                    refEnd = readWindowStart + 5000
+                    refEnd = readWindowStart + 8000
                     self._chrom = read.reference_name
                     self._refWindow = self._refGenome[self._chrom][self._refStart:refEnd].seq
 
@@ -1320,28 +2000,49 @@ class PileupEngine:
             if not self._insideCaptureSpace(read):
                 continue
 
-
-            # Convert the cigar to a more user-friendly format
-            rCigar, rHasIndel = self.cigarToTuple(read.cigartuples)
-
-            # If this read supports an INDEL, we need to set it aside and process it separately.
-            if rHasIndel:
+            # If this read supports an INDEL, we need to set it aside and generate a haplotype for this read
+            if "I" in read.cigarstring or "D" in read.cigarstring:
                 self._indelReads.append(read)
-                continue
-
-            self.processRead(read, rCigar)
+            else:
+                self._bufferedReads.append(read)  # No indels
 
         # Now that we have finished processing all reads in the input file, process all remaining positions
         try:
+            realignReadsAndPileup(None)
             posToProcess = self.pileup[self._chrom].keys()
             for coordinate in posToProcess:
-                processWindow(self.pileup[self._chrom][coordinate], coordinate)
+                processWindow(self.pileup[self._chrom][coordinate], coordinate, coordinate, self.candidateVar)
+            # Process indels
+            posToProcess = self.rawIndels[self._chrom].keys()
+            for coordinate in posToProcess:
+                for type, indelObj in self.rawIndels[self._chrom][coordinate].items():
+                    # What is the end position of this indel?
+                    # If it's an insertion, the start and end points are the same
+                    if type == "I":
+                        endPos = coordinate
+                    else:  # If it's a deletion, add the length of the deletion
+                        endPos = coordinate + indelObj.length  # Add the length of the deletion at this position
+                    processWindow(indelObj, coordinate, endPos, self.candidateIndels)
         except KeyError:
             pass
 
-        sys.stderr.write("\t".join([self._printPrefix, time.strftime('%X'), "Reads Processed:" + str(readsProcessed) + "\n"]))
-        sys.stderr.write(
-            "\t".join([self._printPrefix, time.strftime('%X'), "Candidate Variants Identified\n"]))
+
+def runCallMultithreaded(callArgs):
+    """
+    Parallelize the pileup engine by chromosome
+
+    :return:
+    """
+
+    pileupArgs = callArgs[0]
+    filterArgs = callArgs[1]
+    contig = callArgs[2]
+
+    pileup = PileupEngine(*pileupArgs)
+
+    pileup.generatePileup(chrom=contig)
+
+    pileup.filterAndWriteVariants(*filterArgs)
 
 
 def isValidFile(file, parser):
@@ -1355,7 +2056,7 @@ def isValidFile(file, parser):
     if os.path.exists(file):
         return file
     else:
-        raise parser.error("Unable to locate %s. Please ensure the file exists, and try again" % file)
+        raise parser.error("Unable to locate \'%s\': No such file or directory" % file)
 
 
 def validateArgs(args):
@@ -1400,25 +2101,37 @@ def validateArgs(args):
                         help="A BED file containing regions in which to restrict variant calling")
     parser.add_argument("-f", "--filter", metavar="PICKLE", required=True, type=lambda x: isValidFile(x, parser),
                         help="A pickle file containing the trained filter. Can be generated using \'produse train\'")
+    parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
+                        help="How many chromosomes to process simultaneously")
     parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
                         help="Classification threshold to use when filtering variants [Default: 0.33]")
-    parser.add_argument("--min_alt_depth", metavar="INT", type=int, default=2,
-                        help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 2]")
+    parser.add_argument("--min_alt_depth", metavar="INT", type=int, default=4,
+                        help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")
+    parser.add_argument("--realigned_BAM", metavar="BAM", help="Optional output BAM/SAM file for realigned reads")
     validatedArgs = parser.parse_args(listArgs)
     return vars(validatedArgs)
 
 
 parser = argparse.ArgumentParser(description="Identifies and calls variants")
-parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser), help="An optional configuration file which can provide one or more arguments")
-parser.add_argument("-i", "--input", metavar="BAM", type=lambda x: isValidFile(x, parser), help="Input post-collapse or post-clipoverlap BAM file")
+parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
+                    help="An optional configuration file which can provide one or more arguments")
+parser.add_argument("-i", "--input", metavar="BAM", type=lambda x: isValidFile(x, parser),
+                    help="Input post-collapse or post-clipoverlap BAM file")
 parser.add_argument("-o", "--output", metavar="VCF", help="Output VCF file, listing all variants which passed filters")
-parser.add_argument("-u", "--unfiltered", metavar="VCF", help="An additional output VCF file, which lists all candidate variants, including those that failed filters")
-parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser), help="Reference Genome, in FASTA format")
-parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser), help="A BED file containing regions in which to restrict variant calling")
+parser.add_argument("-u", "--unfiltered", metavar="VCF",
+                    help="An additional output VCF file, which lists all candidate variants, including those that failed filters")
+parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser),
+                    help="Reference Genome, in FASTA format")
+parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser),
+                    help="A BED file containing regions in which to restrict variant calling")
 parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser),
                     help="A pickle file containing a trained filter. Can be generated using \'produse train\'")
-parser.add_argument("--threshold", metavar="FLOAT", type=float, help="Classification threshold to use when filtering variants [Default: 0.33]")
-parser.add_argument("--min_alt_depth", metavar="INT", type=int, help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 2]")
+parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="How many chromosomes to process simultaneously")
+parser.add_argument("--threshold", metavar="FLOAT", type=float,
+                    help="Classification threshold to use when filtering variants [Default: 0.33]")
+parser.add_argument("--min_alt_depth", metavar="INT", type=int,
+                    help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")
+parser.add_argument("--realigned_BAM", metavar="BAM", help="Optional output BAM/SAM file for realigned reads")
 
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
@@ -1434,24 +2147,210 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
         config = ConfigObj(args["config"])
         try:
             for argument, parameter in config["call"].items():
-                if argument in args and not args[argument]:  # Aka this argument is used by call, and a parameter was not provided at the command line
+                if argument in args and not args[
+                    argument]:  # Aka this argument is used by call, and a parameter was not provided at the command line
                     args[argument] = parameter
         except KeyError:  # i.e. there is no section named "call" in the config file
             sys.stderr.write(
                 "ERROR: Unable to locate a section named \'call\' in the config file \'%s\'\n" % (args["config"]))
             exit(1)
 
+
     args = validateArgs(args)
-    pileup = PileupEngine(args["input"], args["reference"], args["targets"], minAltDepth = args["min_alt_depth"], printPrefix=printPrefix)
 
-    # Find candidate variants
-    pileup.generatePileup()
+    # Load filter
+    # with open(args["filter"], "r+b") as o:
+    #    filterModel = pickle.load(o)
 
-    # Filter variants
-    with open(args["filter"], "r+b") as o:
-        filterModel = pickle.load(o)
-    pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"])
+    # Load filter
+    try:
+        with open(args["filter"], "r+b") as o:
+            filterModel = pickle.load(o)
+    except KeyError as e:
+        # A KeyError will be thrown if loading a RandomForestModel generated with sklearn <0.18.0, while
+        # using >0.18.0
+        # All we can do is warn the user
+        from sklearn import __version__ as currentVer
+        raise AttributeError("The filter model \'%s\' was generated by an earlier version of sklearn, " 
+                             "and is not compatible with sklearn version %s" % (args["filter"], currentVer)) from e
+    # Print status messages
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
+    contigNames = Fasta(args["reference"]).records.keys()
 
+    # How much should we multithread?
+    if args["jobs"] == 0:  # i.e. use as many threads as possible
+        threads = None  # The multiprocessing module will chose the number of threads
+    else:
+        threads = min(len(contigNames), args["jobs"], os.cpu_count())
+
+    if threads > 1 or threads is None:
+        # Multi-threaded. Append output file names with different prefixes to maintain sorted order later on
+
+        # Process arguments
+        # This is going to get ugly, since we need to pass seperate arguments to both generatePileup and filterAndWriteVariants
+        # Thus, we are going to need a list of list of tuples.....
+        # Also, since map doesn't support kwargs, we are going to need to obtain a lot of defaults.
+
+        # Obtain defaults for pileup engine
+        arguments = inspect.signature(PileupEngine)
+        outBAMIndex = -1
+        defaults = []
+        i = 0
+        for name, value in arguments.parameters.items():
+            if name == "inBAM":
+                defaults.append(args["input"])
+            elif name == "refGenome":
+                defaults.append(args["reference"])
+            elif name == "targetRegions":
+                defaults.append(args["targets"])
+            elif name == "minAltDepth":
+                defaults.append(args["min_alt_depth"])
+            elif name == "oBAM":
+                outBAMIndex = i
+                defaults.append(None)
+            elif name == "printPrefix":
+                defaults.append(printPrefix)
+            else:
+                defaults.append(value.default)
+            i += 1
+
+        # Obtain defaults for filterAndWriteVariants
+        arguments = inspect.signature(PileupEngine.filterAndWriteVariants)
+        outVCFIndex = -1
+        outUnfiltIndex = -1
+        headerIndex = -1
+        vcfDefaults = []
+        i = 0
+        for name, value in arguments.parameters.items():
+            if name == "self":
+                i -= 1
+            elif name == "outFile":
+                outVCFIndex = i
+                vcfDefaults.append(None)
+            elif name == "unfilteredOut":
+                outUnfiltIndex = i
+                vcfDefaults.append(None)
+            elif name == "writeHeader":
+                vcfDefaults.append(False)
+                headerIndex = i
+            elif name == "filter":
+                vcfDefaults.append(filterModel)
+            else:
+                vcfDefaults.append(value.default)
+            i += 1
+
+        # Now, merge these arguments into the multiprocessing list
+        # The format will be [[EngineArgs1, filterArgs1, contig1], [EngineArgs2, filterArgs2, contig2]]
+        multithreadArgs = tuple((defaults[:], vcfDefaults[:], contig) for contig in contigNames)
+        multithreadArgs[0][1][headerIndex] = True
+        # Now, add the unique filenames
+        i = 0
+        bamFiles = []
+        oVCFFiles = []
+        uVCFFiles = []
+        for contig in contigNames:
+            # Add output BAM name
+            oBAMName = args["realigned_BAM"] + "." + contig
+            bamFiles.append(oBAMName)
+            multithreadArgs[i][0][outBAMIndex] = oBAMName
+            # Add output VCF name
+            oVCFName = args["output"] + "." + contig
+            oVCFFiles.append(oVCFName)
+            if args["unfiltered"] is not None:
+                uVCFName = args["unfiltered"] + "." + contig
+                uVCFFiles.append(uVCFName)
+            else:
+                uVCFName = None
+            multithreadArgs[i][1][outVCFIndex] = oVCFName
+            multithreadArgs[i][1][outUnfiltIndex] = uVCFName
+            i += 1
+        i = 0
+
+        # Run the jobs
+        processPool = multiprocessing.Pool(processes=threads)
+        try:
+            processPool.map_async(runCallMultithreaded, multithreadArgs)
+            processPool.close()
+            processPool.join()
+        except KeyboardInterrupt as e:
+            processPool.terminate()
+            processPool.join()
+            raise e
+
+        # Finally, merge the output files
+        pysam.merge("-f", args["realigned_BAM"], *bamFiles)
+        for bFile in bamFiles:
+            os.remove(bFile)
+        with open(args["output"], "w") as o:
+            for oVCFFile in oVCFFiles:
+                with open(oVCFFile) as v:
+                    for line in v:
+                        o.write(line)
+                os.remove(oVCFFile)
+        if args["unfiltered"] is not None:
+            with open(args["unfiltered"], "w") as o:
+                for uVCFFile in uVCFFiles:
+                    with open(uVCFFile) as v:
+                        for line in v:
+                            o.write(line)
+                    os.remove(uVCFFile)
+
+    else:  # Singe-threaded
+        pileup = PileupEngine(args["input"], args["reference"], args["targets"], minAltDepth=args["min_alt_depth"],
+                              oBAM=args["realigned_BAM"],
+                              printPrefix=printPrefix)
+        # For testing
+        first = True
+        for contig in contigNames:
+            # Find candidate variants
+            pileup.generatePileup(chrom=contig)
+
+            # Filter variants
+            if first:
+                pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"], writeHeader=True)
+                first = False
+            else:
+                pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"])
+
+    """
+    # Print status messages
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
+    readCount = 0
+    varCount = 0
+
+    outBAM = None
+    # Prepare the output BAM file
+    if args["realigned_BAM"] is not None:
+        tmp = pysam.AlignmentFile(args["input"])
+        outBAM = pysam.AlignmentFile(args["realigned_BAM"], mode="wb", template=tmp)
+        tmp.close()
+
+    contigNames = Fasta(args["reference"]).records.keys()
+    first = True
+    for contig in contigNames:
+
+        # Re-generate the pileup every time to minimize memory usage
+        pileup = PileupEngine(args["input"], args["reference"], args["targets"], minAltDepth=args["min_alt_depth"],
+                              oBAM=outBAM,
+                              printPrefix=printPrefix)
+
+        # Update counters
+        pileup.readCount = readCount
+        pileup.varCount = varCount
+
+        # Find candidate variants
+        pileup.generatePileup(chrom=contig)
+
+        # Filter variants
+        if first:
+            pileup.filterAndWriteVariants(args["output"], None, args["unfiltered"], args["threshold"], writeHeader=True)
+            first = False
+        else:
+            pileup.filterAndWriteVariants(args["output"], None, args["unfiltered"], args["threshold"])
+
+        readCount += pileup.readCount
+        varCount += pileup.varCount
+        """
 
 if __name__ == "__main__":
     main()
