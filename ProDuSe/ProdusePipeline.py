@@ -39,7 +39,7 @@ def isValidFile(file, parser, default=None):
     elif os.path.exists(file):
         return file
     else:
-        raise parser.error("Unable to locate \'%s\'. Please ensure the file exists, and try again." % (file))
+        raise parser.error("Unable to locate \'%s\': No such file or directory" % (file))
 
 
 def makeConfig(configName, configPath, arguments):
@@ -89,8 +89,7 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript, printPre
     bwaR2In = tmpDir + sampleName + ".trim_R2.fastq.gz"
     bwaOut = tmpDir + sampleName + ".trim.bam"
     collapseOut = tmpDir + sampleName + ".collapse.bam"
-    clipUnsortedOut = tmpDir + sampleName + ".clipO.bam"
-    clipSortedOut = resultsDir + sampleName + ".clipO.sort.bam"
+    collapseSortedOut = resultsDir + sampleName + ".collapse.sort.bam"
     callPassedOut = resultsDir + sampleName + ".call.passed.vcf"
     callAllOut = resultsDir + sampleName + ".call.all.vcf"
 
@@ -99,8 +98,7 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript, printPre
     scriptToArgs["bwa"] = {"input": [bwaR1In, bwaR2In], "output": bwaOut, "reference": sampleParameters["reference"]}
     scriptToArgs["trim"] = {"input": sampleParameters["fastqs"], "output": [bwaR1In, bwaR2In]}
     scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut}
-    scriptToArgs["clipoverlap"] = {"input": collapseOut, "output": clipUnsortedOut, "tag_origin": "True"}
-    scriptToArgs["call"] = {"input": clipSortedOut, "output": callPassedOut, "unfiltered": callAllOut}
+    scriptToArgs["call"] = {"input": collapseSortedOut, "output": callPassedOut, "unfiltered": callAllOut}
 
     for argument, scripts in argsToScript.items():
 
@@ -183,6 +181,13 @@ def checkArgs(rawArgs):
         produsePath = os.path.dirname(os.path.realpath(__file__))
     defaultFilt = os.path.join(produsePath, "default_filter.pkl")
 
+    # Did the user specify no_barcodes? if so, we don't need a lot of the arguments that the pipeline would normally
+    # require, as we will set some defaults later
+    if rawArgs["no_barcodes"] is True or rawArgs["no_barcodes"] == "True":
+        barParamReq = False
+    else:
+        barParamReq = True
+
     # To validate the argument type, recreate the parser
     # BUT HERE, INDICATE IF AN ARGUMENT IS REQUIRED OR NOT
     parser = argparse.ArgumentParser(description="Runs all stages of the ProDuSe pipeline on the designated samples")
@@ -192,42 +197,32 @@ def checkArgs(rawArgs):
                         help="Output directory for analysis directory")
     parser.add_argument("-r", "--reference", metavar="FASTA", required=True,
                         help="Reference genome, in FASTA format. BWA indexes should be present in the same directory")
-    parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
-                        help="If multiple samples are specified (using \'-sc\'), how many samples will be processed in parallel")
+    parser.add_argument("--no_barcodes", action="store_true", help="Does not use semi-degenerate barcoded adapters")
     inputFiles = parser.add_mutually_exclusive_group(required=True)
     inputFiles.add_argument("--fastqs", metavar="FASTQ", default=None, nargs=2,
                             type=lambda x: isValidFile(x, parser), help="Two paired end FASTQ files")
     inputFiles.add_argument("-sc", "--sample_config", metavar="INI", default=None,
                             type=lambda x: isValidFile(x, parser),
                             help="A sample cofiguration file, specifying one or more samples")
-    parser.add_argument("--bwa", default="bwa", type=lambda x: isValidFile(x, parser, default="bwa"),
-                        help="Path to bwa executable")
-    parser.add_argument("--samtools", default="samtools", type=lambda x: isValidFile(x, parser, default="samtools"),
-                        help="Path to samtools executable")
-    parser.add_argument("--directory_name", default="produse_analysis_directory",
-                        help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
-    parser.add_argument("--append_to_directory", action="store_true",
-                        help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
-    parser.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
 
     trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
     trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
                           help="The sequence of the degenerate barcode, represented in IUPAC bases")
-    trimArgs.add_argument("-p", "--barcode_position", metavar="0001111111111110", required=True, type=str,
+    trimArgs.add_argument("-p", "--barcode_position", metavar="0001111111111110",  type=str, required=barParamReq,
                           help="Barcode positions to use when comparing expected and actual barcode sequences (1=Yes, 0=No)")
-    trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", type=int, required=True,
+    trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", type=int, required=barParamReq,
                           help="The maximum number of mismatches permitted between the expected and actual barcode sequences [Default: 3]")
     trimArgs.add_argument("--trim_other_end", action="store_true",
                         help="In addition, examine the other end of the read for a barcode. Will not remove partial barcodes")
 
     collapseArgs = parser.add_argument_group("Arguments used when Collapsing families into a consensus")
-    collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str, required=True,
+    collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str, required=barParamReq,
                               help="Positions to consider when identifying reads are members of the same family. Usually the same as \'-b\'")
-    collapseArgs.add_argument("-fmm", "--family_mismatch", metavar="INT", type=int, required=True,
+    collapseArgs.add_argument("-fmm", "--family_mismatch", metavar="INT", type=int, required=barParamReq,
                               help="Maximum number of mismatches allowed between two barcodes before they are considered as members of different families")
-    collapseArgs.add_argument("-dm", "--duplex_mask", metavar="0000000001111110", type=str, required=True,
+    collapseArgs.add_argument("-dm", "--duplex_mask", metavar="0000000001111110", type=str, required=barParamReq,
                               help="Positions to consider when determining if two families are in duplex")
-    collapseArgs.add_argument("-dmm", "--duplex_mismatch", metavar="INT", type=int, required=True,
+    collapseArgs.add_argument("-dmm", "--duplex_mismatch", metavar="INT", type=int, required=barParamReq,
                               help="Maximum number of mismatches allowed between two barcodes before they are classified as not in duplex")
     collapseArgs.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser),
                               help="A BED file containing capture regions of interest. Read pairs that do not overlap these regions will be filtered out")
@@ -240,7 +235,21 @@ def checkArgs(rawArgs):
     callArgs.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
                           help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.33]")
 
+    miscArgs = parser.add_argument_group("Miscellaneous Args")
+    miscArgs.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
+                        help="If multiple samples are specified (using \'-sc\'), how many samples will be processed in parallel")
+    miscArgs.add_argument("--bwa", default="bwa", type=lambda x: isValidFile(x, parser, default="bwa"),
+                        help="Path to bwa executable")
+    miscArgs.add_argument("--samtools", default="samtools", type=lambda x: isValidFile(x, parser, default="samtools"),
+                        help="Path to samtools executable")
+    miscArgs.add_argument("--directory_name", default="produse_analysis_directory",
+                        help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
+    miscArgs.add_argument("--append_to_directory", action="store_true",
+                        help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
+    miscArgs.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
+
     validatedArgs = parser.parse_args(args=listArgs)
+
     return vars(validatedArgs)
 
 
@@ -483,9 +492,9 @@ def runPipeline(sampleName, sampleDir, cleanup=False):
             if bwaCom.returncode != 0 or sortCom.returncode != 0:  # i.e. Something crashed
                 sys.stderr.write("ERROR: BWA and Samtools encountered an unexpected error and were terminated\n")
                 sys.stderr.write("BWA Standard Error Stream:\n")
-                sys.stderr.write("\n".join(bwaStderr))
+                sys.stderr.write(os.linesep.join(bwaStderr))
                 sys.stderr.write("Samtools Sort Standard Error Stream:\n")
-                sys.stderr.write("\n".join(samtoolsStderr))
+                sys.stderr.write(os.linesep.join(samtoolsStderr))
                 exit(1)
 
             sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Mapping Complete\n"]))
@@ -568,19 +577,11 @@ def runPipeline(sampleName, sampleDir, cleanup=False):
         collapseConfig = os.path.join(sampleDir, "config", "collapse_task.ini")
         collapsePrintPrefix = "PRODUSE-COLLAPSE\t" + sampleName
         Collapse.main(sysStdin=["--config", collapseConfig], printPrefix=collapsePrintPrefix)
-        open(collapseDone, "w").close()
 
-    # Run clipoverlap
-    clipDone = os.path.join(sampleDir, "config", "Clipoverlap_Complete")
-    if not os.path.exists(clipDone):
-        clipConfig = os.path.join(sampleDir, "config", "clipoverlap_task.ini")
-        clipPrintPrefix = "PRODUSE-CLIPOVERLAP\t" + sampleName
-        ClipOverlap.main(sysStdin=["--config", clipConfig], printPrefix=clipPrintPrefix)
-
-        # Sort the clipOverlap output
-        # Parse the clipoverlap config file for the output file name
-        clipConfArgs = ConfigObj(clipConfig)
-        sortInput = clipConfArgs["clipoverlap"]["output"]
+        # Sort the collapse BAM output output
+        # Parse the config file for the output file name
+        collapseConfArgs = ConfigObj(collapseConfig)
+        sortInput = collapseConfArgs["collapse"]["output"]
         # Append "sort" as the output file name
         sortOutput = sortInput.replace(".bam", ".sort.bam")
         tmpDir = os.sep + "tmp" + os.sep
@@ -590,7 +591,7 @@ def runPipeline(sampleName, sampleDir, cleanup=False):
         bwaConfig = os.path.join(sampleDir, "config", "bwa_task.ini")
         sortAndRetag(sortInput, sortOutput, bwaConfig)
 
-        open(clipDone, "w").close()
+        open(collapseDone, "w").close()
 
     # Run call (variant calling)
     callDone = os.path.join(sampleDir, "config", "Call_Complete")
@@ -619,19 +620,12 @@ parser.add_argument("-c", "--config", metavar="INI", default=None, type=lambda x
                     help="A configuration file, specifying one or more arguments. Overriden by command line parameters")
 parser.add_argument("--fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
                     help="Two paired end FASTQ files")
-parser.add_argument("-d", "--outdir", metavar="DIR", help="Output directory for analysis directory")
-parser.add_argument("-r", "--reference", metavar="FASTA",
-                    help="Reference genome, in FASTA format. BWA indexes should present in the same directory")
 parser.add_argument("-sc", "--sample_config", metavar="INI", default=None, type=lambda x: isValidFile(x, parser),
                     help="A sample cofiguration file, specifying one or more samples")
-parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="If multiple samples are specified (using \'-sc\'), how many samples will be processed in parallel")
-parser.add_argument("--bwa", help="Path to bwa executable [Default: \'bwa\']")
-parser.add_argument("--samtools", help="Path to samtools executable [Default: \'samtools\']")
-parser.add_argument("--directory_name",
-                    help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
-parser.add_argument("--append_to_directory", action="store_true",
-                    help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
-parser.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
+parser.add_argument("-r", "--reference", metavar="FASTA",
+                    help="Reference genome, in FASTA format. BWA indexes should present in the same directory")
+parser.add_argument("-d", "--outdir", metavar="DIR", help="Output directory for analysis directory")
+parser.add_argument("--no_barcodes", action="store_true", help="Does not use semi-degenerate barcoded adapters")
 
 trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
 trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
@@ -659,6 +653,16 @@ collapseArgs.add_argument("--tag_family_members", action="store_true",
 callArgs = parser.add_argument_group("Arguments used when calling variants")
 callArgs.add_argument("--threshold", metavar="FLOAT", type=float, help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.33]")
 callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x:isValidFile(x, parser), help="A python pickle containing a trained Random Forest variant filter")
+
+miscArgs = parser.add_argument_group("Miscellaneous Arguments")
+miscArgs.add_argument("-j", "--jobs", metavar="INT", type=int, help="If multiple samples are specified (using \'-sc\'), how many samples will be processed in parallel")
+miscArgs.add_argument("--bwa", help="Path to bwa executable [Default: \'bwa\']")
+miscArgs.add_argument("--samtools", help="Path to samtools executable [Default: \'samtools\']")
+miscArgs.add_argument("--directory_name",
+                    help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
+miscArgs.add_argument("--append_to_directory", action="store_true",
+                    help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
+miscArgs.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
 
 # For config parsing purposes, assign each parameter to the pipeline component from which it originates
 argsToPipelineComponent = {
@@ -806,7 +810,7 @@ def main(args=None, sysStdin=None):
         multithreadArgs = list((x.ljust(maxLength, " "), y, args["cleanup"]) for x, y in samplesToProcess.items())
         try:
             # Run the jobs
-            processPool.map(runPipelineMultithread, multithreadArgs)
+            processPool.map_async(runPipelineMultithread, multithreadArgs)
             processPool.close()
             processPool.join()
         except KeyboardInterrupt as e:
