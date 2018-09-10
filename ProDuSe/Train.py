@@ -9,11 +9,14 @@ import time
 import random
 from sklearn.ensemble import RandomForestClassifier
 from configobj import ConfigObj
+from pyfaidx import Fasta
+import multiprocessing
 try:
+    import Call_Rewrite as Call
+    import ProDuSeExceptions as pe
+except ImportError:
     from ProDuSe import Call
-except ImportError:  # i.e. ProDuSe is not installed
-    import Call
-
+    from ProDuSe import ProDuSeExceptions as pe
 
 def isValidFile(file, parser, allowNone=False):
     """
@@ -35,21 +38,22 @@ def isValidFile(file, parser, allowNone=False):
 
 def loadVariants(inFile):
     """
-    Load variants from the specified VCF file, and store them in to dictionaries based upon their validation status
+    Load variants from the specified VCF file, and store them in to dictionaries
     :param inFile: A string containing a filepath to a VCF file listing mutation status
     :return:
     """
 
-    trueVariants = {}
-    unclassifiedVariants = {}
-    skippedVar = 0
-    validatedVar = 0
+    variants = {}
+    varCount = 0
+
+    if inFile is None:  # i.e. no VCF file was specified
+        return {}
 
     with open(inFile) as f:
         # Sanity check that the input file is a VCF file
         line = f.readline()
         if "fileformat=VCF" not in line:
-            raise TypeError("Input file \'%s\' does not meet VCF specifications" % inFile)
+            raise pe.InvalidInputException("Input file \'%s\' does not meet VCF specifications" % inFile)
 
         for line in f:
             line = line.rstrip()
@@ -61,36 +65,16 @@ def loadVariants(inFile):
             chrom = cols[0]
             position = int(cols[1]) - 1  # Since pysam uses 0-based indexing
             alt = cols[4]
-            info = cols[7]
-            validated = None
-            infoFields = info.split(";")
-            for field in infoFields:
-                name, value = field.split("=")
-                if name == "VALIDATED":
-                    validated = None if value.upper() == "UNKNOWN" else value.upper() == "TRUE"
-                    break
-            if validated is None:  # No validation status was specified for this variant
-                skippedVar += 1
-                continue
+
             # Add this variant to the coresponding validations
-            validatedVar += 1
-            if validated is True:
-                if chrom not in trueVariants:
-                    trueVariants[chrom] = {}
-                if position not in trueVariants[chrom]:
-                    trueVariants[chrom][position] = set()
-                trueVariants[chrom][position].add(alt)
-            elif validated is None:
-                if chrom not in unclassifiedVariants:
-                    unclassifiedVariants[chrom] = {}
-                if position not in unclassifiedVariants[chrom]:
-                    unclassifiedVariants[chrom][position] = set()
-                unclassifiedVariants[chrom][position].add(alt)
+            varCount += 1
+            if chrom not in variants:
+                variants[chrom] = {}
+            if position not in variants[chrom]:
+                variants[chrom][position] = set()
+            variants[chrom][position].add(alt)
 
-        if skippedVar > 0:
-            sys.stderr.write("WARNING: Validation status was not specified for %s variants. These will be ignored.\n" % skippedVar)
-
-    return trueVariants, unclassifiedVariants
+    return variants
 
 
 def validateArgs(args):
@@ -128,30 +112,90 @@ def validateArgs(args):
     parser.add_argument("-b", "--bam", metavar="BAM", required=True, nargs="+", type=lambda x: isValidFile(x, parser),
                         help="Input post-collapse or post-clipoverlap BAM file")
     parser.add_argument("-v", "--validations", metavar="VCF", required=True, nargs="+", type=lambda x: isValidFile(x, parser),
-                        help="Input VCF file listing validated variants. Validation status must be specified using the INFO field \'VALIDATED\'")
+                        help="Input VCF file listing validated variants.")
+    parser.add_argument("--ignore_vcfs", metavar="VCF", type=lambda x: isValidFile(x, parser), nargs="+",
+                        help="One or more optional VCF files listing variants that are to be excluded from filter training")
     parser.add_argument("-o", "--output", metavar="PICKLE", required=True, help="Output pickle file, containing the filtering classifier")
     parser.add_argument("-r", "--reference", metavar="FASTA", required=True, type=lambda x: isValidFile(x, parser),
                         help="Reference Genome, in FASTA format")
     parser.add_argument("-t", "--targets", metavar="BED", nargs="+", type=lambda x: isValidFile(x, parser),
                         help="A BED file containing regions in which to restrict variant calling")
+    parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1, help="Number of chromosomes to process simultaneously")
     parser.add_argument("--true_stats", metavar="TSV", type=lambda x: isValidFile(x, parser),
-                        help="An optional file to dump stats coresponding to validated variants")
+                        help="An optional output file containing all true variant status used to train the filter")
     parser.add_argument("--false_stats", metavar="TSV", type=lambda x: isValidFile(x, parser),
-                        help="An optional file to dump stats coresponding to false variants that were chosen to train the filter")
+                        help="An optional output file containing all false variant status used to train the filter")
+    parser.add_argument("-d", "--plot_dir", metavar="DIR",
+                        help="An output directory for density plots visualizing the various characteristics")
 
     args = parser.parse_args(listArgs)
     return vars(args)
 
+def processSample(bamFile, refGenome, targets, contig, trueVariants, ignoreVariants, printPrefix):
 
-parser = argparse.ArgumentParser(description="Creates a new random forest filtering model based upon the specified validated variants")
+    # Run the pileup to identify candidate variants
+    pileup = Call.PileupEngine(bamFile, refGenome, targets, printPrefix=printPrefix)
+
+    trueVarStats = []
+    falseVarStats = []
+
+    #if "_" not in contig:  # Don't print status messages for minor contigs
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Processing " + contig + "\n"]))
+
+    # Find candidate variants (same as Call)
+    pileup.generatePileup(chrom=contig)
+
+    #if "_" not in contig:  # Don't print status messages for minor contigs
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), contig + ": Classifying Candidate Variants\n"]))
+    chromToDelete = []
+    for chrom, positions in pileup.candidateVar.items():
+
+        for location, pos in positions.items():
+            if pos.summarizeVariant():  # i.e. this variant passes the minimum depth filter
+
+                # Only examine the major allele
+                maxWeight = 0
+                maxAltAllele = None
+                for allele in pos.altAlleles.keys():
+                    weight = pos.strandCounts[allele]
+                    if maxAltAllele is None or weight > maxWeight:
+                        maxAltAllele = allele
+                        maxWeight = weight
+                if chrom in ignoreVariants and location in ignoreVariants[chrom] and maxAltAllele in \
+                        ignoreVariants[chrom][location]:
+                    continue  # Skip this variant
+
+                # Skip variants where the reference allele is supported by too few reads
+                if pos.strandCounts[pos.ref] < 4:
+                    continue
+                # Obtain the stats that we wish to filter upon
+
+                posStats = pileup.varToFilteringStats(pos, maxAltAllele)
+
+                if chrom in trueVariants and location in trueVariants[chrom] and maxAltAllele in trueVariants[chrom][
+                    location]:
+                    trueVarStats.append(posStats)
+                else:
+                    falseVarStats.append(posStats)
+        chromToDelete.append(chrom)
+    for chrom in chromToDelete:
+        del pileup.candidateVar[chrom]
+
+    return trueVarStats, falseVarStats
+
+
+parser = argparse.ArgumentParser(description="Creates a new random forest filtering model trained using the supplied variants")
 parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser), help="An optional configuration file which can provide one or more arguments")
-parser.add_argument("-b", "--bam", metavar="BAM", type=lambda x: isValidFile(x, parser), nargs="+", help="One or more post-collapse or post-clipoverlap BAM files. BAM files must be specified in the same order as \'--validations\'")
-parser.add_argument("-v", "--validations", metavar="VCF", type=lambda x: isValidFile(x, parser), nargs="+", help="One or more VCF file listing validated variants. Validation status must be specified using the INFO field \'VALIDATED\'")
-parser.add_argument("-o", "--output", metavar="PICKLE", help="Output pickle file, containing the filtering classifier")
+parser.add_argument("-b", "--bam", metavar="BAM", type=lambda x: isValidFile(x, parser), nargs="+", help="One or more post-collapse BAM files. BAM files must be specified in the same order as \'--validations\'")
+parser.add_argument("-v", "--validations", metavar="VCF", type=lambda x: isValidFile(x, parser), nargs="+", help="One or more VCF files listing validated variants.")
+parser.add_argument("--ignore_vcfs", metavar="VCF", type=lambda x: isValidFile(x, parser, allowNone=True), nargs="+", help="One or more optional VCF files listing variants that are to be excluded from filter training")
+parser.add_argument("-o", "--output", metavar="PICKLE", help="Output pickle file, containing the trained filter")
 parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser), help="Reference Genome, in FASTA format")
-parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser, allowNone=True), nargs="+", help="One or more BED file(s) containing regions in which to restrict variant calling. Must be specified in the same order as \'--bam\' (use \'None\' for no BED file)")
-parser.add_argument("--true_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An optional file to dump stats coresponding to validated variants")
-parser.add_argument("--false_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An optional file to dump stats coresponding to false variants that were chosen to train the filter")
+parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser, allowNone=True), nargs="+", help="One or more BED files containing regions in which to restrict variant calling. Must be specified in the same order as \'--bam\' (use \'None\' for no BED file)")
+parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="Number of chromosomes to process simultaneously")
+parser.add_argument("--true_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An output file containing all true variant status used to train the filter")
+parser.add_argument("--false_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An optional output file containing all false variant status used to train the filter")
+parser.add_argument("-d", "--plot_dir", metavar="DIR", help="An output directory for density plots visualizing the various characteristics")
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     if args is None:
@@ -171,48 +215,60 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
             exit(1)
     # Check that the args generated from the config file are validated
     args = validateArgs(args)
-
-    # Sanity check input arguments
-    if len(args["bam"]) != len(args["validations"]):
-        sys.stderr.write("ERROR: The number of \'-v/--validations\' files must match the number of \'-b/--bam\' files")
-        exit(1)
     if args["targets"] is None:
         args["targets"] = [None] * len(args["bam"])
+    if args["ignore_vcfs"] is None:
+        args["ignore_vcfs"] = [None] * len(args["bam"])
 
-    baseToIndex = {"A": 0, "C": 1, "G": 2, "T": 3, "-": 4}
+    # Parse contig names
+    contigNames = Fasta(args["reference"]).records.keys()
     # Aggregate the statistics to generate the filter
     trueVarStats = []
     falseVarStats = []
 
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
+
     # Load validated variants
     i = 0
     for validations in args["validations"]:
-        trueVariants, unclassifiedVariants = loadVariants(validations)
+        trueVariants = loadVariants(validations)
+        ignoreVariants = loadVariants(args["ignore_vcfs"][i])
 
-        # Run the pileup to identify candidate variants
-        pileup = Call.PileupEngine(args["bam"][i], args["reference"], args["targets"][i], printPrefix=printPrefix)
+        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Processing Sample \'%s\'\n" % args["bam"][i].split("/")[-1]]))
 
-        # Find candidate variants (same as Call)
-        pileup.generatePileup()
+        # Run single threaded
+        if args["jobs"] == 1:
 
-        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Classifying Candidate Variants\n"]))
-        for chrom, positions in pileup.candidateVar.items():
+            # Process each chromosome seperately to reduce memory footprint
+            for contig in contigNames:
 
-            for location, pos in positions.items():
+                sTrueVarStats, sFalseVarStats = processSample(args["bam"][i], args["reference"], args["targets"][i], contig, trueVariants, ignoreVariants, printPrefix)
+                trueVarStats.extend(sTrueVarStats)
+                falseVarStats.extend(sFalseVarStats)
+        else:  # Run Multi threaded
+            # Parallelize by chromosome
+            if args["jobs"] == 0:  # i.e. use as many threads as possible
+                threads = None  # The multiprocessing module will chose the number of threads
+            else:
+                threads = min(len(contigNames), args["jobs"], os.cpu_count())
 
-                try:
-                    posStats, altBases = pos.collapsePosition()
-                except KeyError:  # i.e. The reference based at this position is degenerate
-                    continue
-                # Is this a true or false variant
-                for posStat, base in zip(posStats, altBases):
+            # Prepare arguments for pool
+            multiprocArgs = list([args["bam"][i], args["reference"], args["targets"][i], x, trueVariants, ignoreVariants, printPrefix] for x in contigNames)
+            processPool = multiprocessing.Pool(processes=threads)
+            try:
+                varStats = processPool.starmap_async(processSample, multiprocArgs).get()
+                processPool.close()
+                processPool.join()
+            except KeyboardInterrupt as e:
+                processPool.terminate()
+                processPool.join()
+                raise e
 
-                    if chrom in unclassifiedVariants and location in unclassifiedVariants[chrom] and base in unclassifiedVariants[chrom][location]:
-                        continue  # We can't train the filter based on this variant
-                    if chrom in trueVariants and location in trueVariants[chrom] and base in trueVariants[chrom][location]:
-                        trueVarStats.append(posStat)
-                    else:
-                        falseVarStats.append(posStat)
+            # Extract true and false variant stats
+            for vStats in varStats:
+                trueVarStats.extend(vStats[0])
+                falseVarStats.extend(vStats[1])
+
         i += 1
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Training Random Forest\n"]))
 
@@ -224,6 +280,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     # Dump the stats used to train the filters to the specified output files
     with open(args["true_stats"] if args["true_stats"] is not None else os.devnull, "w") as t,\
             open(args["false_stats"] if args["false_stats"] is not None else os.devnull, "w") as f:
+
         # Write the file headers
         f.write("\t".join(["quality", "family_size", "distance_to_read_end", "number_of_read_mismatches", "mapping_qual", "alt_count", "strand_bias_p", "family_in_duplex"]))
         for line in trueVarStats:
@@ -237,14 +294,14 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     varStats.extend(falseVarStats)
     realOrNot.extend([1]*len(falseVarStats))
 
-    filter = RandomForestClassifier(n_estimators=30, max_features="auto")
+    filter = RandomForestClassifier(n_estimators=50, max_features="auto")
     filter.fit(varStats, realOrNot)
 
     # Write the trained classifier out to the file
     with open(args["output"], "w+b") as o:
         pickle._dump(filter, o)
 
-    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Filter Trained\n"]))
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Filter trained and saved in \'%s\'\n" % args["output"]]))
 
 if __name__ == "__main__":
     main()
