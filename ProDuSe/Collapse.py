@@ -9,10 +9,13 @@ import collections
 import time
 import bisect
 from packaging import version
-from skbio import alignment
+from skbio.alignment import StripedSmithWaterman
 from pyfaidx import Fasta
 from configobj import ConfigObj
-
+try:
+    import ProDuSeExceptions as pe
+except ImportError:  # Check if ProDuSe is installed
+    from ProDuSe import ProDuSeExceptions as pe
 
 class Family:
     """
@@ -178,7 +181,7 @@ class Family:
             refEnd = readWindowStart + 4500
             refName = read.reference_name
             refWindow = refGenome[refName][refStart:refEnd].seq.upper()
-            refAlignment = alignment.StripedSmithWaterman(query_sequence=refWindow)
+            refAlignment = StripedSmithWaterman(query_sequence=refWindow)
 
         # Create a reference alignment object
         mapping = refAlignment(read.query_sequence)
@@ -1022,7 +1025,8 @@ class FamilyCoordinator:
                     # As a sanity check, ensure that the new position is greater than the previous position
                     # (unless we have switched chromosomes)
                     # If it's not, then the input BAM file is unsorted
-                    assert self._previousPos + self._baseBuffer < currentPos or currentChrom != self._previousChr
+                    if self._previousPos + self._baseBuffer > currentPos and currentChrom == self._previousChr:
+                        raise pe.UnsortedInputException("Input BAM/SAM/CRAM file does not appear to be sorted")
 
                     # Identify all previous positions that are to be processed
                     # If we have switched chromosomes, purge everything, as no more reads are coming which map to the
@@ -1297,10 +1301,11 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
     # As of pysam V0.14.0, the header is now managed using an AlignmentHeader class.
     # Thus, support both approaches
     if version.parse(pysam.__version__) >= version.parse("0.14.0"):
-        raise NotImplementedError("Pysam version 0.14.0 and above are currently not supported.")
+        header = inBAM.header.as_dict()
+    else:
+        header = inBAM.header
 
     # Add this command (collapse) to the BAM header
-    header = inBAM.header
     if "PG" not in header:
         header["PG"] = []
 
