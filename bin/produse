@@ -9,7 +9,7 @@ def usage():
     """
 
     from ProDuSe.__version import __version__
-    sys.stdout.write("\nProDuSe: Variant Caller for semi-degenerate barcoded adapter libraries\n")
+    sys.stdout.write("\nProDuSe: Error supression and variant calling pipeline for semi-degenerate barcoded adapter libraries\n")
     sys.stdout.write("Version: " + __version__ + "\n")
     sys.stdout.write("\n")
     sys.stdout.write("Usage:\tproduse <command> [options]\n")
