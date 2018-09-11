@@ -12,7 +12,7 @@ from configobj import ConfigObj
 from pyfaidx import Fasta
 import multiprocessing
 try:
-    import Call_Rewrite as Call
+    import Call
     import ProDuSeExceptions as pe
 except ImportError:
     from ProDuSe import Call
