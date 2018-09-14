@@ -322,17 +322,23 @@ def createLogFile(filePath, args, **toolVer):
     with open(filePath, "w") as o:
 
         # Add the version number of ProDuSe
-        o.write("ProDuSe Version " + __version.__version__ + os.linesep)
+        o.write("# ProDuSe Version " + __version.__version__ + os.linesep)
+        o.write(os.linesep)
+
+        # Add a status message explaining that this log file can actually be used as a configuration file
+        o.write("# This log file can be used as a ProDuSe configuration file to repeat this analysis" + os.linesep)
+        o.write("[Pipeline]")
+        o.write(os.linesep)
         o.write(os.linesep)
 
         # Add command line parameters
         for argument, parameter in args.items():
-            o.write(str(argument) + ": " + str(parameter) + os.linesep)
+            o.write(str(argument) + "=" + str(parameter) + os.linesep)
         o.write(os.linesep)
 
         # Add tool version numbers
         for tool, version in toolVer.items():
-            o.write(str(tool) + ": " + str(version) + os.linesep)
+            o.write("# " + str(tool) + ": " + str(version.replace("\n", " ")) + os.linesep)
         o.write(os.linesep)
 
 
