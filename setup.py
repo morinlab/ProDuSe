@@ -37,7 +37,7 @@ setup(
         "sklearn",
 	"fisher"
         ],
-    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.1.tar.gz",
+    download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.3.tar.gz",
     license="GNU GPLv3",
     scripts=["bin/produse"],
     data_files = [("ProDuSe", ["LICENSE.txt", "README.md", "etc/default_filter.pkl"])],
