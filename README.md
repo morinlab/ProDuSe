@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/morinlab/ProDuSe.svg?branch=master)](https://travis-ci.org/morinlab/ProDuSe)
+
 # ProDuSe
 A variant caller designed for use with libraries generated using semi-degenerate barcoded adapters.
 
