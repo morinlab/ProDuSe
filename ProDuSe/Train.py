@@ -282,7 +282,11 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
             open(args["false_stats"] if args["false_stats"] is not None else os.devnull, "w") as f:
 
         # Write the file headers
-        f.write("\t".join(["quality", "family_size", "distance_to_read_end", "number_of_read_mismatches", "mapping_qual", "alt_count", "strand_bias_p", "family_in_duplex"]))
+        f.write("\t".join(["Total_Supporting_Molecules", "Strand_Bias", "Mean_Base_Quality", "Base_Quality_Bias",
+                           "Mean_Mapping_Quality", "Mapping_Quality_Bias", "Total_Depth", "Left_Flank_Homopolymer",
+                           "Right_Flank_Homopolymer", "Nearby_Mismatch_Proportion", "Mean_Read_Mismatches",
+                           "Read_Mismatch_Bias", "Mean_Family_Size", "Family_Size_Bias", "Mean_Distance_To_Read_End",
+                           "Duplex_Counts"]))
         for line in trueVarStats:
             t.write("\t".join(list(str(x) for x in line)) + os.linesep)
         for line in falseVarStats:
