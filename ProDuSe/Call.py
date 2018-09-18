@@ -2105,8 +2105,8 @@ def validateArgs(args):
                         help="A pickle file containing the trained filter. Can be generated using \'produse train\'")
     parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
                         help="How many chromosomes to process simultaneously")
-    parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
-                        help="Classification threshold to use when filtering variants [Default: 0.33]")
+    parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.65,
+                        help="Classification threshold to use when filtering variants [Default: 0.65]")
     parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
     parser.add_argument("--min_alt_depth", metavar="INT", type=int, default=4,
                         help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")
@@ -2131,7 +2131,7 @@ parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFi
                     help="A pickle file containing a trained filter. Can be generated using \'produse train\'")
 parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="How many chromosomes to process simultaneously")
 parser.add_argument("--threshold", metavar="FLOAT", type=float,
-                    help="Classification threshold to use when filtering variants [Default: 0.33]")
+                    help="Classification threshold to use when filtering variants [Default: 0.65]")
 parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
 parser.add_argument("--min_alt_depth", metavar="INT", type=int,
                     help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")

@@ -121,9 +121,9 @@ def validateArgs(args):
     parser.add_argument("-t", "--targets", metavar="BED", nargs="+", type=lambda x: isValidFile(x, parser),
                         help="A BED file containing regions in which to restrict variant calling")
     parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1, help="Number of chromosomes to process simultaneously")
-    parser.add_argument("--true_stats", metavar="TSV", type=lambda x: isValidFile(x, parser),
+    parser.add_argument("--true_stats", metavar="TSV", type=str,
                         help="An optional output file containing all true variant status used to train the filter")
-    parser.add_argument("--false_stats", metavar="TSV", type=lambda x: isValidFile(x, parser),
+    parser.add_argument("--false_stats", metavar="TSV", type=str,
                         help="An optional output file containing all false variant status used to train the filter")
     parser.add_argument("-d", "--plot_dir", metavar="DIR",
                         help="An output directory for density plots visualizing the various characteristics")
@@ -193,8 +193,8 @@ parser.add_argument("-o", "--output", metavar="PICKLE", help="Output pickle file
 parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser), help="Reference Genome, in FASTA format")
 parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser, allowNone=True), nargs="+", help="One or more BED files containing regions in which to restrict variant calling. Must be specified in the same order as \'--bam\' (use \'None\' for no BED file)")
 parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="Number of chromosomes to process simultaneously")
-parser.add_argument("--true_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An output file containing all true variant status used to train the filter")
-parser.add_argument("--false_stats", metavar="TSV", type=lambda x: isValidFile(x, parser), help="An optional output file containing all false variant status used to train the filter")
+parser.add_argument("--true_stats", metavar="TSV", type=str, help="An output file containing all true variant status used to train the filter")
+parser.add_argument("--false_stats", metavar="TSV", type=str, help="An optional output file containing all false variant status used to train the filter")
 parser.add_argument("-d", "--plot_dir", metavar="DIR", help="An output directory for density plots visualizing the various characteristics")
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
@@ -217,6 +217,8 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     args = validateArgs(args)
     if args["targets"] is None:
         args["targets"] = [None] * len(args["bam"])
+    elif len(args["targets"]) == 1:  # i.e. all samples have the same capture space
+        args["targets"] = args["targets"] * len(args["bam"])
     if args["ignore_vcfs"] is None:
         args["ignore_vcfs"] = [None] * len(args["bam"])
 
@@ -286,7 +288,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
                            "Mean_Mapping_Quality", "Mapping_Quality_Bias", "Total_Depth", "Left_Flank_Homopolymer",
                            "Right_Flank_Homopolymer", "Nearby_Mismatch_Proportion", "Mean_Read_Mismatches",
                            "Read_Mismatch_Bias", "Mean_Family_Size", "Family_Size_Bias", "Mean_Distance_To_Read_End",
-                           "Duplex_Counts"]))
+                           "Duplex_Counts" + os.linesep]))
         for line in trueVarStats:
             t.write("\t".join(list(str(x) for x in line)) + os.linesep)
         for line in falseVarStats:
