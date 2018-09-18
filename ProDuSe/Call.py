@@ -29,7 +29,7 @@ except ImportError:
     from ProDuSe import ProDuSeExceptions as pe
 
 
-class Haplotype:
+class Haplotype(object):
     """
     TODO: An object that stores an aligned sequence ("Haplotype"), it's differences relative to the reference, and
     the NGS reads which support this haplotype
@@ -50,7 +50,7 @@ class Haplotype:
         self.alignmentStructure=alignment.StripedSmithWaterman(seq, mismatch_score=-3, match_score=1)
 
 
-class Position:
+class Position(object):
     """
     Stores the allele counts and associated characteristics at this position
     """
@@ -421,7 +421,7 @@ class Position:
         return i / len(self.rightWindow)
 
 
-class IndelPos:
+class IndelPos(object):
     """
     Similar to a position object, but stores indel events, rather than SNV/SNPs
 
@@ -696,7 +696,7 @@ class IndelPos:
         self.alleleMismatch = {}
         self.alleleAvFamSize = {}
         self.alleleEndDist = {}
-        self.molecDepth = depth
+        self.molecDepth = sum(len(readNameBaseIndex[x]) for x in readNameBaseIndex)
         # Since this is an indel, we need to generate a consensus for the indel sequence
         # The consensus will be the most frequent size, and the consensus sequence (insertions only)
         refSeq = ""
@@ -825,7 +825,7 @@ class IndelPos:
         return i / len(self.rightWindow)
 
 
-class PileupEngine:
+class PileupEngine(object):
     """
     Generates a custom pileup using family characteristics
     """
@@ -979,11 +979,13 @@ class PileupEngine:
             '##INFO=<ID=SP,Number=R,Type=Integer,Description="Singleton Support with Strong Positive Consensus">',
             '##INFO=<ID=Sp,Number=R,Type=Integer,Description="Singleton Support with Weak Positive Consensus">',
             '##INFO=<ID=SN,Number=R,Type=Integer,Description="Singleton Support with Strong Negative Consensus">',
+            '##INFO=<ID=Sn,Number=R,Type=Integer,Description="Singleton Support with Weak Negative Consensus">',
             '##INFO=<ID=MC,Number=R,Type=Integer,Description="Total Molecule counts for Each Allele">',
             '##INFO=<ID=STP,Number=R,Type=Float,Description="Probability of Strand Bias during sequencing for each Allele">',
             '##INFO=<ID=PC,Number=R,Type=Integer,Description="Positive Strand Molecule Counts">',
             '##INFO=<ID=NC,Number=R,Type=Integer,Description="Negative Strand Molecule Counts">',
             '##INFO=<ID=VAF,Number=R,Type=Float,Description="Variant allele fraction of alternate allele(s) at this locus">'
+            '##FILTER=<ID=RandomForest,Description="Confidence that a given variant is real (0=weak, 1=strong)">'
             ])
 
         # Genotype fields
@@ -1068,7 +1070,7 @@ class PileupEngine:
 
         return posStats
 
-    def filterAndWriteVariants(self, outFile, filter, unfilteredOut=None, filtThreshold=0.5, writeHeader=False):
+    def filterAndWriteVariants(self, outFile, filter, unfilteredOut=None, filtThreshold=0.6, onlyDuplex=False, writeHeader=False):
         """
 
         Filters candidate variants based upon specified characteristics, and writes the output to the output file
@@ -1078,6 +1080,7 @@ class PileupEngine:
         :param filter: A sklearn.ensemble.RandomForestClassifier() which is to be used to filter variants
         :param unfilteredOut: A sting containing a filepath to an output VCF file which will contain ALL variants, even those that do not pass filters
         :param filtThreshold: A float representing the classification threshold in which to filter variants
+        :param onlyDuplex: A boolean indicating if only variants with duplex support should pass filters. Not recommended
         :param writeHeader: A boolean. If true, any existing file outFile will be overwritten, and a VCF header will be added to the file
         :return:
         """
@@ -1189,7 +1192,7 @@ class PileupEngine:
                                 vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults))
                                 u.write(vcfEntry)
 
-                                if filterResults > filtThreshold:
+                                if filterResults > filtThreshold and (not onlyDuplex or indel.duplexCounts["ALT"] > 0):
                                     o.write(vcfEntry)
 
                             posToDelete.append(iPos)
@@ -1202,7 +1205,7 @@ class PileupEngine:
                         # Delete to reduce memory usage
                         for iPos in posToDelete:
                             del self.candidateIndels[chrom][iPos]
-                    except KeyError as e:  # i.e. There are no indels on this chromosome
+                    except KeyError:  # i.e. There are no indels on this chromosome
                         pass
 
                     altAllele = candidateSNV.summarizeVariant()
@@ -1214,13 +1217,13 @@ class PileupEngine:
 
                         filterResults = filter.predict_proba(alleleStats)
 
-                        vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, ",".join(list(str(x[0]) for x in filterResults)))
+                        vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, ";".join(list(str(x[0]) for x in filterResults)))
                         u.write(vcfEntry)
 
                         # Filter alleles
                         failedAlleles = []
                         for result, allele in zip(filterResults, candidateSNV.altAlleles.keys()):
-                            if result[0] < filtThreshold:
+                            if result[0] < filtThreshold and (not onlyDuplex or candidateSNV.duplexCounts[allele] > 0):
                                 failedAlleles.append(allele)
 
                         # Remove failed alleles
@@ -1229,7 +1232,7 @@ class PileupEngine:
 
                         # If any alt alleles passed filters, print them out
                         if candidateSNV.altAlleles:
-                            vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, ",".join(list(str(x[0]) for x in filterResults if x[0] > filtThreshold)))
+                            vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, ";".join(list(str(x[0]) for x in filterResults if x[0] > filtThreshold)))
                             o.write(vcfEntry)
 
                     del positions[position]  # Delete variants after processing them to reduce memory consumption
@@ -1250,7 +1253,7 @@ class PileupEngine:
                         vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults))
                         u.write(vcfEntry)
 
-                        if filterResults > filtThreshold:
+                        if filterResults > filtThreshold and (not onlyDuplex or indel.duplexCounts["ALT"] > 0):
                             o.write(vcfEntry)
 
                     del self.candidateIndels[chrom]
@@ -1435,7 +1438,6 @@ class PileupEngine:
                         indelSeq = ""
                         indelEndDist = 0
                     continue
-
 
         except IndexError:
             pass
@@ -2105,6 +2107,7 @@ def validateArgs(args):
                         help="How many chromosomes to process simultaneously")
     parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
                         help="Classification threshold to use when filtering variants [Default: 0.33]")
+    parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
     parser.add_argument("--min_alt_depth", metavar="INT", type=int, default=4,
                         help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")
     parser.add_argument("--realigned_BAM", metavar="BAM", help="Optional output BAM/SAM file for realigned reads")
@@ -2129,6 +2132,7 @@ parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFi
 parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="How many chromosomes to process simultaneously")
 parser.add_argument("--threshold", metavar="FLOAT", type=float,
                     help="Classification threshold to use when filtering variants [Default: 0.33]")
+parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
 parser.add_argument("--min_alt_depth", metavar="INT", type=int,
                     help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")
 parser.add_argument("--realigned_BAM", metavar="BAM", help="Optional output BAM/SAM file for realigned reads")
@@ -2299,7 +2303,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
         pileup = PileupEngine(args["input"], args["reference"], args["targets"], minAltDepth=args["min_alt_depth"],
                               oBAM=args["realigned_BAM"],
                               printPrefix=printPrefix)
-        # For testing
         first = True
         for contig in contigNames:
             # Find candidate variants
@@ -2311,46 +2314,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
                 first = False
             else:
                 pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"])
-
-    """
-    # Print status messages
-    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Starting...\n"]))
-    readCount = 0
-    varCount = 0
-
-    outBAM = None
-    # Prepare the output BAM file
-    if args["realigned_BAM"] is not None:
-        tmp = pysam.AlignmentFile(args["input"])
-        outBAM = pysam.AlignmentFile(args["realigned_BAM"], mode="wb", template=tmp)
-        tmp.close()
-
-    contigNames = Fasta(args["reference"]).records.keys()
-    first = True
-    for contig in contigNames:
-
-        # Re-generate the pileup every time to minimize memory usage
-        pileup = PileupEngine(args["input"], args["reference"], args["targets"], minAltDepth=args["min_alt_depth"],
-                              oBAM=outBAM,
-                              printPrefix=printPrefix)
-
-        # Update counters
-        pileup.readCount = readCount
-        pileup.varCount = varCount
-
-        # Find candidate variants
-        pileup.generatePileup(chrom=contig)
-
-        # Filter variants
-        if first:
-            pileup.filterAndWriteVariants(args["output"], None, args["unfiltered"], args["threshold"], writeHeader=True)
-            first = False
-        else:
-            pileup.filterAndWriteVariants(args["output"], None, args["unfiltered"], args["threshold"])
-
-        readCount += pileup.readCount
-        varCount += pileup.varCount
-        """
 
 if __name__ == "__main__":
     main()
