@@ -13,7 +13,7 @@ See the full wiki page for more information: http://produse.readthedocs.io/en/la
 
 You will need to install the following tools before installing the ProDuSe package:
 
-* `python>=3.4`
+* `python==3.4, 3.5, or 3.6`
 * `bwa>=0.7.0`
 * `samtools>=1.3.1`
 
