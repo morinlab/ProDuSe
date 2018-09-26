@@ -232,8 +232,8 @@ def checkArgs(rawArgs):
     callArgs = parser.add_argument_group("Arguments used when calling variants")
     callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser), default=defaultFilt,
                           help="A python pickle containing a trained Random Forest variant filter")
-    callArgs.add_argument("--threshold", metavar="FLOAT", type=float, default=0.33,
-                          help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.33]")
+    callArgs.add_argument("--threshold", metavar="FLOAT", type=float, default=0.65,
+                          help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.65]")
 
     miscArgs = parser.add_argument_group("Miscellaneous Args")
     miscArgs.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
@@ -657,7 +657,7 @@ collapseArgs.add_argument("--tag_family_members", action="store_true",
                           help="Store the names of all reads used to generate a consensus in the tag 'Zm'")
 
 callArgs = parser.add_argument_group("Arguments used when calling variants")
-callArgs.add_argument("--threshold", metavar="FLOAT", type=float, help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.33]")
+callArgs.add_argument("--threshold", metavar="FLOAT", type=float, help="Classifier threshold to use when filtering variants. Decrease to be more lenient [Default: 0.65]")
 callArgs.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x:isValidFile(x, parser), help="A python pickle containing a trained Random Forest variant filter")
 
 miscArgs = parser.add_argument_group("Miscellaneous Arguments")
