@@ -1051,10 +1051,12 @@ class FamilyCoordinator:
                                 readPair.toPysam(self.tagOrig)
                                 yield readPair.R1
                                 yield readPair.R2
+                                self.familyCounter += 1
                             for readPair in posToProcess.negFamilies.values():
                                 readPair.toPysam(self.tagOrig)
                                 yield readPair.R1
                                 yield readPair.R2
+                                self.familyCounter += 1
                         i -= 1
 
                     self._previousChr = currentChrom
@@ -1073,7 +1075,7 @@ class FamilyCoordinator:
                 if self.pairCounter % 100000 == 0:
                     sys.stderr.write(
                         "\t".join(
-                            [self.printPrefix, time.strftime('%X'), "Pairs Processed:" + str(self.pairCounter) + "\n"]))
+                            [self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " reads into " + str(self.familyCounter) + " families" + os.linesep]))
 
                 # Delete the mate from the dictionary to free up space
                 del self._waitingForMate[read.query_name]
@@ -1136,10 +1138,12 @@ class FamilyCoordinator:
                         readPair.toPysam(self.tagOrig)
                         yield readPair.R1
                         yield readPair.R2
+                        self.familyCounter += 1
                     for readPair in posToProcess.negFamilies.values():
                         readPair.toPysam(self.tagOrig)
                         yield readPair.R1
                         yield readPair.R2
+                        self.familyCounter += 1
 
             # Print out a status (or error) message, briefly summarizing the overall collapse
             if self.missingBarcode > 0 and self.familyCounter == 0:
@@ -1151,7 +1155,7 @@ class FamilyCoordinator:
                 sys.stderr.write("ERROR: The input BAM file is empty!")
             else:
                 sys.stderr.write(
-                    "\t".join([self.printPrefix, time.strftime('%X'), "Pairs Processed:" + str(self.pairCounter) + "\n"]))
+                    "\t".join([self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " reads into " + str(self.familyCounter) + " families" + os.linesep]))
                 sys.stderr.write("\t".join([self.printPrefix, time.strftime('%X'), "Collapse Complete\n"]))
 
 
