@@ -506,8 +506,19 @@ class IndelPos(object):
         self.nearbyVar = nearbyVar
         self.nWindow = noiseWindow
 
-    def summarizeVariant(self, minAltDepth=4, strongMoleculeThreshold=3):
+    def summarizeVariant(self, minAltDepth=4, strongMoleculeThreshold=3, delBaseQual=38):
+        """
+        Summarize the statistics for this variant
+        Generate a by-allele summary of the number of reads/molecules which support each
+        variant, base quality, mapping quality, strand bias, and so forth
 
+        This function handles overlapping read pairs. If only one read in the pair supports an indel,
+        the other read (i.e. the one that does not support the indel) is used instead.
+
+        :param minAltDepth: The minimum number of molecules which must support an alternate allele before it is filtered out
+        :param strongMoleculeThreshold: How many members of a read family before it is considered a strong family?
+        :param delBaseQual: What quality score should be assigned to deletions, since there are no bases in deletions?
+        """
 
         # Data structures to hold the various summary statistics
         self.baseCounts =  {"DPN": {"ALT": 0, "REF": 0},
@@ -725,7 +736,7 @@ class IndelPos(object):
                                 break
                             except IndexError:
                                 continue
-                        self.alleleBaseQual[base] = 0
+                        self.alleleBaseQual[base] = delBaseQual
                     else:  # Insertion
                         # The inserted seq is stored in "alleles"
                         # Generate a consensus
@@ -1442,7 +1453,7 @@ class PileupEngine(object):
         except IndexError:
             pass
         except StopIteration as e:
-            raise pe.MalformedReadException("\'%s\' appears to be malformed" % read.query_name) from e
+            raise pe.MalformedReadException("Read \'%s\' appears to be malformed" % read.query_name) from e
 
         # Store the number of total mismatches for this read at each variant
         for pos in positions:
@@ -2106,12 +2117,16 @@ def validateArgs(args):
     parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
                         help="How many chromosomes to process simultaneously")
     parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.65,
-                        help="Classification threshold to use when filtering variants [Default: 0.65]")
+                        help="Filtering threshold (lower=more lenient) [Default: 0.65]")
     parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
     parser.add_argument("--min_alt_depth", metavar="INT", type=int, default=4,
-                        help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")
+                        help="Minimum number of reads required to even consider an alternate allele as possibly real [Default: 4]")
     parser.add_argument("--realigned_BAM", metavar="BAM", help="Optional output BAM/SAM file for realigned reads")
     validatedArgs = parser.parse_args(listArgs)
+
+    # Sanity check
+    if 1 < validatedArgs.threshold or 0 > validatedArgs.threshold:
+        raise parser.error("\'--threshold\' must be a float between 0 and 1")
     return vars(validatedArgs)
 
 
@@ -2131,10 +2146,10 @@ parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFi
                     help="A pickle file containing a trained filter. Can be generated using \'produse train\'")
 parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="How many chromosomes to process simultaneously")
 parser.add_argument("--threshold", metavar="FLOAT", type=float,
-                    help="Classification threshold to use when filtering variants [Default: 0.65]")
+                    help="Filtering threshold (lower=more lenient) [Default: 0.65]")
 parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
 parser.add_argument("--min_alt_depth", metavar="INT", type=int,
-                    help="Minimum number of variant reads required to even consider a variant as possibly real [Default: 4]")
+                    help="Minimum number of reads required to even consider an alternate allele as possibly real [Default: 4]")
 parser.add_argument("--realigned_BAM", metavar="BAM", help="Optional output BAM/SAM file for realigned reads")
 
 
