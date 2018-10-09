@@ -22,10 +22,10 @@ def usage():
     sys.stdout.write(" -- Pipeline Components\n")
     sys.stdout.write("    trim\t\tTrims off barcodes from raw reads\n")
     sys.stdout.write("    collapse\t\tIdentifies duplicates, and merges duplicates into a consensus\n")
-    sys.stdout.write("    clip\t\tGenerates a consensus from overlapping positions within a read pair\n")
     sys.stdout.write("    call\t\tIdentifies and filters variants\n")
     sys.stdout.write("\n")
     sys.stdout.write(" -- Miscellaneous\n")
+    sys.stdout.write("    clip\t\tGenerates a consensus from overlapping positions within a read pair\n")
     sys.stdout.write("    update_config\tUpdates an older ProDuSe configuration file\n")
     sys.stdout.write("    adapter_predict\tIdentifies the degerate barcode used in a set of FASTQ files\n")
     sys.stdout.write("    train\t\tTrains the variant calling filter using a set of validated variants\n")
@@ -60,6 +60,11 @@ def main(args):
         Call.main(sysStdin=args[2:])
     elif command == "train":
         Train.main(sysStdin=args[2:])
+    elif command == "version" or command == "--version":
+        from ProDuSe.__version import __version__
+        sys.stdout.write(__version__ + "\n")
+    elif command == "--help" or command == "-h":
+        usage()
     else:
         sys.stdout.write("Unrecognized Command: %s\n" % command)
         usage()
