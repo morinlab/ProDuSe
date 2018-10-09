@@ -717,13 +717,13 @@ class IndelPos(object):
         for base, reads in readNameBaseIndex.items():
 
             if not reads:  # i.e. the dictionary is empty. There are no values to process
-                self.alleleMapQual[base] = (0)
-                self.alleleBaseQual[base] = (0)
+                self.alleleMapQual[base] = [0]
+                self.alleleBaseQual[base] = [0]
                 self.alleleStrandBias[base] = 1
                 self.alleleVafs[base] = 0
-                self.alleleMismatch[base] = (0)
-                self.alleleAvFamSize[base] = (0)
-                self.alleleEndDist[base] = (0)
+                self.alleleMismatch[base] = [0]
+                self.alleleAvFamSize[base] = [0]
+                self.alleleEndDist[base] = [0]
             else:
                 if base == "ALT":
                     # Is this an insertion? Or deletion
@@ -780,7 +780,7 @@ class IndelPos(object):
 
                 counts = len(reads.values())
                 self.strandCounts[base] = counts
-                self.alleleVafs[base] = counts / depth
+                self.alleleVafs[base] = counts / self.molecDepth
 
                 # Aggregate remaining stats
                 self.alleleMismatch[base] = tuple(self.mismatchNum[x] for x in reads.values())
@@ -995,7 +995,7 @@ class PileupEngine(object):
             '##INFO=<ID=STP,Number=R,Type=Float,Description="Probability of Strand Bias during sequencing for each Allele">',
             '##INFO=<ID=PC,Number=R,Type=Integer,Description="Positive Strand Molecule Counts">',
             '##INFO=<ID=NC,Number=R,Type=Integer,Description="Negative Strand Molecule Counts">',
-            '##INFO=<ID=VAF,Number=R,Type=Float,Description="Variant allele fraction of alternate allele(s) at this locus">'
+            '##INFO=<ID=VAF,Number=R,Type=Float,Description="Variant allele fraction of alternate allele(s) at this locus">',
             '##FILTER=<ID=RandomForest,Description="Confidence that a given variant is real (0=weak, 1=strong)">'
             ])
 
@@ -1253,10 +1253,30 @@ class PileupEngine(object):
                         sys.stderr.write(
                             "\t".join([self._printPrefix, time.strftime('%X'),
                                        chrom + ":Positions Filtered:" + str(self.varCount) + "\n"]))
-                # Process any remaining indels
+                # Process any remaining indels on this chromosome
                 try:
                     for iPos, indel in self.candidateIndels[chrom].items():
-                        indel.summarizeVariant()
+                        altAllele = indel.summarizeVariant()
+
+                        if altAllele:
+                            # Filter indel
+                            stats = [self.varToFilteringStats(indel, "ALT")]
+                            filterResults = filter.predict_proba(stats)[0][0]
+
+                            vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults))
+                            u.write(vcfEntry)
+
+                            if filterResults > filtThreshold and (not onlyDuplex or indel.duplexCounts["ALT"] > 0):
+                                o.write(vcfEntry)
+
+                    del self.candidateIndels[chrom]
+                except KeyError:
+                    pass
+            # Finally, process any indels on remaining contigs
+            for chrom in self.candidateIndels:
+                for iPos, indel in self.candidateIndels[chrom].items():
+                    hasAlt = indel.summarizeVariant()
+                    if hasAlt:
                         # Filter indel
                         stats = [self.varToFilteringStats(indel, "ALT")]
                         filterResults = filter.predict_proba(stats)[0][0]
@@ -1267,10 +1287,8 @@ class PileupEngine(object):
                         if filterResults > filtThreshold and (not onlyDuplex or indel.duplexCounts["ALT"] > 0):
                             o.write(vcfEntry)
 
-                    del self.candidateIndels[chrom]
-                except KeyError:
-                    pass
             self.candidateVar = {}
+            self.candidateIndels = {}
 
     def processRead(self, read, rCigar):
         """
