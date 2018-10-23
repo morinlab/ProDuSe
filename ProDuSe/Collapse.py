@@ -12,6 +12,10 @@ from packaging import version
 from skbio.alignment import StripedSmithWaterman
 from pyfaidx import Fasta
 from configobj import ConfigObj
+# Plotting
+import matplotlib
+import seaborn
+
 try:
     import ProDuSeExceptions as pe
 except ImportError:  # Check if ProDuSe is installed
@@ -22,12 +26,13 @@ class Family:
     Stores various statistics relating to a given read pair
     """
 
-    def __init__(self, R1, R2, barcodeLength):
+    def __init__(self, R1, R2, barcodeLength, readSeqBarcode=False):
 
         # The first time this is initiated, this "family" will have a size of 1, since only a single
         # read pair is stored here.
         # The basis for this family is this initial read pair
         self.size = 1
+        self.inDuplex = False
         self.members = [R1.query_name]
 
         # Set counters which will store the number of sequences which contain elements (indels,
@@ -47,12 +52,20 @@ class Family:
         else:
             self.posParent = True
 
-        # Obtain the family name for this read pair (from the barcode)
+        # Obtain the family name for this read pair
         self.invalidBarcode = False
         try:
-            self.familyName = R1.get_tag("OX")
-            if len(self.familyName) != barcodeLength:
-                raise TypeError("The read pair barcode \'%s\' for pair \'%s\' is not compatible with the specified mask" % (self.familyName, R1.query_name))
+            if readSeqBarcode:
+                # We need to use the sequence of each read as the barcode
+                # Lets parse it out
+                # We need to divide the barcode length in half, since we are obtaining half of the barcode from each read
+                r1Barcode = R1.query_sequence[:barcodeLength]
+                r2Barcode = R2.query_sequence[-1 * barcodeLength:]
+                self.familyName = r1Barcode + r2Barcode
+            else:
+                self.familyName = R1.get_tag("OX")
+                if len(self.familyName) != barcodeLength:
+                    raise TypeError("The read pair barcode \'%s\' for pair \'%s\' is not compatible with the specified mask" % (self.familyName, R1.query_name))
         except KeyError:
             self.familyName = None
             self.invalidBarcode = True
@@ -125,9 +138,6 @@ class Family:
             self.malformed = True
             self.R1cigar = [None]
             self.R2cigar = [None]
-
-        # These are statistics which will be used after all reads are collapsed into a consensus
-        self.collapseSize = []
 
         # These are used to create output reads
         self.R1 = R1
@@ -230,14 +240,12 @@ class Family:
             raise TypeError("Invalid Cigar Sequence %s" % (cigarTuples))
         return cigarList
 
-    def add(self, family, mismatchThreshold=8):
+    def add(self, family):
         """
         Combines another family into this family
         """
 
         if family.R1pos != self.R1pos or family.R2pos != self.R2pos:
-            thisOrigEnd = None
-            familyOrigEnd = None
             if self.R1.is_reverse:
                 thisOrigEnd = self.R1.reference_end
             else:
@@ -259,6 +267,28 @@ class Family:
         self.R2sequence.extend(family.R2sequence)
         self.R2qual.extend(family.R2qual)
         self.R2cigar.extend(family.R2cigar)
+
+        self.size += family.size
+        self.members.extend(family.members)
+
+    def addDuplex(self, family):
+        """
+        Adds the duplex read pair to this family
+
+        A read pair is in duplex with this family. Let's combine them
+
+        :param family: A Family() representing the duplex family
+        :return:
+        """
+
+        # Since read1 for the duplex is on the opposite strand as this family, we need to add R1 to R2, and R2 to R1
+        self.R1sequence.extend(family.R2sequence)
+        self.R1qual.extend(family.R2qual)
+        self.R1cigar.extend(family.R2cigar)
+
+        self.R2sequence.extend(family.R1sequence)
+        self.R2qual.extend(family.R1qual)
+        self.R2cigar.extend(family.R1cigar)
 
         self.size += family.size
         self.members.extend(family.members)
@@ -774,7 +804,7 @@ class Position:
             tmpNegFamilies[familyName] = consensusPair
         self.negFamilies = tmpNegFamilies
 
-    def markDuplexes(self, duplexIndices, duplexDistance=2):
+    def markDuplexes(self, duplexIndices, duplexDistance=2, collapseDuplex=False):
         """
         Identify families which exist in a duplex
 
@@ -829,11 +859,18 @@ class Position:
             # If the (-) strand family and closest (+) strand family are within the specified mismatch threshold, they are considered to be
             # in duplex
             if minDist <= duplexDistance:
-                # In this case, ensure that the names of the families are given a complimentary names
-                # so they can be identified as in duplex
                 duplexPair = self.plusFamilies.pop(minAdapter)
-                duplexPair.name = adapter + ":+:" + str(duplexPair.size) + ":" + str(counter)
-                processedPlusFamilies[minAdapter] = duplexPair
+                readPair.inDuplex = True
+                # Are we flagging duplexes, or collapsing them?
+                if collapseDuplex:
+                    readPair.addDuplex(duplexPair)
+                    readPair.consensus()
+                else:
+                    # In this case, ensure that the names of the families are given a complimentary names
+                    # so they can be identified as in duplex
+                    duplexPair.name = adapter + ":+:" + str(duplexPair.size) + ":" + str(counter)
+                    processedPlusFamilies[minAdapter] = duplexPair
+                    duplexPair.inDuplex = True
 
             counter += 1
 
@@ -855,10 +892,12 @@ class FamilyCoordinator:
     """
 
     def __init__(self, inputFile, reference, familyIndices, familyThreshold, duplexIndices, duplexThreshold,
-                 barcodeLength, targets=None, tagOrig = False, baseBuffer=400, padding=10, printPrefix="PRODUSE-COLLAPSE"):
+                 barcodeLength, targets=None, tagOrig = False, baseBuffer=400, padding=10, noBarcodes=False,
+                 mergeDuplex = False, printPrefix="PRODUSE-COLLAPSE"):
         self.inFile = inputFile
         self.tagOrig = tagOrig
 
+        # Read classification counters
         self.readCounter = 0
         self.pairCounter = 0
         self.familyCounter = 0
@@ -867,10 +906,16 @@ class FamilyCoordinator:
         self.missingBarcode = 0
         self.outsideCaptureSpace = 0
 
+        # Do we need to leading sequence of the read pair as a "barcode"?
+        self.barcodeFromRead = noBarcodes
+
+        # Are we collapsing the forward and reverse strand into a single read?
+        self.mergeDuplex = mergeDuplex
+
         # Post-collapse stats
-        self.familyDistribution = {}
-        self.duplexDistribution = {}
-        self.depthDistribution = {}
+        self.familyDistribution = []
+        self.duplexDistribution = []
+        self.depthDistribution = []
         global refGenome
         refGenome = self._loadContigs(reference)
         global refWindow
@@ -888,7 +933,13 @@ class FamilyCoordinator:
         self.familyThreshold = familyThreshold
         self.duplexIndices = duplexIndices
         self.duplexThreshold = duplexThreshold
-        self.barcodeLength = barcodeLength
+
+        if noBarcodes:
+            # If there are no barcodes in this sample, we are obtaining a "barcode" from the start of each read
+            # Since half of the barcode comes from each read, divide the barcode length in half
+            self.barcodeLength = int(barcodeLength / 2)
+        else:
+            self.barcodeLength = barcodeLength
 
         self._waitingForMate = {}
         self._pairsAtPositions = sortedcontainers.SortedDict()
@@ -998,7 +1049,7 @@ class FamilyCoordinator:
     def __iter__(self):
 
         sys.stderr.write("\t".join([self.printPrefix, time.strftime('%X'), "Starting...\n"]))
-
+        global counter
         try:
             while True:
                 read = next(self.inFile)
@@ -1044,19 +1095,28 @@ class FamilyCoordinator:
                         # Identify any reads which could originate from the same family, and collapse them into a consensus
                         for posToProcess in posList.values():
                             posToProcess.collapse(self.familyIndices, self.familyThreshold)
-                            posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
+                            posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold, self.mergeDuplex)
 
                             # Return all families stored at this position
                             for readPair in posToProcess.plusFamilies.values():
                                 readPair.toPysam(self.tagOrig)
+                                # Store the stats for these reads
+                                self.familyDistribution.append(readPair.size)
+                                self.familyCounter += 1
+                                # As a duplex has a (+)-strand and (-)-strand family, we only need to consider this once
+                                if readPair.inDuplex:
+                                    self.duplexDistribution.append(readPair.size)
+
                                 yield readPair.R1
                                 yield readPair.R2
-                                self.familyCounter += 1
                             for readPair in posToProcess.negFamilies.values():
                                 readPair.toPysam(self.tagOrig)
+                                # Store the stats for these reads
+                                self.familyDistribution.append(readPair.size)
+                                self.familyCounter += 1
+
                                 yield readPair.R1
                                 yield readPair.R2
-                                self.familyCounter += 1
                         i -= 1
 
                     self._previousChr = currentChrom
@@ -1069,13 +1129,7 @@ class FamilyCoordinator:
                     continue
 
                 # First, create an object representing this read pair
-                pair = Family(read, self._waitingForMate[read.query_name], self.barcodeLength)
-                self.pairCounter += 1
-
-                if self.pairCounter % 100000 == 0:
-                    sys.stderr.write(
-                        "\t".join(
-                            [self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " reads into " + str(self.familyCounter) + " families" + os.linesep]))
+                pair = Family(read, self._waitingForMate[read.query_name], self.barcodeLength, self.barcodeFromRead)
 
                 # Delete the mate from the dictionary to free up space
                 del self._waitingForMate[read.query_name]
@@ -1112,6 +1166,13 @@ class FamilyCoordinator:
                 # if pair.softClipped:
                 # 	continue
 
+                self.pairCounter += 1
+
+                if self.pairCounter % 100000 == 0:
+                    sys.stderr.write(
+                        "\t".join(
+                            [self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " pairs into " + str(counter) + " families" + os.linesep]))
+
                 # Store this read pair until we obtain all read pairs that overlap this position
                 # If this is the first time we are seeing a read pair at this position,
                 # we need to create the data structure which will hold all the read pairs
@@ -1131,32 +1192,66 @@ class FamilyCoordinator:
                 # Identify any reads which could originate from the same family, and collapse them into a consensus
                 for posToProcess in posList.values():
                     posToProcess.collapse(self.familyIndices, self.familyThreshold)
-                    posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold)
+                    posToProcess.markDuplexes(self.duplexIndices, self.duplexThreshold, self.mergeDuplex)
 
                     # Return all remaining families
                     for readPair in posToProcess.plusFamilies.values():
                         readPair.toPysam(self.tagOrig)
+                        # Store the stats for these reads
+                        self.familyDistribution.append(readPair.size)
+                        self.familyCounter += 1
+                        # As a duplex has a (+)-strand and (-)-strand family, we only need to consider this once
+                        if readPair.inDuplex:
+                            self.duplexDistribution.append(readPair.size)
+
                         yield readPair.R1
                         yield readPair.R2
-                        self.familyCounter += 1
+
                     for readPair in posToProcess.negFamilies.values():
                         readPair.toPysam(self.tagOrig)
+                        # Store the stats for these reads
+                        self.familyDistribution.append(readPair.size)
+                        self.familyCounter += 1
+
                         yield readPair.R1
                         yield readPair.R2
-                        self.familyCounter += 1
 
             # Print out a status (or error) message, briefly summarizing the overall collapse
             if self.missingBarcode > 0 and self.familyCounter == 0:
-                sys.stderr.write("ERROR: Unable to find a \'OX\' tag, which contains the degenerate barcode, for any read in the input BAM file\n")
+                sys.stderr.write("ERROR: Unable to find a \'OX\' tag, which contains the degenerate barcode, for any read in the input BAM file" + os.linesep)
                 sys.stderr.write(
-                    "Check that BWA was run using the \'-C\' option\n")
+                    "Check that BWA was run using the \'-C\' option" + os.linesep)
+                exit(1)
 
             elif self.readCounter == 0:
-                sys.stderr.write("ERROR: The input BAM file is empty!")
+                sys.stderr.write("ERROR: The input BAM file is empty!" + os.linesep)
+                exit(1)
             else:
-                sys.stderr.write(
-                    "\t".join([self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " reads into " + str(self.familyCounter) + " families" + os.linesep]))
+                if self.pairCounter % 100000 != 0:
+                    sys.stderr.write(
+                    "\t".join([self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " pairs into " + str(counter) + " families" + os.linesep]))
                 sys.stderr.write("\t".join([self.printPrefix, time.strftime('%X'), "Collapse Complete\n"]))
+
+    def generatePlots(self, outDir):
+        """
+        Generate several histograms visualizing the family size distribution of duplex and non-duplex read pairs
+        :param outDir: A path to the output folder where the plots will be generated
+        :return:
+        """
+
+        bins = list(range(0, 25)) # We shouldn't have family sizes > 25, unless the library is very saturated
+
+        # Generate a histogram for the overall family size distribution
+        overallAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution")
+        overallHist = overallAx.get_figure()
+        outFile = outDir + os.path.sep + "Family_Size_Distribution.png"
+        overallHist.savefig(outFile)
+
+        # Generate a histogram for families in duplex
+        duplexAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution (duplexes)")
+        duplexHist = overallAx.get_figure()
+        outFile = outDir + os.path.sep + "Duplex_Family_Size_Distribution.png"
+        duplexHist.savefig(outFile)
 
 
 def validateArgs(args):
@@ -1189,25 +1284,57 @@ def validateArgs(args):
     parser.add_argument("-c", "--config", type=lambda x: isValidFile(x, parser),
                         help="An optional configuration file, which can provide one or more arguments")
     parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser, True), required=True,
-                        help="Input sorted BAM file (use \"-\" to read from stdin [use control + d to stop reading])")
+                        help="Input sorted SAM/BAM/CRAM file (use \"-\" to read from stdin [use control + d to stop reading])")
     parser.add_argument("-o", "--output", required=True,
-                        help="Output BAM file (use \"-\" to write to stdout). Will be unsorted")
-    parser.add_argument("-fm", "--family_mask", required=True, type=str,
+                        help="Output SAM/BAM/CRAM file (use \"-\" to write to stdout). Will be unsorted")
+    parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
+                        help="A BED file listing targets of interest")
+    parser.add_argument("--no_barcodes", action="store_true", help="This sample is not using barcoded adapters")
+    parser.add_argument("--collapse_duplexes", action="store_true", help="Generate a consensus from the forward and reverse strands")
+    parser.add_argument("-fm", "--family_mask", type=str,
                         help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
-    parser.add_argument("-dm", "--duplex_mask", required=True, type=str,
+    parser.add_argument("-dm", "--duplex_mask", type=str,
                         help="Positions in the barcode to consider when determining if two families are in duplex (1=Consider, 0=Ignore)")
-    parser.add_argument("-fmm", "--family_mismatch", required=True, type=int,
+    parser.add_argument("-fmm", "--family_mismatch", type=int,
                         help="Maximum number of mismatches permitted when collapsing reads into a family")
-    parser.add_argument("-dmm", "--duplex_mismatch", required=True, type=int,
+    parser.add_argument("-dmm", "--duplex_mismatch", type=int,
                         help="Maximum number of mismatches permitted when identifying of two families are in duplex")
     parser.add_argument("--tag_family_members", action="store_true",
                         help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
+    parser.add_argument("--plot_dir", metavar="DIR", help="Output directory for summary plots")
     parser.add_argument("-r", "--reference", required=True, type=lambda x: isValidFile(x, parser),
                         help="Reference genome, in FASTA format")
-    parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
-                        help="A BED file listing targets of interest")
+    parser.add_argument("--input_format", metavar="SAM/BAM/CRAM", choices=["SAM", "BAM", "CRAM"],
+                          help="Input file format [Default: Detect using file extension]")
     validatedArgs = parser.parse_args(listArgs)
-    return vars(validatedArgs)
+    validateArgs = vars(validatedArgs)
+
+    # Ensure either the user specified all the barcode parameters, or that no barcodes are used
+    if not args["no_barcodes"]:
+        missingArgs = []
+        if not args["family_mask"]:
+            missingArgs.append("-fm/--family_mask")
+        if not args["family_mismatch"]:
+            missingArgs.append("-fmm/--family_mismatch")
+        if not args["duplex_mask"]:
+            missingArgs.append("-dm/--duplex_mask")
+        if not args["duplex_mismatch"]:
+            missingArgs.append("-dmm/--duplex_mismatch")
+        # If arguments are missing, error out
+        if len(missingArgs) > 0:
+            raise parser.error("the following arguments are required: (%s) OR --no_barcodes" % (", ".join(missingArgs)))
+    else:
+        # If we are not using barcoded adapters, we can set some default parameters for "barcode" collapsing
+        # These defaults are based on results I obtained testing ~40 samples with different barcode lengths and parameters
+        if not args["family_mask"]:
+            args["family_mask"] = "111111111111111"
+        if not args["family_mismatch"]:
+            args["family_mismatch"] = 3
+        if not args["duplex_mask"]:
+            args["duplex_mask"] = "111111111111111"
+        if not args["duplex_mismatch"]:
+            args["duplex_mismatch"] = 3
+    return validateArgs
 
 
 def isValidFile(file, parser, allowStream=False):
@@ -1229,7 +1356,7 @@ def isValidFile(file, parser, allowStream=False):
     elif os.path.exists(file):
         return file
     else:
-        raise parser.error("Unable to locate %s. Please ensure the file exists, and try again." % (file))
+        raise parser.error("Unable to locate \'%s\': No such file or directory." % (file))
 
 
 # Process command line arguments
@@ -1237,21 +1364,28 @@ parser = argparse.ArgumentParser(description="Collapsed duplicate sequences into
 parser.add_argument("-c", "--config", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can provide one or more arguments")
 parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser, True),
-                    help="Input sorted BAM file (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
-parser.add_argument("-o", "--output", help="Output BAM file (use \"-\" to write to stdout). Will be unsorted")
-parser.add_argument("-fm", "--family_mask", type=str,
-                    help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
-parser.add_argument("-dm", "--duplex_mask", type=str,
-                    help="Positions in the barcode to consider when determining if two families are in duplex (1=Consider, 0=Ignore)")
-parser.add_argument("-fmm", "--family_mismatch", type=int,
-                    help="Maximum number of mismatches permitted when collapsing reads into a family")
-parser.add_argument("-dmm", "--duplex_mismatch", type=int,
-                    help="Maximum number of mismatches permitted when identifying of two families are in duplex")
-parser.add_argument("--tag_family_members", action="store_true", help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
+                    help="Input sorted SAM/BAM/CRAM file (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
+parser.add_argument("-o", "--output", help="Output SAM/BAM/CRAM file (use \"-\" to write to stdout). Will be unsorted")
 parser.add_argument("-r", "--reference", type=lambda x: isValidFile(x, parser),
                     help="Reference genome, in FASTA format")
 parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
-                    help="A BED file listing targets of interest")
+                    help="A BED file listing target regions of interest")
+parser.add_argument("--no_barcodes", action="store_true", help="This sample is not using barcoded adapters")
+barcodeArgs = parser.add_argument_group(description="Arguments when using barcoded adapters")
+barcodeArgs.add_argument("-fm", "--family_mask", type=str,
+                    help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
+barcodeArgs.add_argument("-dm", "--duplex_mask", type=str,
+                    help="Positions in the barcode to consider when determining if two families are in duplex (1=Consider, 0=Ignore)")
+barcodeArgs.add_argument("-fmm", "--family_mismatch", type=int,
+                    help="Maximum number of mismatches permitted when collapsing reads into a family")
+barcodeArgs.add_argument("-dmm", "--duplex_mismatch", type=int,
+                    help="Maximum number of mismatches permitted when identifying of two families are in duplex")
+miscArgs = parser.add_argument_group(description="Miscellaneous Arguments")
+miscArgs.add_argument("--tag_family_members", action="store_true", help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
+miscArgs.add_argument("--plot_dir", metavar="DIR", help="Output directory for summary plots")
+miscArgs.add_argument("--collapse_duplexes", action="store_true",
+                    help="Generate a consensus from the forward and reverse strands")
+miscArgs.add_argument("--input_format", metavar="SAM/BAM/CRAM", choices=["SAM", "BAM", "CRAM"], help="Input file format [Default: Detect using file extension]")
 
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
@@ -1268,7 +1402,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
         config = ConfigObj(args["config"])
         try:
             for argument, parameter in config["collapse"].items():
-                if argument in args and args[argument] is None:  # Aka this argument is used by collapse, and a parameter was not provided at the command line
+                if argument in args and (args[argument] is None or args[argument] is False):  # Aka this argument is used by collapse, and a parameter was not provided at the command line
                     args[argument] = parameter
         except KeyError:  # i.e. there is no section named "collapse" in the config file
             sys.stderr.write(
@@ -1300,7 +1434,32 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
     duplexMask = args["duplex_mask"] * 2
     familyIndices = list(i for i in range(0, len(familyMask)) if familyMask[i] == "1")
     duplexIndices = list(i for i in range(0, len(duplexMask)) if duplexMask[i] == "1")
-    inBAM = pysam.AlignmentFile(args["input"], "rb")
+
+    # Open the input file
+    # Here we handle different file types
+    if args["input_format"]:
+        # Open the input file in the format that the user specified
+        if args["input_format"] == "SAM":
+            inBAM = pysam.AlignmentFile(args["input"], "r")
+            inFormat = "SAM"
+        elif args["input_format"] == "CRAM":
+            inBAM = pysam.AlignmentFile(args["input"], "rc", reference_filename=args["reference"])  # Specify the reference for CRAM files
+            inFormat = "CRAM"
+        else:
+            inBAM = pysam.AlignmentFile(args["input"], "rb")
+            inFormat = "BAM"
+    else:
+        # Use the file extension to determine the file type
+        fileExt = args["input"].split(".")[-1]
+        if fileExt == "SAM":
+            inBAM = pysam.AlignmentFile(args["input"], "r")
+            inFormat = "SAM"
+        elif fileExt == "CRAM":
+            inBAM = pysam.AlignmentFile(args["input"], "rc", reference_filename=args["reference"])  # Specify the reference for CRAM files
+            inFormat = "CRAM"
+        else:
+            inBAM = pysam.AlignmentFile(args["input"], "rb")
+            inFormat = "BAM"
 
     # As of pysam V0.14.0, the header is now managed using an AlignmentHeader class.
     # Thus, support both approaches
@@ -1327,10 +1486,15 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
 
     readProcessor = FamilyCoordinator(inBAM, args["reference"], familyIndices, args["family_mismatch"],
                                       duplexIndices, args["duplex_mismatch"], len(args["duplex_mask"]) * 2,
-                                      args["targets"], args["tag_family_members"], printPrefix=printPrefix)
+                                      args["targets"], args["tag_family_members"], noBarcodes=args["no_barcodes"],
+                                      mergeDuplex=args["collapse_duplexes"], printPrefix=printPrefix)
 
     for read in readProcessor:
         outBAM.write(read)
+
+    # If the user specified an output directory for plots, generate them
+    if args["plot_dir"] is not None:
+        readProcessor.generatePlots(args["plot_dir"])
 
 
 if __name__ == "__main__":
