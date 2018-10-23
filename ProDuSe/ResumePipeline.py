@@ -53,7 +53,7 @@ def main(args=None, sysStdin=None):
 
     # To actually check that this is a "produse_analysis_directory", check for the required config files for each sample
     validSamples = {}
-    requiredConfigs = ["trim_task.ini", "bwa_task.ini", "collapse_task.ini", "call_task.ini"]
+    requiredConfigs = ["bwa_task.ini", "collapse_task.ini", "call_task.ini"]
     for sample in samples:
         validSample = True
         for config in requiredConfigs:
