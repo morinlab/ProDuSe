@@ -14,6 +14,7 @@ from pyfaidx import Fasta
 from configobj import ConfigObj
 # Plotting
 import matplotlib
+matplotlib.use('Agg')
 import seaborn
 
 try:
