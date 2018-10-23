@@ -26,16 +26,17 @@ setup(
        "Programming Language :: Python :: 3"
        ],
     setup_requires=["numpy"],
-    install_requires=[
-        "sortedcontainers",
+    install_requires=[  # This ordering is very important!!!!!!
+        "fisher",
+        "seaborn",
         "scipy",
+        "sortedcontainers",
         "configobj",
-        "scikit-bio",
         "pyfaidx",
         "pysam",
         "packaging",
         "sklearn",
-	"fisher"
+        "scikit-bio"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.3.tar.gz",
     license="GNU GPLv3",

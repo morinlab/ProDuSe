@@ -1,5 +1,5 @@
 sortedcontainers
-numpy
+numpy>=1.9.2
 configobj
 scikit-bio
 pyfaidx
@@ -7,3 +7,5 @@ pysam==0.13.0
 packaging
 sklearn
 scipy
+seaborn
+fisher
