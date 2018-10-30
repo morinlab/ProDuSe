@@ -86,3 +86,5 @@ produse adapter_predict -i input1.fastq input2.fastq
 
 This tool will print a predicted adapter sequence based off of ACGT abundances at each position. It uses these observed abundances and finds the closest expected abundance for an IUPAC unambiguous or ambiguous base.
 
+### External links
+[The Morin Laboratory at SFU](https://morinlab.github.io/team/)
