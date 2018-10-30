@@ -1010,14 +1010,15 @@ class PileupEngine(object):
             '##INFO=<ID=FILT,Number=R,Type=Float,Description="Variant call confidence for alternate allele(s)">',
             '##FILTER=<ID=PASS,Description="Variant call confidence is above random forest filter confidence threshold %s">' % (filtThreshold),
             '##FILTER=<ID=LOW_CONF,Description="Variant call confidence is below the random forest filter confidence threshold %s">' % (filtThreshold),
-            '##FILTER=<ID=NO_DUPLEX,Description="Variant does not have duplex support. Only used when the duplex filter is enabled">'
+            '##FILTER=<ID=NO_DUPLEX,Description="Variant does not have duplex support. Only used when the duplex filter is enabled">',
+            '##FILTER=<ID=REPEAT,Description="Variant indel is an expansion or contraction of an adjacent repeat">'
             ])
 
         # Genotype fields
-        header.append('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total molecule count">')
-        header.append('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Total number of molecules supporting each allele">')
-        header.append('##FORMAT=<ID=ADF,Number=R,Type=Integer,Description="Number of reads mapped to the forward strand for each allele">')
-        header.append('##FORMAT=<ID=ADR,Number=R,Type=Integer,Description="Number of reads mapped to the reverse strand for each allele">')
+        header.append('##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Total MOLECULE count">')
+        header.append('##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Total number of MOLECULES supporting each allele">')
+        header.append('##FORMAT=<ID=ADF,Number=R,Type=Integer,Description="Number of READS mapped to the forward strand for each allele">')
+        header.append('##FORMAT=<ID=ADR,Number=R,Type=Integer,Description="Number of READS mapped to the reverse strand for each allele">')
 
         header.append("\t".join(["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "TUMOR" + os.linesep]))
         file.write(os.linesep.join(header))
@@ -1106,7 +1107,7 @@ class PileupEngine(object):
 
         return posStats
 
-    def filterAndWriteVariants(self, outFile, filter, unfilteredOut=None, filtThreshold=0.6, onlyDuplex=False, writeHeader=False):
+    def filterAndWriteVariants(self, outFile, filter, unfilteredOut=None, filtThreshold=0.6, onlyDuplex=False, indelRepeatThresh=4, writeHeader=False):
         """
 
         Filters candidate variants based upon specified characteristics, and writes the output to the output file
@@ -1117,6 +1118,7 @@ class PileupEngine(object):
         :param unfilteredOut: A sting containing a filepath to an output VCF file which will contain ALL variants, even those that do not pass filters
         :param filtThreshold: A float representing the classification threshold in which to filter variants
         :param onlyDuplex: A boolean indicating if only variants with duplex support should pass filters. Not recommended
+        :param indelRepeatThresh: An int indicating the number of times a repeat has to occur before an indel which is an expansion/contraction of this repeat is filtered out
         :param writeHeader: A boolean. If true, any existing file outFile will be overwritten, and a VCF header will be added to the file
         :return:
         """
@@ -1240,12 +1242,23 @@ class PileupEngine(object):
                                 if (onlyDuplex and indel.duplexCounts["ALT"] == 0):  # Are we filtering based on duplex support?
                                     duplexSupportFilt = False
                                     if filterField == "LOW_CONF":
-                                        filterField = filterField + ",NO_DUPLEX"
+                                        filterField = filterField + ";NO_DUPLEX"
                                     else:
                                         filterField = "NO_DUPLEX"
 
+                                # Check to see if this indel is an expansion or contraction of a repeat
+                                if len(indel.ref) > 1:  # i.e. a deletion
+                                    isRepeat = self.checkForRepeat(chrom, iPos, indel.ref[1:], indelRepeatThresh, True)
+                                else:
+                                    isRepeat = self.checkForRepeat(chrom, iPos, indel.alt[1:], indelRepeatThresh, False)
+                                if isRepeat:  # This variant is likely a sequencing artifact
+                                    passesConfFilter = False
+                                    if filterField == "PASS":
+                                        filterField = "REPEAT"
+                                    else:
+                                        filterField = filterField + ";REPEAT"
                                 # Write out the unfiltered variant
-                                vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults), filterField)
+                                vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField)
                                 u.write(vcfEntry)
 
                                 if passesConfFilter and duplexSupportFilt:  # This variant passes filters
@@ -1293,7 +1306,7 @@ class PileupEngine(object):
                             if onlyDuplex and candidateSNV.duplexCounts[allele] == 0:
                                 duplexSupportFilt = False
                                 if filterField == "LOW_CONF":
-                                    filterField = filterField + ",NO_DUPLEX"
+                                    filterField = filterField + ";NO_DUPLEX"
                                 else:
                                     filterField = "NO_DUPLEX"
 
@@ -1305,7 +1318,7 @@ class PileupEngine(object):
                             allFiltResults.append(filterField)
                             allFiltConf.append(result)
 
-                        vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, allFiltConf, ",".join(allFiltResults))
+                        vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, allFiltConf, ";".join(allFiltResults))
                         u.write(vcfEntry)
 
                         # Remove failed alleles
@@ -1314,7 +1327,7 @@ class PileupEngine(object):
 
                         # If any alt alleles passed filters, print them out
                         if candidateSNV.altAlleles:
-                            vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, passFiltConf, ",".join(passFiltResults))
+                            vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, passFiltConf, ";".join(passFiltResults))
                             o.write(vcfEntry)
 
                     del positions[position]  # Delete variants after processing them to reduce memory consumption
@@ -1349,12 +1362,23 @@ class PileupEngine(object):
                                 "ALT"] == 0):  # Are we filtering based on duplex support?
                                 duplexSupportFilt = False
                                 if filterField == "LOW_CONF":
-                                    filterField = filterField + ",NO_DUPLEX"
+                                    filterField = filterField + ";NO_DUPLEX"
                                 else:
                                     filterField = "NO_DUPLEX"
 
+                            # Check to see if this indel is an expansion or contraction of a repeat
+                            if len(indel.ref) > 1:  # i.e. a deletion
+                                isRepeat = self.checkForRepeat(chrom, iPos, indel.ref[1:], indelRepeatThresh, True)
+                            else:
+                                isRepeat = self.checkForRepeat(chrom, iPos, indel.alt[1:], indelRepeatThresh, False)
+                            if isRepeat:  # This variant is likely a sequencing artifact
+                                passesConfFilter = False
+                                if filterField == "PASS":
+                                    filterField = "REPEAT"
+                                else:
+                                    filterField = filterField + ";REPEAT"
                             # Write out the unfiltered variant
-                            vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults), filterField)
+                            vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField)
                             u.write(vcfEntry)
 
                             if passesConfFilter and duplexSupportFilt:  # This variant passes filters
@@ -1391,8 +1415,19 @@ class PileupEngine(object):
                             else:
                                 filterField = "NO_DUPLEX"
 
+                        # Check to see if this indel is an expansion or contraction of a repeat
+                        if len(indel.ref) > 1:  # i.e. a deletion
+                            isRepeat = self.checkForRepeat(chrom, iPos, indel.ref[1:], indelRepeatThresh, True)
+                        else:
+                            isRepeat = self.checkForRepeat(chrom, iPos, indel.alt[1:], indelRepeatThresh, False)
+                        if isRepeat:  # This variant is likely a sequencing artifact
+                            passesConfFilter = False
+                            if filterField == "PASS":
+                                filterField = "REPEAT"
+                            else:
+                                filterField = filterField + ",REPEAT"
                         # Write out the unfiltered variant
-                        vcfEntry = _generateVCFEntry(indel, chrom, iPos, str(filterResults), filterField)
+                        vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField)
                         u.write(vcfEntry)
 
                         if passesConfFilter and duplexSupportFilt:  # This variant passes filters
@@ -1400,6 +1435,38 @@ class PileupEngine(object):
 
             self.candidateVar = {}
             self.candidateIndels = {}
+
+    def checkForRepeat(self, chrom, position, seq, threshold, offsetSearch):
+        """
+        Check to see if a given sequence occurs at a given position in the reference more than x number of times
+        :param chrom: A string listing the name of the contig to be examined
+        :param position: An int listing the position in the contig to be examined
+        :param seq: The sequence of the variant to be checked
+        :param threshold: An int listing the number of times the variant should occur
+        :param offsetSearch: A boolean. When searching, offset the starting position by the length of seq
+        :return: A boolean indicating if a repeat occurs
+        """
+
+        seqLength = len(seq)
+        if offsetSearch:
+            position = position + seqLength
+
+        endPos = position + seqLength * threshold
+        # Obtain the reference sequence to be examined for repeats
+        try:
+            refSeq = self._refGenome[chrom][position:endPos].seq
+        except IndexError:  # i.e. this indel occurs near the end of the genome. This filter does not apply
+            return False
+
+        # Now, check each slice for the repeats
+        for j in range(threshold):
+            cPos = j * seqLength
+            cEnd = cPos + seqLength
+            if refSeq[cPos:cEnd] != seq: # This sequence does not match. This sequence does not occur the specified number of times
+                return False
+
+        # The specified seq occurs more than threshold number of times
+        return True
 
     def processRead(self, read, rCigar):
         """
@@ -1457,18 +1524,24 @@ class PileupEngine(object):
 
         try:
             while True:
-                # for base, cigar, qual, mapStrand in zip(read.query_alignment_sequence, rCigar, read.query_alignment_qualities, rMapStrand):
+
                 cigar = rCigar[cigarIndex]
                 cigarIndex += 1
 
                 if cigar == 0:  # Matched base
                     # This is the most common case by far
                     base, qual = next(readIterator)
-                    distFromEnd = min(abs(position - read.reference_start), abs(read.reference_end - position))
+                    # Calculate the distance from the end of the read for this variant
+                    dist2Start = position - read.reference_start
+                    dist2End = read.reference_end - position
+                    if dist2Start < dist2End:
+                        distFromEnd = dist2Start
+                    else:
+                        distFromEnd = dist2End
 
-                    if lastCigar != 1:
+                    if lastCigar != 1 and lastCigar != 2:
                         # If this position overlaps a candidate indel, we also need to add this position to those indels
-                        # But don't do this if the last position was an insertion, as we do not want to double-count this read
+                        # But don't do this if the last position was an indel, as we do not want to double-count this read
                         try:
                             if position in self.rawIndels[self._chrom]:
                                 for indel in self.rawIndels[self._chrom][position ].values():
@@ -1834,6 +1907,7 @@ class PileupEngine(object):
 
                     length, indelType = event
                     # Where is this event?
+                    # We need to subtract 1, since we will be referencing the indel from the proceeding mapped base
                     pos = self._bufferPos + pos
 
                     readToIndel(pos, indelType, length, read)
@@ -2243,6 +2317,8 @@ def validateArgs(args):
                         help="How many chromosomes to process simultaneously")
     parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.65,
                         help="Filtering threshold (lower=more lenient) [Default: 0.65]")
+    parser.add_argument("--repeat_count_threshold", metavar="INT", type=int, default=4,
+                        help="If an indel is an expansion or contraction of a nearby repeat which occurs at least this many times, filter it [Default: 4]")
     parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
     parser.add_argument("--min_alt_depth", metavar="INT", type=int, default=3,
                         help="Minimum number of reads required to even consider an alternate allele as possibly real [Default: 3]")
@@ -2252,6 +2328,8 @@ def validateArgs(args):
     # Sanity check
     if 1 < validatedArgs.threshold or 0 > validatedArgs.threshold:
         raise parser.error("\'--threshold\' must be a float between 0 and 1")
+    if validatedArgs.repeat_count_threshold < 1 or validatedArgs.repeat_count_threshold > 10:
+        raise parser.error("\'--repeat_count_threshold\' must be between 1 and 10")
     return vars(validatedArgs)
 
 
@@ -2272,6 +2350,7 @@ parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFi
 parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="How many chromosomes to process simultaneously")
 parser.add_argument("--threshold", metavar="FLOAT", type=float,
                     help="Filtering threshold (lower=more lenient) [Default: 0.65]")
+parser.add_argument("--repeat_count_threshold", metavar="INT", type=int, help="If an indel is an expansion or contraction of a nearby repeat which occurs at least this many times, filter it [Default: 4]")
 parser.add_argument("--duplex_support_only", action="store_true", help="Only output variants with duplex support")
 parser.add_argument("--min_alt_depth", metavar="INT", type=int,
                     help="Minimum number of reads required to even consider an alternate allele as possibly real [Default: 3]")
@@ -2450,11 +2529,15 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
 
             # Filter variants
             if first:
-                pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"], writeHeader=True)
+                pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"],
+                                              args["duplex_support_only"], args["repeat_count_threshold"], writeHeader=True)
                 first = False
             else:
-                pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"])
+                pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"],
+                                              args["duplex_support_only"], args["repeat_count_threshold"])
             pileup.reset()
+
+    sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Call Complete\n"]))
 
 if __name__ == "__main__":
     main()
