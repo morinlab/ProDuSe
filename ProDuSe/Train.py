@@ -11,6 +11,8 @@ from sklearn.ensemble import RandomForestClassifier
 from configobj import ConfigObj
 from pyfaidx import Fasta
 import multiprocessing
+import matplotlib
+matplotlib.use('Agg')
 import seaborn
 import matplotlib.pyplot as plt
 try:
@@ -193,6 +195,10 @@ def processSample(bamFile, refGenome, targets, contig, trueVariants, ignoreVaria
     for chrom in chromToDelete:
         del pileup.candidateVar[chrom]
 
+    # If there are more false variants than true variants (which is usually the case), subset them
+    if len(falseVarStats) > len(trueVarStats):
+        falseVarStats = random.sample(falseVarStats, len(trueVarStats))
+
     return trueVarStats, falseVarStats
 
 def parseInputFiles(args):
@@ -216,8 +222,8 @@ def parseInputFiles(args):
             line = line.rstrip("\n").rstrip("\r")
             cols = line.split("\t")
             try:
-                bamFile = cols[0]
-                vcfFile = cols[1]
+                vcfFile = cols[0]
+                bamFile = cols[1]
                 try:
                     targetFile = cols[2]
                     # Check that this file exists
@@ -235,10 +241,10 @@ def parseInputFiles(args):
                 vcfFiles.append(vcfFile)
                 targetFiles.append(targetFile)
             except IndexError as e:  # i.e we are missing one or more columns in the input file
-                raise TypeError("--input_files must be a tab-deliniated file listing \'bamFile.bam    variants.vcf\'") from e
+                raise TypeError("--input_files must be a tab-deliniated file listing \'variants.vcf    bamFile.bam\'") from e
 
     # Now that we have parsed all the input files, modify the arguments dictionary to include them
-    args["input"] = bamFiles
+    args["bam"] = bamFiles
     args["validations"] = vcfFiles
     args["targets"] = targetFiles
 
@@ -249,7 +255,7 @@ def generatePlots(outDir, trueVarStats, falseVarStats, featureNames):
     for i in range(0, len(featureNames)):
         # What is this feature?
         name = featureNames[i]
-	# Don't plot artifact variants, since that is a boolean
+        # Don't plot artifact variants, since that is a boolean
         if name == "C->A mutation":
             continue
         # Parse the statistics of true variants and false variants for this feature
@@ -363,11 +369,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
                            "Mean_Family_Size", "Family_Size_Bias", "Mean_Distance_To_Read_End",
                            "Duplex_Counts", "C->A mutation"]
 
-    # Subset the false variants so that there are an equal number of false and true variants
-    # If there are more validated variants than false variants, do not subset
-    if len(falseVarStats) > len(trueVarStats):
-        falseVarStats = random.sample(falseVarStats, len(trueVarStats))
-
     # Dump the stats used to train the filters to the specified output files
     with open(args["true_stats"] if args["true_stats"] is not None else os.devnull, "w") as t,\
             open(args["false_stats"] if args["false_stats"] is not None else os.devnull, "w") as f:
@@ -392,7 +393,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     varStats.extend(falseVarStats)
     realOrNot.extend([1]*len(falseVarStats))
 
-    filter = RandomForestClassifier(n_estimators=50, max_features="auto")
+    filter = RandomForestClassifier(n_estimators=100, max_features="auto")
     filter.fit(varStats, realOrNot)
 
     # Write the trained classifier out to the file
