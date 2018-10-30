@@ -338,6 +338,7 @@ def createLogFile(filePath, args, **toolVer):
 
         # Add a status message explaining that this log file can actually be used as a configuration file
         o.write("# This log file can be used as a ProDuSe configuration file to repeat this analysis" + os.linesep)
+        o.write("# Current working directory: " + os.path.abspath(".") + os.linesep)
         o.write("[Pipeline]")
         o.write(os.linesep)
         o.write(os.linesep)
