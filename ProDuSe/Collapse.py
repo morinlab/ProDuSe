@@ -873,10 +873,28 @@ class Position:
                     processedPlusFamilies[minAdapter] = duplexPair
                     duplexPair.inDuplex = True
 
+                    # Finally, flag the read with the smallest family as a duplicate, as it is the most likely to
+                    # contain errors
+                    if duplexPair.size < readPair.size:
+                        duplexPair.R1.is_duplicate = True
+                        duplexPair.R2.is_duplicate = True
+                    elif duplexPair.size > readPair.size:
+                        readPair.R1.is_duplicate = True
+                        readPair.R2.is_duplicate = True
+                    else:
+                        # In the case of a tie, flag the read pair with the lowest aggregate quality scores as a duplicate
+                        readPairQualSum = sum(readPair.R1.query_qualities) + sum(readPair.R2.query_qualities)
+                        duplexPairQualSum = sum(duplexPair.R1.query_qualities) + sum(duplexPair.R2.query_qualities)
+                        if duplexPairQualSum < readPairQualSum:
+                            duplexPair.R1.is_duplicate = True
+                            duplexPair.R2.is_duplicate = True
+                        else:  # In the case of a tie, it doesn't really matter which one is flagged a duplicate
+                            readPair.R1.is_duplicate = True
+                            readPair.R2.is_duplicate = True
             counter += 1
 
         # We have finished processing all the families which originate from the (+) parental strand
-        # Any (+) families remaining must be derrived from unique molecules, as they were not paired with a (-) family
+        # Any (+) families remaining must be derived from unique molecules, as they were not paired with a (-) family
         # while processing those
         # In this case, just assign each an apropriate name
         for adapter in list(self.plusFamilies.keys()):
@@ -1153,7 +1171,7 @@ class FamilyCoordinator:
                 if pair.isSplit:
                     continue
 
-                # if this read paif falls outside the capture space completely, don't process it
+                # if this read pair falls outside the capture space completely, don't process it
                 if self.targets:
                     withinCapture = self._withinCaptureSpace(pair)
                     if not withinCapture:
