@@ -808,7 +808,7 @@ def main(args=None, sysStdin=None):
             runArgs["barcode_sequence"] = AdapterPredict.main(sysStdin=adapterPredictArgs, supressOutput=True)
             # Check if the resulting barcode is garbage
             if set(runArgs["barcode_sequence"]) == {"N"}:
-                sys.stderr.write("WARNING: Unable to predict barcode sequence for \'%s\'. Skipping..." % runArgs["sample"])
+                sys.stderr.write("WARNING: Unable to predict barcode sequence for \'%s\'. Skipping..." % sample)
                 continue
             elif "N" in runArgs["barcode_sequence"]:  # TODO: Improve this estimate
                 sys.stderr.write("WARNING: The barcode sequence predicted for \'%s\' is quite broad\n" % sample)
