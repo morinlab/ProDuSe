@@ -1,5 +1,8 @@
 #! /usr/bin/env python
 
+import numpy
+numpy.seterr(all="raise")
+
 import argparse
 import os
 import pysam
@@ -842,9 +845,13 @@ class PileupEngine(object):
     """
 
     def __init__(self, inBAM, refGenome, targetRegions, minAltDepth=1, homopolymerWindow=7, noiseWindow=150,
-                 pileupWindow=1000, oBAM=None, printPrefix="PRODUSE-CALL\t", softClipUntilIndel=25):
+                 pileupWindow=1000, oBAM=None, normalBAM=None, printPrefix="PRODUSE-CALL\t", softClipUntilIndel=25):
         try:
             self._inFile = pysam.AlignmentFile(inBAM, require_index=True)
+            if normalBAM:
+                self._normalFile = pysam.AlignmentFile(normalBAM, require_index=True)
+            else:
+                self._normalFile = None
         except FileNotFoundError as e:
             raise pe.IndexNotFound("Unable to locate BAM index \'%s.bai\': No such file or directory" % inBAM) from e
         self._refGenome = Fasta(refGenome, read_ahead=20000)
@@ -1011,7 +1018,9 @@ class PileupEngine(object):
             '##FILTER=<ID=PASS,Description="Variant call confidence is above random forest filter confidence threshold %s">' % (filtThreshold),
             '##FILTER=<ID=LOW_CONF,Description="Variant call confidence is below the random forest filter confidence threshold %s">' % (filtThreshold),
             '##FILTER=<ID=NO_DUPLEX,Description="Variant does not have duplex support. Only used when the duplex filter is enabled">',
-            '##FILTER=<ID=REPEAT,Description="Variant indel is an expansion or contraction of an adjacent repeat">'
+            '##FILTER=<ID=REPEAT,Description="Variant indel is an expansion or contraction of an adjacent repeat">',
+            '##FILTER=<ID=GERMLINE,Description="Variant allele frequency is not significantly higher in the tumour relative to the normal sample">',
+            '##FILTER=<ID=NO_DEPTH_NORMAL,Description="Insufficient depth in the normal to assign a variant as germline or somatic">',
             ])
 
         # Genotype fields
@@ -1257,11 +1266,25 @@ class PileupEngine(object):
                                         filterField = "REPEAT"
                                     else:
                                         filterField = filterField + ";REPEAT"
+
+                                # Is this event germline?
+                                if self._normalFile is not None:
+                                    isGermline = self._checkIfGermlineIndel(chrom, iPos, indel)
+                                    if isGermline is True:
+                                        if filterField == "PASS":
+                                            filterField = "GERMLINE"
+                                        else:
+                                            filterField = filterField + ";GERMLINE"
+                                    elif isGermline is None:  # Insufficient depth in normal.
+                                        if filterField == "PASS":
+                                            filterField = "NO_DEPTH_NORMAL"
+                                        else:
+                                            filterField = filterField + ";NO_DEPTH_NORMAL"
                                 # Write out the unfiltered variant
                                 vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField)
                                 u.write(vcfEntry)
 
-                                if passesConfFilter and duplexSupportFilt:  # This variant passes filters
+                                if passesConfFilter and duplexSupportFilt and isGermline is False:  # This variant passes filters
                                     o.write(vcfEntry)
 
                             posToDelete.append(iPos)
@@ -1309,8 +1332,21 @@ class PileupEngine(object):
                                     filterField = filterField + ";NO_DUPLEX"
                                 else:
                                     filterField = "NO_DUPLEX"
+                            # Is this variant germline? Check if it's in the normal sample (if provided)
+                            if self._normalFile is not None:
+                                isGermline = self._checkIfGermlineSNV(chrom, position, allele, candidateSNV)
+                                if isGermline is True:
+                                    if filterField == "PASS":
+                                      filterField = "GERMLINE"
+                                    else:
+                                        filterField = filterField + ";GERMLINE"
+                                elif isGermline is None:  # Insufficient depth in normal.
+                                    if filterField == "PASS":
+                                        filterField = "NO_DEPTH_NORMAL"
+                                    else:
+                                        filterField = filterField + ";NO_DEPTH_NORMAL"
 
-                            if not passesConfFilter or not duplexSupportFilt:  # Fails duplex support filter
+                            if not passesConfFilter or not duplexSupportFilt or isGermline is True or isGermline is None:  # Fails one or more filters
                                 failedAlleles.append(allele)
                             else:
                                 passFiltResults.append(filterField)
@@ -1377,11 +1413,26 @@ class PileupEngine(object):
                                     filterField = "REPEAT"
                                 else:
                                     filterField = filterField + ";REPEAT"
+
+                            # Is this event germline?
+                            if self._normalFile is not None:
+                                isGermline = self._checkIfGermlineIndel(chrom, iPos, indel)
+                                if isGermline is True:
+                                    if filterField == "PASS":
+                                        filterField = "GERMLINE"
+                                    else:
+                                        filterField = filterField + ";GERMLINE"
+                                elif isGermline is None:  # Insufficient depth in normal.
+                                    if filterField == "PASS":
+                                        filterField = "NO_DEPTH_NORMAL"
+                                    else:
+                                        filterField = filterField + ";NO_DEPTH_NORMAL"
+
                             # Write out the unfiltered variant
                             vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField)
                             u.write(vcfEntry)
 
-                            if passesConfFilter and duplexSupportFilt:  # This variant passes filters
+                            if passesConfFilter and duplexSupportFilt and isGermline is False:  # This variant passes filters
                                 o.write(vcfEntry)
 
                     del self.candidateIndels[chrom]
@@ -1467,6 +1518,147 @@ class PileupEngine(object):
 
         # The specified seq occurs more than threshold number of times
         return True
+
+    def _checkIfGermlineSNV(self, chrom, position, altAllele, altPosition, pValThresh=0.05, minReadThreshold=6):
+        """
+        Determines if a given snv is a germline mutation
+
+        Compares the number of reads which support the alternate allele between the tumour sample and the matched normal
+        sample using a fisher's exact test. If the number of reads supporting the alternate allele in the tumour is not
+        significantly higher than in the normal, this variant is flagged as germline
+
+        WARNING: This implementation is VERY basic for performance and code maintinance readsons. It will not take into
+        account family sizes or any duplexes. That said, if the normal BAM was collapsed, each family will only be
+        counted once
+
+        :param chrom: A string indicating the name of the contig the read is mapped against
+        :param position: An integer indicating the position of the variant in the specified contig
+        :param altAllele: A string containing the alternate allele
+        :param altPosition: A position() object containing the variant position and aggregated stats
+        :param pValThresh: A float indicating the p-value threshold. If the fisher's pvalue is above this threshold, the variant is flagged as germline
+        :param minReadThreshold: An int indicating the minimum normal depth required to confidently assign a variant as germline or not
+        :return: A boolean indicating if the variant is germline, or None, if there is insufficient depth
+        """
+
+        # Count the number of reads which support the reference and alternate alleles in the normal
+        refAllele = altPosition.ref
+        refCount = 0
+        altCount = 0
+        for pileupPos in self._normalFile.pileup(contig=chrom, start=position, stop=position+1, maxDepth=20000):
+            # Since pysam's pileup generates an iterable of all positions covered by reads which overlap the specified
+            # position, we need to go to the position we care about
+            if pileupPos.pos == position:
+                # Obtain the base by all reads which overlap this position
+                for read in pileupPos.pileups:
+                    # If this read has a deletion at this position, don't count it
+                    if read.query_position is None:
+                        continue
+
+                    base = read.alignment.query_sequence[read.query_position]
+                    if base == refAllele:
+                        refCount += 1
+                    elif base == altAllele:
+                        altCount += 1
+
+        # Is there sufficient normal depth?
+        if refCount + altCount < minReadThreshold:
+            return None
+
+        # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
+        pVal = fisher_exact(refCount, altCount, altPosition.strandCounts[refAllele], altPosition.strandCounts[altAllele]).right_tail
+        if pVal < pValThresh:
+            return False  # Somatic
+        else:
+            return True  # Germline
+
+    def _checkIfGermlineIndel(self, chrom, position, altPosition, pValThresh=0.05, minReadThreshold=6, sequenceWindow=200):
+        """
+        Determines if a given indel is a germline mutation
+
+        Performs local realignment of the reads in the matched normal which could overlap this indel. Creates a haplotype
+        for the reference and alternate alleles, then maps all reads against those alleles to determine the best mappings
+
+        :param chrom: A string indicating the name of the contig the read is mapped against
+        :param position: An integer indicating the position of the variant in the specified contig
+        :param altPosition: A position() object containing the variant position and aggregated stats
+        :param pValThresh: A float indicating the p-value threshold. If the fisher's pvalue is above this threshold, the variant is flagged as germline
+        :param minReadThreshold: An int indicating the minimum normal depth required to confidently assign a variant as germline or not
+        :return: A boolean indicating if the variant is germline, or None, if there is insufficient depth
+        """
+
+        class discountPysamRead:
+            # This is a placeholder for a read, so we can provide a query_sequence
+            def __init__(self, seq, position, length):
+                self.query_sequence = seq
+                self.reference_start = position
+                self.query_alignment_length = length
+
+
+        # Parse all reads which overlap this position
+        indelSize = len(altPosition.alt) - len(altPosition.ref)
+        pileupEnd = position - indelSize if indelSize < 0 else position + 1
+        windowStart = 0
+        first = True
+        windowEnd = 0
+        positions = self._normalFile.pileup(contig=chrom, start=position, stop=pileupEnd, maxDepth=20000)
+        for pileupPos in positions:
+            # Since pysam's pileup generates an iterable of all positions covered by reads which overlap the specified
+            # position, we need to go to the position we care about
+            if first:
+                windowStart = pileupPos.pos
+                first = False
+            windowEnd = pileupPos.pos
+            if pileupPos.pos == position:
+                normalReads = tuple(x.alignment for x in pileupPos.pileups)
+
+        # If there is too little coverage at this locus, then we can't accurately determine if this mutation is germline
+        if len(normalReads) < minReadThreshold:
+            return None
+
+        windowStart -= sequenceWindow
+        windowEnd += sequenceWindow
+        # Set the reference buffer correctly so the correct haplotypes are generated
+        self._refWindow = self._refGenome[self._chrom][windowStart - self._realignBuffer:windowEnd + self._realignBuffer].seq
+        self._refStart = windowStart - self._realignBuffer
+
+        # If this is a deletion, remove bases from the sequence
+        if indelSize < 0:
+            altSeq = self._refGenome[chrom][windowStart:position].seq + self._refGenome[chrom][position - indelSize: windowEnd - indelSize].seq
+        else:
+            # Add the insertion into the sequence
+            altSeq = self._refGenome[chrom][windowStart-1:position-1].seq + altPosition.alt + \
+                     self._refGenome[chrom][position: windowEnd].seq
+
+        simRead = discountPysamRead(altSeq, windowStart, windowEnd - windowStart)
+        # Create the relevant haplotypes
+        haplotypes = self.generateHaplotypes([simRead], softclippingBuffer=0)
+
+        # Align all reads in the normal against these haplotypes, and count which reads support which haplotypes
+        refCount = 0
+        altCount = 0
+        for read in normalReads:
+            maxScore = 0
+            maxHap = None
+            for hap in haplotypes:
+                align = hap.alignmentStructure(read.query_sequence)
+                if align.optimal_alignment_score > maxScore:
+                    maxScore = align.optimal_alignment_score
+                    # Bias in favor of the reference alignment, since skbio's implementation of SSW does strange things
+                    if maxHap is None:
+                        maxScore += 2
+                    maxHap = hap
+
+            if maxHap.eventFromRef:  # i.e. this read supports the alternate allele
+                altCount += 1
+            else:
+                refCount += 1
+
+        # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
+        pVal = fisher_exact(refCount, altCount, altPosition.strandCounts["REF"], altPosition.strandCounts["ALT"]).right_tail
+        if pVal < pValThresh:
+            return False  # Somatic
+        else:
+            return True  # Germline
 
     def processRead(self, read, rCigar):
         """
@@ -1656,7 +1848,7 @@ class PileupEngine(object):
         for pos in positions:
             pos.addMismatchNum(numMismatch)
 
-    def generateHaplotypes(self, softclippingBuffer=100):
+    def generateHaplotypes(self, indelReads, softclippingBuffer=100):
         """
         Generate a reference using all reads which contain an indel
 
@@ -1664,11 +1856,11 @@ class PileupEngine(object):
         """
 
         # If no reads in this window support an indel, then there are no alternative haplotypes
-        if not self._indelReads:
+        if not indelReads:
             return None
 
-        if not self._bufferedReads or self._indelReads[0].reference_start < self._bufferedReads[0].reference_start:
-            self._bufferPos = self._indelReads[0].reference_start - softclippingBuffer
+        if not self._bufferedReads or indelReads[0].reference_start < self._bufferedReads[0].reference_start:
+            self._bufferPos = indelReads[0].reference_start - softclippingBuffer
             if self._bufferPos < 0:
                 self._bufferPos = 0
             refStart = self._bufferPos - self._refStart
@@ -1679,7 +1871,7 @@ class PileupEngine(object):
             refStart = self._bufferPos - self._refStart
 
         # What is the general length of each read?
-        readLength = self._indelReads[-1].query_alignment_length
+        readLength = indelReads[-1].query_alignment_length
         refEnd = refStart + self._realignBuffer + softclippingBuffer + readLength
 
         referenceSeq = self._refWindow[refStart:refEnd]
@@ -1689,7 +1881,7 @@ class PileupEngine(object):
 
         # First pass: Align all reads against the reference haplotype using SW-alignment to identify any differences
         # between this read and the reference
-        for read in self._indelReads:
+        for read in indelReads:
 
             # Align this read against the reference
             altAlignment = refHaplotype.alignmentStructure(read.query_sequence)
@@ -1854,7 +2046,7 @@ class PileupEngine(object):
 
         return pysamCigar, cigar, readStartOffset
 
-    def _realign(self, haplotypes, endPoint, indelWindow = 200):
+    def _realign(self, haplotypes, endPoint=None, indelWindow = 200):
         """
         Realign all reads stored in the buffer against these haplotypes, and add the realigned reads to the pileip
 
@@ -2058,7 +2250,7 @@ class PileupEngine(object):
             :return:
             """
             # First, generate the haplotypes using reads with INDELs
-            haplotypes = self.generateHaplotypes()
+            haplotypes = self.generateHaplotypes(self._indelReads)
             # Map all reads in the buffer against these haplotypes
             if haplotypes is not None:
                 self._realign(haplotypes, windowEndPoint)
@@ -2304,6 +2496,8 @@ def validateArgs(args):
                         help="An optional configuration file which can provide one or more arguments")
     parser.add_argument("-i", "--input", metavar="BAM", required=True, type=lambda x: isValidFile(x, parser),
                         help="Input post-collapse or post-clipoverlap BAM file")
+    parser.add_argument("-n", "--normal", metavar="BAM", type=lambda x: isValidFile(x, parser),
+                        help="Optional matched normal BAM file, for removing germline variants")
     parser.add_argument("-o", "--output", metavar="VCF", required=True, help="Output VCF file")
     parser.add_argument("-u", "--unfiltered", metavar="VCF",
                         help="An additional output VCF file, which lists all candidate variants, including those that failed filters")
@@ -2338,6 +2532,9 @@ parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(
                     help="An optional configuration file which can provide one or more arguments")
 parser.add_argument("-i", "--input", metavar="BAM", type=lambda x: isValidFile(x, parser),
                     help="Input post-collapse or post-clipoverlap BAM file")
+
+parser.add_argument("-n", "--normal", metavar="BAM", type=lambda x:isValidFile(x, parser),
+                    help="Optional matched normal BAM file, for removing germline variants")
 parser.add_argument("-o", "--output", metavar="VCF", help="Output VCF file, listing all variants which passed filters")
 parser.add_argument("-u", "--unfiltered", metavar="VCF",
                     help="An additional output VCF file, which lists all candidate variants, including those that failed filters")
@@ -2380,10 +2577,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
 
 
     args = validateArgs(args)
-
-    # Load filter
-    # with open(args["filter"], "r+b") as o:
-    #    filterModel = pickle.load(o)
 
     # Load filter
     try:
@@ -2433,6 +2626,8 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
                 defaults.append(None)
             elif name == "printPrefix":
                 defaults.append(printPrefix)
+            elif name == "normalBAM":
+                defaults.append(args["normal"])
             else:
                 defaults.append(value.default)
             i += 1
@@ -2520,8 +2715,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
 
     else:  # Singe-threaded
         pileup = PileupEngine(args["input"], args["reference"], args["targets"], minAltDepth=args["min_alt_depth"],
-                              oBAM=args["realigned_BAM"],
-                              printPrefix=printPrefix)
+                              oBAM=args["realigned_BAM"], normalBAM=args["normal"], printPrefix=printPrefix)
         first = True
         for contig in contigNames:
             # Find candidate variants

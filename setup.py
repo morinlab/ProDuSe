@@ -35,7 +35,7 @@ setup(
         "pyfaidx",
         "pysam",
         "packaging",
-        "sklearn",
+        "scikit-learn==0.19.2",
         "scikit-bio"
         ],
     download_url="https://github.com/morinlab/ProDuSe/dist/ProDuSe-0.9.4.tar.gz",
