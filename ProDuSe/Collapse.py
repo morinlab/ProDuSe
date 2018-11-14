@@ -1329,15 +1329,15 @@ def validateArgs(args):
     validateArgs = vars(validatedArgs)
 
     # Ensure either the user specified all the barcode parameters, or that no barcodes are used
-    if not args["no_barcodes"]:
+    if not validateArgs["no_barcodes"]:
         missingArgs = []
-        if not args["family_mask"]:
+        if not validateArgs["family_mask"]:
             missingArgs.append("-fm/--family_mask")
-        if not args["family_mismatch"]:
+        if not validateArgs["family_mismatch"]:
             missingArgs.append("-fmm/--family_mismatch")
-        if not args["duplex_mask"]:
+        if not validateArgs["duplex_mask"]:
             missingArgs.append("-dm/--duplex_mask")
-        if not args["duplex_mismatch"]:
+        if not validateArgs["duplex_mismatch"]:
             missingArgs.append("-dmm/--duplex_mismatch")
         # If arguments are missing, error out
         if len(missingArgs) > 0:
@@ -1345,14 +1345,14 @@ def validateArgs(args):
     else:
         # If we are not using barcoded adapters, we can set some default parameters for "barcode" collapsing
         # These defaults are based on results I obtained testing ~40 samples with different barcode lengths and parameters
-        if not args["family_mask"]:
-            args["family_mask"] = "111111111111111"
-        if not args["family_mismatch"]:
-            args["family_mismatch"] = 3
-        if not args["duplex_mask"]:
-            args["duplex_mask"] = "111111111111111"
-        if not args["duplex_mismatch"]:
-            args["duplex_mismatch"] = 3
+        if not validateArgs["family_mask"]:
+            validateArgs["family_mask"] = "111111111111111"
+        if not validateArgs["family_mismatch"]:
+            validateArgs["family_mismatch"] = 3
+        if not validateArgs["duplex_mask"]:
+            validateArgs["duplex_mask"] = "111111111111111"
+        if not validateArgs["duplex_mismatch"]:
+            validateArgs["duplex_mismatch"] = 3
     return validateArgs
 
 
