@@ -1,8 +1,5 @@
 #! /usr/bin/env python
 
-import numpy
-numpy.seterr(all="raise")
-
 import argparse
 import os
 import pysam
@@ -40,17 +37,19 @@ class Haplotype(object):
     A haplotype is generated from reads which contain indels, and represents that indel
     """
 
-    def __init__(self, seq=None, eventFromRef=None):
+    def __init__(self, seq=None, eventFromRef=None, scoreFromRef=None):
         """
 
         :param seq: A string containing a nucleotide sequence which coresponds to the assembled haplotype
         :param support: A list containing strings coresponding to the reads which support this event
         :param eventFromRef: A cigar string containing the distance from this alignment to the reference
+        :param
         """
         self.seq = seq
         self.support = []
         self.eventFromRef=eventFromRef
         self.alignmentStructure=alignment.StripedSmithWaterman(seq, mismatch_score=-3, match_score=1)
+        self.scoreFromRef = scoreFromRef
 
 
 class Position(object):
@@ -1268,6 +1267,7 @@ class PileupEngine(object):
                                         filterField = filterField + ";REPEAT"
 
                                 # Is this event germline?
+                                isGermline = False
                                 if self._normalFile is not None:
                                     isGermline = self._checkIfGermlineIndel(chrom, iPos, indel)
                                     if isGermline is True:
@@ -1333,6 +1333,7 @@ class PileupEngine(object):
                                 else:
                                     filterField = "NO_DUPLEX"
                             # Is this variant germline? Check if it's in the normal sample (if provided)
+                            isGermline = False
                             if self._normalFile is not None:
                                 isGermline = self._checkIfGermlineSNV(chrom, position, allele, candidateSNV)
                                 if isGermline is True:
@@ -1415,6 +1416,7 @@ class PileupEngine(object):
                                     filterField = filterField + ";REPEAT"
 
                             # Is this event germline?
+                            isGermline = False
                             if self._normalFile is not None:
                                 isGermline = self._checkIfGermlineIndel(chrom, iPos, indel)
                                 if isGermline is True:
@@ -1519,7 +1521,7 @@ class PileupEngine(object):
         # The specified seq occurs more than threshold number of times
         return True
 
-    def _checkIfGermlineSNV(self, chrom, position, altAllele, altPosition, pValThresh=0.05, minReadThreshold=6):
+    def _checkIfGermlineSNV(self, chrom, position, altAllele, altPosition, pValThresh=0.05, minReadThreshold=6, minVafThreshold=0.33, maxVafThreshold=0.08):
         """
         Determines if a given snv is a germline mutation
 
@@ -1537,6 +1539,8 @@ class PileupEngine(object):
         :param altPosition: A position() object containing the variant position and aggregated stats
         :param pValThresh: A float indicating the p-value threshold. If the fisher's pvalue is above this threshold, the variant is flagged as germline
         :param minReadThreshold: An int indicating the minimum normal depth required to confidently assign a variant as germline or not
+        :param minVafThreshold: A float. If the VAF in the normal sample is higher than this threshold, the variant is flagged as germline
+        :param maxVafThreshold: A flat. If the normal sample VAF is lower than this threshold, the variant is flagged as somatic
         :return: A boolean indicating if the variant is germline, or None, if there is insufficient depth
         """
 
@@ -1544,7 +1548,8 @@ class PileupEngine(object):
         refAllele = altPosition.ref
         refCount = 0
         altCount = 0
-        for pileupPos in self._normalFile.pileup(contig=chrom, start=position, stop=position+1, maxDepth=20000):
+        pileup = self._normalFile.pileup(contig=chrom, start=position, stop=position+1, maxDepth=20000)
+        for pileupPos in pileup:
             # Since pysam's pileup generates an iterable of all positions covered by reads which overlap the specified
             # position, we need to go to the position we care about
             if pileupPos.pos == position:
@@ -1564,6 +1569,14 @@ class PileupEngine(object):
         if refCount + altCount < minReadThreshold:
             return None
 
+        # Calculate the VAF of the mutation in the normal
+        normVaf = altCount / (refCount + altCount)
+        # Based on the VAF, is this variant germline?
+        if normVaf > minVafThreshold:  # Germline
+            return True
+        elif normVaf < maxVafThreshold:  # Somatic
+            return False
+
         # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
         pVal = fisher_exact(refCount, altCount, altPosition.strandCounts[refAllele], altPosition.strandCounts[altAllele]).right_tail
         if pVal < pValThresh:
@@ -1571,7 +1584,7 @@ class PileupEngine(object):
         else:
             return True  # Germline
 
-    def _checkIfGermlineIndel(self, chrom, position, altPosition, pValThresh=0.05, minReadThreshold=6, sequenceWindow=200):
+    def _checkIfGermlineIndel(self, chrom, position, altPosition, pValThresh=0.05, minReadThreshold=6, sequenceWindow=200, minVafThreshold=0.33, maxVafThreshold=0.08):
         """
         Determines if a given indel is a germline mutation
 
@@ -1583,6 +1596,8 @@ class PileupEngine(object):
         :param altPosition: A position() object containing the variant position and aggregated stats
         :param pValThresh: A float indicating the p-value threshold. If the fisher's pvalue is above this threshold, the variant is flagged as germline
         :param minReadThreshold: An int indicating the minimum normal depth required to confidently assign a variant as germline or not
+        :param minVafThreshold: A float. If the VAF in the normal sample is higher than this threshold, the variant is flagged as germline
+        :param maxVafThreshold: A flat. If the normal sample VAF is lower than this threshold, the variant is flagged as somatic
         :return: A boolean indicating if the variant is germline, or None, if there is insufficient depth
         """
 
@@ -1593,23 +1608,35 @@ class PileupEngine(object):
                 self.reference_start = position
                 self.query_alignment_length = length
 
-
-        # Parse all reads which overlap this position
+        # Since reads in the normal could be soft-clipped at this indel, include the soft clipping offset
+        pileupStart = position - self._softClipUntilIndel
+        if pileupStart < 0:
+            pileupStart = 0
         indelSize = len(altPosition.alt) - len(altPosition.ref)
         pileupEnd = position - indelSize if indelSize < 0 else position + 1
+        pileupEnd += self._softClipUntilIndel
         windowStart = 0
         first = True
         windowEnd = 0
-        positions = self._normalFile.pileup(contig=chrom, start=position, stop=pileupEnd, maxDepth=20000)
+        positions = self._normalFile.pileup(contig=chrom, start=pileupStart, stop=pileupEnd, maxDepth=20000)
+        # Parse all reads which overlap this position
+        read1Reads = {}
+        read2Reads = {}
         for pileupPos in positions:
-            # Since pysam's pileup generates an iterable of all positions covered by reads which overlap the specified
-            # position, we need to go to the position we care about
             if first:
                 windowStart = pileupPos.pos
                 first = False
             windowEnd = pileupPos.pos
-            if pileupPos.pos == position:
-                normalReads = tuple(x.alignment for x in pileupPos.pileups)
+            # Obtain all the reads which overlap this position
+            # If we have already included this read, don't double count it
+            for read in pileupPos.pileups:
+                read = read.alignment
+                if read.is_read1:
+                    read1Reads[read.query_name] = read
+                elif read.is_read2:
+                    read2Reads[read.query_name] = read
+
+        normalReads = tuple(read1Reads.values()) + tuple(read2Reads.values())
 
         # If there is too little coverage at this locus, then we can't accurately determine if this mutation is germline
         if len(normalReads) < minReadThreshold:
@@ -1631,27 +1658,43 @@ class PileupEngine(object):
 
         simRead = discountPysamRead(altSeq, windowStart, windowEnd - windowStart)
         # Create the relevant haplotypes
-        haplotypes = self.generateHaplotypes([simRead], softclippingBuffer=0)
+        refHap, altHap = self.generateHaplotypes([simRead], softclippingBuffer=0)
 
-        # Align all reads in the normal against these haplotypes, and count which reads support which haplotypes
-        refCount = 0
-        altCount = 0
+        # Align all reads in the normal against these haplotypes, and determine which reads support which haplotype
+        refReads = []
+        altReads = []
         for read in normalReads:
-            maxScore = 0
-            maxHap = None
-            for hap in haplotypes:
-                align = hap.alignmentStructure(read.query_sequence)
-                if align.optimal_alignment_score > maxScore:
-                    maxScore = align.optimal_alignment_score
-                    # Bias in favor of the reference alignment, since skbio's implementation of SSW does strange things
-                    if maxHap is None:
-                        maxScore += 2
-                    maxHap = hap
+            refAlign = refHap.alignmentStructure(read.query_sequence)
+            altAlign = altHap.alignmentStructure(read.query_sequence)
+            # If this read maps equally well to both the reference and alternate haplotype, then it probably doesn't
+            # overlap the indel, and we should ignore it
+            if altAlign.optimal_alignment_score > refAlign.optimal_alignment_score:
+                altReads.append(read.query_name)
+            elif altAlign.optimal_alignment_score < refAlign.optimal_alignment_score:
+                refReads.append(read.query_name)
 
-            if maxHap.eventFromRef:  # i.e. this read supports the alternate allele
-                altCount += 1
-            else:
-                refCount += 1
+        # Avoid double-counting any read pairs
+        # In the case that one read supports the reference allele, while the other supports the alternate allele, keep
+        # the read which supports the alternate allele
+        altReads = set(altReads)
+        refReads = set(x for x in refReads if x not in altReads)
+
+        altCount = len(altReads)
+        refCount = len(refReads)
+
+        # Check for sufficient coverage again
+        if altCount + refCount < minReadThreshold:
+            return None
+
+        # Calculate normal VAF
+        normVaf = altCount / (refCount + altCount)
+        # Based on the VAF, can we assign this mutation as somatic or germline?
+        # We set a VAF threshold, as very low VAF variants in the tumour will be flagged as germline even if there
+        # are no reads supporting the alternate allele in the tumour
+        if normVaf > minVafThreshold:
+            return True  # Germline
+        elif normVaf < maxVafThreshold:
+            return False  # Somatic
 
         # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
         pVal = fisher_exact(refCount, altCount, altPosition.strandCounts["REF"], altPosition.strandCounts["ALT"]).right_tail
@@ -1875,7 +1918,7 @@ class PileupEngine(object):
         refEnd = refStart + self._realignBuffer + softclippingBuffer + readLength
 
         referenceSeq = self._refWindow[refStart:refEnd]
-        refHaplotype = Haplotype(referenceSeq, None)
+        refHaplotype = Haplotype(referenceSeq)
 
         candidateHaplotypes = {referenceSeq: refHaplotype}
 
@@ -1907,6 +1950,8 @@ class PileupEngine(object):
                     altHaplotype.append(b1)
                     if eventType:
                         eventLoc[i-eventSize] = [eventSize, eventType]
+                        if eventType == "D":
+                            i -= eventSize
                         eventType = None
                         eventSize = 0
 
@@ -1916,18 +1961,22 @@ class PileupEngine(object):
                 altMatchFound = False
                 for name, haplotype in candidateHaplotypes.items():
                     alignBtwnHap = haplotype.alignmentStructure(altAssembledHaplotype)
-                    if "I" not in alignBtwnHap.cigar and "D" not in alignBtwnHap.cigar:  # i.e. there are no indels between these two haplotypes. They are likely the same
+                    if "I" not in alignBtwnHap.cigar and "D" not in alignBtwnHap.cigar:
+                        # i.e. there are no indels between these two haplotypes. They are likely the same event
+                        # Keep the event which is closer to the reference
+                        if haplotype.scoreFromRef is not None and altAlignment.optimal_alignment_score > haplotype.scoreFromRef:
+                            candidateHaplotypes[name] = Haplotype(altAssembledHaplotype, eventLoc, altAlignment.optimal_alignment_score)
                         altMatchFound = True
                         break
 
                 if not altMatchFound:
                     # Store this new haplotype
-                    candidateHaplotypes[altAssembledHaplotype] = Haplotype(altAssembledHaplotype, eventLoc)
+                    candidateHaplotypes[altAssembledHaplotype] = Haplotype(altAssembledHaplotype, eventLoc, altAlignment.optimal_alignment_score)
 
         return tuple(candidateHaplotypes.values())
 
     def _cigarFromAlignment(self, align, haplotypeDist):
-        """
+        """q
         For a given read (query sequence), generate a pysam-style cigar tuple
         Incorperate any differences between this haplotype and the reference as well
         :return:
@@ -2080,7 +2129,7 @@ class PileupEngine(object):
             for hap in haplotypes:
                 align = hap.alignmentStructure(read.query_sequence)
                 if align.optimal_alignment_score > maxScore:
-                    maxScore = align.optimal_alignment_score
+                    maxScore = align.optimal_alignment_score  # TODO: Add score offset here
                     maxAlignment = align
                     maxHap = hap
 
@@ -2314,6 +2363,10 @@ class PileupEngine(object):
             if read.is_secondary or read.is_supplementary:
                 continue
 
+            # Ignore reads with a mapping quality of 0
+            if read.mapping_quality == 0:
+                continue
+
             # Have we advanced positions? If so, we may need to change the loaded reference window, and process
             # positions which no more reads will be mapped to
             if read.reference_name != self._chrom or read.reference_start != lastPos:
@@ -2480,7 +2533,7 @@ def validateArgs(args):
         listArgs.append("--" + argument)
 
         # If the parameter is a boolean, ignore it, as this will be reset once the arguments are re-parsed
-        if parameter == "True":
+        if parameter == "True" or parameter is True:
             continue
         # If the parameter is a list, we need to add each element seperately
         if isinstance(parameter, list):
