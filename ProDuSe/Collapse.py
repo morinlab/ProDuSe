@@ -1251,10 +1251,10 @@ class FamilyCoordinator:
                     "\t".join([self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " pairs into " + str(counter) + " families" + os.linesep]))
                 sys.stderr.write("\t".join([self.printPrefix, time.strftime('%X'), "Collapse Complete\n"]))
 
-    def generatePlots(self, outDir):
+    def generatePlots(self, outPrefix):
         """
         Generate several histograms visualizing the family size distribution of duplex and non-duplex read pairs
-        :param outDir: A path to the output folder where the plots will be generated
+        :param outPrefix: A string listing the output folder and prefix for the plots
         :return:
         """
 
@@ -1263,13 +1263,13 @@ class FamilyCoordinator:
         # Generate a histogram for the overall family size distribution
         overallAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution")
         overallHist = overallAx.get_figure()
-        outFile = outDir + os.path.sep + "Family_Size_Distribution.png"
+        outFile = outPrefix + "Family_Size_Distribution.png"
         overallHist.savefig(outFile)
 
         # Generate a histogram for families in duplex
         duplexAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution (duplexes)")
         duplexHist = overallAx.get_figure()
-        outFile = outDir + os.path.sep + "Duplex_Family_Size_Distribution.png"
+        outFile = outPrefix + "Duplex_Family_Size_Distribution.png"
         duplexHist.savefig(outFile)
 
 
@@ -1320,7 +1320,7 @@ def validateArgs(args):
                         help="Maximum number of mismatches permitted when identifying of two families are in duplex")
     parser.add_argument("--tag_family_members", action="store_true",
                         help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
-    parser.add_argument("--plot_dir", metavar="DIR", help="Output directory for summary plots")
+    parser.add_argument("--plot_prefix", metavar="DIR", help="Output directory for summary plots")
     parser.add_argument("-r", "--reference", required=True, type=lambda x: isValidFile(x, parser),
                         help="Reference genome, in FASTA format")
     parser.add_argument("--input_format", metavar="SAM/BAM/CRAM", choices=["SAM", "BAM", "CRAM"],
@@ -1401,7 +1401,7 @@ barcodeArgs.add_argument("-dmm", "--duplex_mismatch", type=int,
                     help="Maximum number of mismatches permitted when identifying of two families are in duplex")
 miscArgs = parser.add_argument_group(description="Miscellaneous Arguments")
 miscArgs.add_argument("--tag_family_members", action="store_true", help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
-miscArgs.add_argument("--plot_dir", metavar="DIR", help="Output directory for summary plots")
+miscArgs.add_argument("--plot_prefix", metavar="DIR", help="Output directory/prefix for summary plots")
 miscArgs.add_argument("--collapse_duplexes", action="store_true",
                     help="Generate a consensus from the forward and reverse strands")
 miscArgs.add_argument("--input_format", metavar="SAM/BAM/CRAM", choices=["SAM", "BAM", "CRAM"], help="Input file format [Default: Detect using file extension]")
@@ -1501,7 +1501,22 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
             command += " " + str(parameter)
     header["PG"].append({"ID": "PRODUSE-COLLAPSE", "PN": "ProDuSe", "CL": command})
 
-    outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM, header=header)
+    outFileExt = args["output"].split(".")[-1].upper()
+    if outFileExt == "BAM":
+        outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM, header=header)
+    elif outFileExt == "SAM":
+        outBAM = pysam.AlignmentFile(args["output"], "w", template=inBAM, header=header)
+    elif outFileExt == "CRAM":
+        outBAM = pysam.AlignmentFile(args["output"], "wc", template=inBAM, header=header, reference_filename=args["reference"])
+    else:  # The output file extension does not specify the file type. Set the output file type the same as the input
+        sys.stderr.write("WARNING: Unable to determine output file type. Using input file format \'%s\'" % inFormat + os.linesep)
+        if inFormat == "CRAM":
+            outBAM = pysam.AlignmentFile(args["output"], "wc", template=inBAM, header=header,
+                                         reference_filename=args["reference"])
+        elif inFormat == "SAM":
+            outBAM = pysam.AlignmentFile(args["output"], "w", template=inBAM, header=header)
+        else:
+            outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM, header=header)
 
     readProcessor = FamilyCoordinator(inBAM, args["reference"], familyIndices, args["family_mismatch"],
                                       duplexIndices, args["duplex_mismatch"], len(args["duplex_mask"]) * 2,
@@ -1512,8 +1527,8 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
         outBAM.write(read)
 
     # If the user specified an output directory for plots, generate them
-    if args["plot_dir"] is not None:
-        readProcessor.generatePlots(args["plot_dir"])
+    if args["plot_prefix"] is not None:
+        readProcessor.generatePlots(args["plot_prefix"])
 
 
 if __name__ == "__main__":

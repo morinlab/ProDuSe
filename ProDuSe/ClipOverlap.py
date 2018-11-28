@@ -701,6 +701,8 @@ def reparseArgs(args):
                         help="A path to an output BAM file. Will be UNSORTED (use \"-\" for stdout)")
     parser.add_argument("--tag_origin", action="store_true",
                         help="Add a read tag indicating from which read a consensus base originated")
+    parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser),
+                        help="Reference genome, in FASTA format. Only used for CRAM compression/decompression")
     args = parser.parse_args(listArgs)
     return vars(args)
 
@@ -731,10 +733,11 @@ parser = argparse.ArgumentParser(
     description="Generates a consensus for overlapping bases between a read pair, and assigns the consensus to a single read")
 parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can specify any parameters")
-parser.add_argument("-i", "--input", metavar="BAM/SAM", type=lambda x: isValidFile(x, parser, True),
-                    help="Input BAM file. Does not need to be sorted (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
-parser.add_argument("-o", "--output", metavar="BAM/SAM", help="A path to an output BAM file. Will be UNSORTED (use \"-\" for stdout)")
+parser.add_argument("-i", "--input", metavar="SAM/BAM/CRAM", type=lambda x: isValidFile(x, parser, True),
+                    help="Input alignment (BAM) file. Does not need to be sorted (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
+parser.add_argument("-o", "--output", metavar="SAM/BAM/CRAM", help="A path to an output alignment file. Will be UNSORTED (use \"-\" for stdout)")
 parser.add_argument("--tag_origin", action="store_true", help="Add a read tag indicating from which read a consensus base originated")
+parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser), help="Reference genome, in FASTA format. Only used for CRAM compression/decompression")
 
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-CLIPOVERLAP"):
@@ -760,15 +763,15 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CLIPOVERLAP"):
     args = reparseArgs(args)
 
     # Open the input and output BAM files for reading
-    inBAM = pysam.AlignmentFile(args["input"])  # Pysam claims to auto-detect the input format
+    inBAM = pysam.AlignmentFile(args["input"], reference_filename=args["reference"])  # Pysam claims to auto-detect the input format
 
-    # Add this command (clipoverlap) to the BAM header
     # As of pysam V0.14.0, the header is now managed using an AlignmentHeader class.
-    # Thus, support both approaches (when the API for AlignmentHeaders is listed!!!)
+    # Thus, support both approaches
     if version.parse(pysam.__version__) >= version.parse("0.14.0"):
-        raise NotImplementedError("Pysam version 0.14.0 and above are currently not supported.")
+        header = inBAM.header.as_dict()
+    else:
+        header = inBAM.header
 
-    header = inBAM.header
     if "PG" not in header:
         header["PG"] = []
 
@@ -794,15 +797,18 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CLIPOVERLAP"):
             sys.stderr.write("Unable to determine output file type from input stream. Defaulting to BAM")
             outType ="bam"
         else:
-            outType = args["input"].split(".")[-1]
+            outType = args["input"].split(".")[-1].lower()
     else:
         # Determine the output file type via the file extension
-        outType = args["output"].split(".")[-1]
+        outType = args["output"].split(".")[-1].lower()
 
     if outType == "bam":
         outBAM = pysam.AlignmentFile(args["output"], mode="wb", header=header)
     elif outType == "cram":
-        outBAM = pysam.AlignmentFile(args["output"], mode="wc", header=header)
+        # If no reference FASTA was provided, we can't generate a CRAM file
+        if args["reference"] is None:
+            raise AttributeError("\'-r/--reference\' must be provided if using CRAM files")
+        outBAM = pysam.AlignmentFile(args["output"], mode="wc", header=header, reference_filename=args["reference"])
     else:
         outBAM = pysam.AlignmentFile(args["output"], mode="w", header=header)
 
