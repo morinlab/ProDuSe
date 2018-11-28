@@ -288,7 +288,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
                     # Obtain the candidate reverse barcode sequence
                     barcode1 =r1seq.rstrip()[-barcodeLength:]  # Ignore the newline
                     barcode2 = r1seq.rstrip()[-barcodeLength:]
-                    familyBarcode = barcode1 + barcode2
                     b1pos = tuple(barcode1[i] for i in reverseIndexes)
                     b2pos = tuple(barcode2[i] for i in reverseIndexes)
                     # Next,compare these positions to the barcode sequence
@@ -330,7 +329,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
             if count % 100000 == 0:
 
                 sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
-                                            "Discard Rate:" + str(float(discard) / float(count) * 100)[:3] + "%",
+                                            "Discard Rate:" + str(float(discard) / float(count) * 100)[:4] + "%",
                                             "Count:" + str(count) + "\n"]))
                 # Check to see if the discard rate is excessive (>70%). If so, the barcode is probably incorrect
                 if float(discard) / float(count) > 0.70 and not discardWarning:
@@ -346,7 +345,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
     # Final messages
     if count % 100000 != 0:
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'),
-                                    "Discard Rate:" + str(float(discard) / float(count) * 100)[:3] + "%",
+                                    "Discard Rate:" + str(float(discard) / float(count) * 100)[:4] + "%",
                                     "Count:" + str(count) + "\n"]))
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Trimming Complete\n"]))
 
