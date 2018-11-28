@@ -119,7 +119,7 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript, appendNo
     scriptToArgs["bwa"] = {"input": [bwaR1In, bwaR2In], "output": bwaOut, "reference": sampleParameters["reference"],
                            "fastqComment": not sampleParameters["no_barcodes"]}
     scriptToArgs["trim"] = {"input": sampleParameters["fastqs"], "output": [bwaR1In, bwaR2In]}
-    scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut, "plot_prefix": plotDir + sampleName}
+    scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut, "plot_prefix": plotDir + sampleName, "ignore_exception": "True"}
     scriptToArgs["call"] = {"input": collapseSortedOut, "output": callPassedOut, "unfiltered": callAllOut}
 
     for argument, scripts in argsToScript.items():

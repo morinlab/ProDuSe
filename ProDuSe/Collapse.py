@@ -1251,26 +1251,33 @@ class FamilyCoordinator:
                     "\t".join([self.printPrefix, time.strftime('%X'), "Collapsed " + str(self.pairCounter) + " pairs into " + str(counter) + " families" + os.linesep]))
                 sys.stderr.write("\t".join([self.printPrefix, time.strftime('%X'), "Collapse Complete\n"]))
 
-    def generatePlots(self, outPrefix):
+    def generatePlots(self, outPrefix, ignoreException=False):
         """
         Generate several histograms visualizing the family size distribution of duplex and non-duplex read pairs
         :param outPrefix: A string listing the output folder and prefix for the plots
+        :param ignoreException: A boolean indicating if errors that occur during plot generation should be ignored
         :return:
         """
 
         bins = list(range(0, 25)) # We shouldn't have family sizes > 25, unless the library is very saturated
 
-        # Generate a histogram for the overall family size distribution
-        overallAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution")
-        overallHist = overallAx.get_figure()
-        outFile = outPrefix + "Family_Size_Distribution.png"
-        overallHist.savefig(outFile)
+        try:
+            # Generate a histogram for the overall family size distribution
+            overallAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution")
+            overallHist = overallAx.get_figure()
+            outFile = outPrefix + "Family_Size_Distribution.png"
+            overallHist.savefig(outFile)
 
-        # Generate a histogram for families in duplex
-        duplexAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution (duplexes)")
-        duplexHist = overallAx.get_figure()
-        outFile = outPrefix + "Duplex_Family_Size_Distribution.png"
-        duplexHist.savefig(outFile)
+            # Generate a histogram for families in duplex
+            duplexAx = seaborn.distplot(a=self.familyDistribution, axlabel="Family Size", label="Family Size Distribution (duplexes)")
+            duplexHist = overallAx.get_figure()
+            outFile = outPrefix + "Duplex_Family_Size_Distribution.png"
+            duplexHist.savefig(outFile)
+        except BaseException as e:
+            # So the analysis pipeline does not fail simply because the family size plots can't be generated,
+            # quietly handle any errors that occur
+            if not ignoreException:
+                raise e
 
 
 def validateArgs(args):
@@ -1325,6 +1332,7 @@ def validateArgs(args):
                         help="Reference genome, in FASTA format")
     parser.add_argument("--input_format", metavar="SAM/BAM/CRAM", choices=["SAM", "BAM", "CRAM"],
                           help="Input file format [Default: Detect using file extension]")
+    parser.add_argument("--ignore_exception", action="store_true", help=argparse.SUPPRESS)
     validatedArgs = parser.parse_args(listArgs)
     validateArgs = vars(validatedArgs)
 
@@ -1405,6 +1413,7 @@ miscArgs.add_argument("--plot_prefix", metavar="DIR", help="Output directory/pre
 miscArgs.add_argument("--collapse_duplexes", action="store_true",
                     help="Generate a consensus from the forward and reverse strands")
 miscArgs.add_argument("--input_format", metavar="SAM/BAM/CRAM", choices=["SAM", "BAM", "CRAM"], help="Input file format [Default: Detect using file extension]")
+miscArgs.add_argument("--ignore_exception", action="store_true", help=argparse.SUPPRESS)
 
 
 def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
@@ -1528,7 +1537,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
 
     # If the user specified an output directory for plots, generate them
     if args["plot_prefix"] is not None:
-        readProcessor.generatePlots(args["plot_prefix"])
+        readProcessor.generatePlots(args["plot_prefix"], args["ignore_exception"])
 
 
 if __name__ == "__main__":
