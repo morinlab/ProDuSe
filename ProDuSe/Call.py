@@ -354,13 +354,13 @@ class Position(object):
         # Process each variant allele individually
         for base, reads in readNameBaseIndex.items():
             if not reads:  # i.e. the dictionary is empty. There are no reads which support this allele. Use placeholder values
-                self.alleleMapQual[base] = (0)
-                self.alleleBaseQual[base] = (0)
+                self.alleleMapQual[base] = (0,)
+                self.alleleBaseQual[base] = (0,)
                 self.alleleStrandBias[base] = 1
                 self.alleleVafs[base] = 0
-                self.alleleMismatch[base] = (0)
-                self.alleleAvFamSize[base] = (0)
-                self.alleleEndDist[base] = (0)
+                self.alleleMismatch[base] = (0,)
+                self.alleleAvFamSize[base] = (0,)
+                self.alleleEndDist[base] = (0,)
             else:
                 self.alleleMapQual[base] = tuple(self.mappingQual[x] for x in reads.values())
                 self.alleleBaseQual[base] = tuple(self.qualities[x] for x in reads.values())
@@ -738,7 +738,7 @@ class IndelPos(object):
                                 break
                             except IndexError:
                                 continue
-                        self.alleleBaseQual[base] = delBaseQual
+                        self.alleleBaseQual[base] = (delBaseQual,)
                     else:  # Insertion
                         # The inserted seq is stored in "alleles"
                         # Generate a consensus
@@ -772,7 +772,7 @@ class IndelPos(object):
                         except IndexError:  # i.e. the reads which supported the indel were not counted, likely due to duplex handling
                             return False
                         # Take an average of the quality scores
-                        self.alleleBaseQual[base] = int(mean(altQual))
+                        self.alleleBaseQual[base] = (int(mean(altQual)),)
                 else:
                     self.alleleBaseQual[base] = tuple(self.qualities[x] for x in reads.values())
                 self.alleleMapQual[base] = tuple(self.mappingQual[x] for x in reads.values())
@@ -1052,37 +1052,32 @@ class PileupEngine(object):
             # Mean base quality
             meanBaseQual = mean(pos.alleleBaseQual[allele])
             # Calculate differences in base quality btwn reference and alternate alleles
-            try:
+            if pos.strandCounts[ref] > 2:
                 baseQualBias = ttest_ind(pos.alleleBaseQual[ref], pos.alleleBaseQual[allele], equal_var=False).pvalue
                 if baseQualBias != baseQualBias:  #i.e the base quality bias is NaN. Set it to 1
                     baseQualBias = 1
-            except FloatingPointError:
+            else:
                 baseQualBias = 1
 
-        # Calculate differences in read mapping quality between reference and alternate alleles
-        try:
-            mapQualBias = ttest_ind(pos.alleleMapQual[ref], pos.alleleMapQual[allele], equal_var=False).pvalue
-            if mapQualBias != mapQualBias:
-                mapQualBias = 1
-        except FloatingPointError:
+        # If few reads support the reference allele, we can just set all bias values to 1, since there there are too
+        # few reads to actually calculate the p-value
+        if pos.strandCounts[ref] < 2:
             mapQualBias = 1
-
-        # Quantify differences in the number of mismatches supported by each read
-        try:
+            mismatchBias = 1
+            fSizeBias = 1
+        else:
+            # Calculate differences in read mapping quality between reference and alternate alleles
+            mapQualBias = ttest_ind(pos.alleleMapQual[ref], pos.alleleMapQual[allele], equal_var=False).pvalue
+            if mapQualBias != mapQualBias:  # i.e. this is nan
+                mapQualBias = 1
+            # Quantify differences in the number of mismatches supported by each read
             mismatchBias = ttest_ind(pos.alleleMismatch[ref], pos.alleleMismatch[allele], equal_var=False).pvalue
             if mismatchBias != mismatchBias:
                 mismatchBias = 1
-        except FloatingPointError:
-            mismatchBias = 1
-
-        # Quantify differences between the family size supporting the reference and alternate alleles
-        try:
+            # Quantify differences between the family size supporting the reference and alternate alleles
             fSizeBias = ttest_ind(pos.alleleAvFamSize[ref], pos.alleleAvFamSize[allele], equal_var=False).pvalue
             if fSizeBias != fSizeBias:
                 fSizeBias = 1
-        except FloatingPointError:
-            fSizeBias = 1
-
         # Does this mutation indicate DNA damage?
         # C -> A and G -> T mutations are commonly affiliated with DNA damage
         try:
@@ -1148,7 +1143,7 @@ class PileupEngine(object):
             # Is this an indel?
             if isinstance(pos, IndelPos):
                 # If so, we only need to examine one variant
-                qual = pos.alleleBaseQual["ALT"]
+                qual = int(float(filterCon[0]) * 100)
                 alleles = ("REF", "ALT")
                 alt = pos.alt
             else:
@@ -1172,7 +1167,7 @@ class PileupEngine(object):
                 alt = ",".join(altAlleles)
                 alleles = [pos.ref]
                 alleles.extend(altAlleles)
-                qual = int(mean(pos.alleleBaseQual[altAlleles[0]]))
+                qual = ",".join(str(int(float(x) * 100)) for x in filterCon)
 
             # Generate an info column for this variant
             info = []
@@ -1292,7 +1287,7 @@ class PileupEngine(object):
                             if self.varCount % 10000 == 0:
                                 sys.stderr.write(
                                     "\t".join([self._printPrefix, time.strftime('%X'),
-                                               chrom + ":Positions Filtered:" + str(self.varCount) + "\n"]))
+                                               chrom, "Positions Filtered:" + str(self.varCount) + "\n"]))
 
                         # Delete to reduce memory usage
                         for iPos in posToDelete:
@@ -1373,7 +1368,7 @@ class PileupEngine(object):
                     if self.varCount % 10000 == 0:
                         sys.stderr.write(
                             "\t".join([self._printPrefix, time.strftime('%X'),
-                                       chrom + ":Positions Filtered:" + str(self.varCount) + "\n"]))
+                                       chrom + "    Positions Filtered:" + str(self.varCount) + "\n"]))
                 # Process any remaining indels on this chromosome
                 try:
                     for iPos, indel in self.candidateIndels[chrom].items():
@@ -2347,7 +2342,7 @@ class PileupEngine(object):
             if self.readCount % 100000 == 0:
                 if chrom is not None:
                     sys.stderr.write(
-                    "\t".join([self._printPrefix, time.strftime('%X'), chrom + ":Reads Processed:%s\n" % self.readCount]))
+                    "\t".join([self._printPrefix, time.strftime('%X'), chrom, "Reads Processed:%s\n" % self.readCount]))
                 else:                    sys.stderr.write(
                     "\t".join([self._printPrefix, time.strftime('%X'), "Reads Processed:%s\n" % self.readCount]))
 
