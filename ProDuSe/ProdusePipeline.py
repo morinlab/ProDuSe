@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import shutil
 import sys
 import subprocess
 import re
@@ -42,21 +43,25 @@ def isValidFile(file, parser, default=None):
         raise parser.error("Unable to locate \'%s\': No such file or directory" % (file))
 
 
-def makeConfig(configName, configPath, arguments):
+def makeConfig(configName, configPath, arguments, appendNormal=False):
     """
     Creates a config file with the specified arguments
     :param configName: A string containing the base name of the config file
     :param configPath: A string containing a directory in which the config file will be placed
     :param arguments: A dictionary containing {argument: parameter} pairings. To be written to the config file
+    :param appendNormal: Add "_normal" to the same of the config file
     :return:
     """
     config = ConfigObj()
-    config.filename = configPath + os.sep + configName + "_task.ini"
+    if appendNormal:
+        config.filename = configPath + os.sep + configName + "_normal_task.ini"
+    else:
+        config.filename = configPath + os.sep + configName + "_task.ini"
     config[configName] = arguments
     config.write()
 
 
-def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
+def configureOutput(sampleName, sampleParameters, outDir, argsToScript, appendNormal=False):
     # Create a sample-specific output directory inside the specified output directory
     # Inside this directory, we are going to create seperate directories for the data,
     # intermediate files, and results
@@ -64,12 +69,15 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     # If a directory corresponding to this sample already exists, don't proccess this sample,
     # as it likely has already been processed (at least partially)
     samplePath = outDir + os.sep + sampleName
-    if os.path.exists(samplePath):
+    if os.path.exists(samplePath) and not appendNormal:
         sys.stderr.write("WARNING: A folder corresponding to \'%s\' already exists inside \'%s\'.\n" % (sampleName, outDir))
         sys.stderr.write("We will attempt to finish analyzing this sample using the existing configuration.\n")
         return samplePath
 
-    os.mkdir(samplePath)
+    try:
+        os.mkdir(samplePath)
+    except FileExistsError:
+        pass
 
     # Create a tmp directory, which will hold intermediate files
     tmpDir = samplePath + os.sep + "tmp" + os.sep
@@ -81,7 +89,14 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     plotDir = samplePath + os.sep + "figures" + os.sep
     # Create a config directory, which will hold the config file used to run each step of the pipeline
     configDir = samplePath + os.sep + "config" + os.sep
-    os.mkdir(configDir)
+    try:
+        os.mkdir(configDir)
+    except FileExistsError:
+        pass
+
+    # If this is a normal sample, specify it
+    if appendNormal:
+        sampleName = sampleName + ".normal"
 
     # Group the arguments for this sample by the script they will be run in
     # I am going to specify defaults for bwa here, as there is no script to run BWA anymore
@@ -104,7 +119,7 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
     scriptToArgs["bwa"] = {"input": [bwaR1In, bwaR2In], "output": bwaOut, "reference": sampleParameters["reference"],
                            "fastqComment": not sampleParameters["no_barcodes"]}
     scriptToArgs["trim"] = {"input": sampleParameters["fastqs"], "output": [bwaR1In, bwaR2In]}
-    scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut, "plot_dir": plotDir}
+    scriptToArgs["collapse"] = {"input": bwaOut, "output": collapseOut, "plot_prefix": plotDir + sampleName}
     scriptToArgs["call"] = {"input": collapseSortedOut, "output": callPassedOut, "unfiltered": callAllOut}
 
     for argument, scripts in argsToScript.items():
@@ -125,12 +140,30 @@ def configureOutput(sampleName, sampleParameters, outDir, argsToScript):
         # Don't create a config file for trim if there are no barcodes
         if script == "trim" and sampleParameters["no_barcodes"]:
             continue
-        makeConfig(script, configDir, args)
+        makeConfig(script, configDir, args, appendNormal=appendNormal)
 
     # Finally, lets create tmp directories (for the intermediate files), figure directories, and output directories
-    os.mkdir(samplePath + os.sep + "tmp")
-    os.mkdir(samplePath + os.sep + "results")
-    os.mkdir(samplePath + os.sep + "figures")
+    try:
+        os.mkdir(samplePath + os.sep + "tmp")
+        os.mkdir(samplePath + os.sep + "results")
+        os.mkdir(samplePath + os.sep + "figures")
+    except FileExistsError:
+        pass
+
+    # If normal FASTQ files were specified, we will also need to create a config for those samples
+    if sampleParameters["normal_fastqs"] is not None and not appendNormal:
+        # We will need to assign each argument to the corresponding pipeline component
+        normArgsToTumourArgs = {
+            "normal_fastqs": "fastqs",
+            "norm_barcode_sequence": "barcode_sequence",
+            "norm_barcode_position": "barcode_position",
+            "norm_max_mismatch": "max_mismatch",
+            "no_norm_barcodes": "no_barcodes"
+        }
+        for normArg, tumourArg in normArgsToTumourArgs.items():
+            sampleParameters[tumourArg] = sampleParameters[normArg]
+
+        configureOutput(sampleName, sampleParameters, outDir, argsToScript, appendNormal=True)
     return samplePath
 
 
@@ -147,7 +180,7 @@ def combineArgs(confArgs, args):
     for parameter, arg in args.items():
 
         try:
-            if arg is None and parameter in confArgs["Pipeline"]:
+            if (arg is None or arg is False) and parameter in confArgs["Pipeline"]:
                 # If this parameter is specified in the config file, add it to the argument groupings
                 args[parameter] = confArgs["Pipeline"][parameter]
         except KeyError as e:
@@ -166,6 +199,10 @@ def checkArgs(rawArgs):
     :param rawArgs: A dictionary containing {argument: parameter}
     :returns: A namespace object coresponding to the validated parameters
     """
+
+    # If --fastqs were specified, ignore any sample configuration file specified in the config file
+    if rawArgs["fastqs"] is not None and rawArgs["fastqs"] != "None":
+        rawArgs["sample_config"] = None
 
     # Convert the dictionary of arguments to a list, to allow for parsing
     listArgs = []
@@ -215,6 +252,12 @@ def checkArgs(rawArgs):
     inputFiles.add_argument("-sc", "--sample_config", metavar="INI", default=None,
                             type=lambda x: isValidFile(x, parser),
                             help="A sample cofiguration file, specifying one or more samples")
+    parser.add_argument("--normal_fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
+                        help="An optional set of paired-end FASTQ files corresponding to the matched normal of \'--fastqs\'")
+    parser.add_argument("-n", "--normal", metavar="BAM", default=None, type=lambda x: isValidFile(x, parser),
+                        help="An optional matched normal BAM file of \'--fastqs\'")
+    parser.add_argument("--norm_barcodes", action="store_true",
+                        help="The \'--normal_fastqs\' use barcoded adapters")
 
     trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
     trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
@@ -225,6 +268,13 @@ def checkArgs(rawArgs):
                           help="The maximum number of mismatches permitted between the expected and actual barcode sequences [Default: 3]")
     trimArgs.add_argument("--trim_other_end", action="store_true",
                         help="In addition, examine the other end of the read for a barcode. Will not remove partial barcodes")
+    # Once again, hide these, as they shouldn't be commonly used, and will just clutter the usage message
+    trimArgs.add_argument("--norm_barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
+                          help=argparse.SUPPRESS)
+    trimArgs.add_argument("--norm_barcode_position", metavar="0001111111111110", type=str,
+                          help=argparse.SUPPRESS)
+    trimArgs.add_argument("--norm_max_mismatch", metavar="INT", type=int,
+                          help=argparse.SUPPRESS)
 
     collapseArgs = parser.add_argument_group("Arguments used when Collapsing families into a consensus")
     collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str, required=barParamReq,
@@ -261,7 +311,18 @@ def checkArgs(rawArgs):
 
     validatedArgs = parser.parse_args(args=listArgs)
 
-    return vars(validatedArgs)
+    # Check that the user hasn't accidentally specified the number of threads as "--barcode_position"
+    positionComp = set(validatedArgs.barcode_position)
+    for element in positionComp:
+        if element != "0" and element != "1":
+            raise parser.error("\'-p/--barcode_position\' should be specified using \"1\" and \"0\". Did you mean \"-j/--jobs\"")
+
+    validatedArgs = vars(validatedArgs)
+
+    # Finally, invert norm_barcodes, so it is consistent with no_barcodes for the normals
+    validatedArgs["no_norm_barcodes"] = not validatedArgs["norm_barcodes"]
+
+    return validatedArgs
 
 
 def checkCommand(command, path, versionStr=None, minVer=None):
@@ -345,6 +406,10 @@ def createLogFile(filePath, args, **toolVer):
 
         # Add command line parameters
         for argument, parameter in args.items():
+            # If the parameter is a list (ex. FASTQs or norm_fastqs), we need to cast it into a string so it can be
+            # parsed as a config file
+            if isinstance(parameter, list):
+                parameter = ",".join(parameter)
             o.write(str(argument) + "=" + str(parameter) + os.linesep)
         o.write(os.linesep)
 
@@ -589,12 +654,28 @@ def runPipeline(sampleName, sampleDir, cleanup=False):
             open(trimDone,
                  "w").close()  # After Trim completes, it will create this file, signifying to the end user that this task completed
 
+    # Run Trim on the normal (if specified)
+    trimNormConfig = os.path.join(sampleDir, "config", "trim_normal_task.ini")
+    trimNormDone = os.path.join(sampleDir, "config", "Trim_Normal_Complete")  # Similar to Make's "TASK_COMPLETE" file
+    if os.path.exists(trimNormConfig) and not os.path.exists(trimNormDone):  # i.e. Did Trim already complete for the normal? If so, do not re-run it
+        # Is there a trim config file? If not, then we don't need to run trim, as the sample doesn't have barcodes
+        trimPrintPrefix = "PRODUSE-TRIM\t\t" + sampleName + "-Normal"
+        Trim.main(sysStdin=["--config", trimNormConfig], printPrefix=trimPrintPrefix)  # Actually run Trim
+        open(trimNormDone, "w").close()  # After Trim completes, it will create this file, signifying to the end user that this task completed
+
     # Run bwa
     bwaDone = os.path.join(sampleDir, "config", "BWA_Complete")
     if not os.path.exists(bwaDone):
         bwaConfig = os.path.join(sampleDir, "config", "bwa_task.ini")
         runBWA(bwaConfig)
         open(bwaDone, "w").close()
+
+    # Run BWA on the normal (if required)
+    bwaNormDone = os.path.join(sampleDir, "config", "BWA_Normal_Complete")
+    bwaNormConfig = os.path.join(sampleDir, "config", "bwa_normal_task.ini")
+    if os.path.exists(bwaNormConfig) and not os.path.exists(bwaNormDone):
+        runBWA(bwaNormConfig)
+        open(bwaNormDone, "w").close()
 
     # Run Collapse
     collapseDone = os.path.join(sampleDir, "config", "Collapse_Complete")
@@ -617,6 +698,26 @@ def runPipeline(sampleName, sampleDir, cleanup=False):
         sortAndRetag(sortInput, sortOutput, bwaConfig)
 
         open(collapseDone, "w").close()
+
+    # Run Collapse on the normal sample (if specified)
+    collapseNormDone = os.path.join(sampleDir, "config", "Collapse_Normal_Complete")
+    collapseNormConfig = os.path.join(sampleDir, "config", "collapse_normal_task.ini")
+    if os.path.exists(collapseNormConfig) and not os.path.exists(collapseNormDone):
+        collapsePrintPrefix = "PRODUSE-COLLAPSE\t" + sampleName + "-Normal"
+        Collapse.main(sysStdin=["--config", collapseNormConfig], printPrefix=collapsePrintPrefix)
+
+        # Sort the collapse normal BAM output
+        # Parse the config file for the output file name
+        collapseConfArgs = ConfigObj(collapseNormConfig)
+        sortInput = collapseConfArgs["collapse"]["output"]
+        # Append "sort" as the output file name
+        sortOutput = sortInput.replace(".bam", ".sort.bam")
+        tmpDir = os.sep + "tmp" + os.sep
+        resultsDir = os.sep + "results" + os.sep
+        sortOutput = sortOutput.replace(tmpDir, resultsDir)
+        sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Sorting final matched-normal BAM file, and recalculating tags...\n"]))
+        bwaConfig = os.path.join(sampleDir, "config", "bwa_task.ini")
+        sortAndRetag(sortInput, sortOutput, bwaConfig)
 
     # Run call (variant calling)
     callDone = os.path.join(sampleDir, "config", "Call_Complete")
@@ -651,6 +752,11 @@ parser.add_argument("-r", "--reference", metavar="FASTA",
                     help="Reference genome, in FASTA format. BWA indexes should present in the same directory")
 parser.add_argument("-d", "--outdir", metavar="DIR", help="Output directory for analysis directory")
 parser.add_argument("--no_barcodes", action="store_true", help="Does not use semi-degenerate barcoded adapters")
+parser.add_argument("--normal_fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
+                    help="An optional set of paired-end FASTQ files corresponding to the matched normal of \'--fastqs\'")
+parser.add_argument("--normal", metavar="BAM", default=None, type=lambda x: isValidFile(x, parser),
+                    help="An optional matched normal BAM file of \'--fastqs\'")
+parser.add_argument("--norm_barcodes", action="store_true", help="The \'--normal_fastqs\' use barcoded adapters")
 
 trimArgs = parser.add_argument_group("Arguments used when Trimming barcodes")
 trimArgs.add_argument("-b", "--barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
@@ -660,6 +766,13 @@ trimArgs.add_argument("-p", "--barcode_position", metavar="0001111111111110", ty
 trimArgs.add_argument("-mm", "--max_mismatch", metavar="INT", type=int,
                       help="The maximum number of mismatches permitted between the expected and actual barcode sequences [Default: 3]")
 trimArgs.add_argument("--trim_other_end", action="store_true", help="In addition, examine the other end of the read for a barcode. Will not remove partial barcodes")
+# Since these arguments will be rarely used, hide them as to minimize clutter
+trimArgs.add_argument("--norm_barcode_sequence", metavar="NNNWSMRWSYWKMWWT", type=str,
+                      help=argparse.SUPPRESS)
+trimArgs.add_argument("--norm_barcode_position", metavar="0001111111111110", type=str,
+                      help=argparse.SUPPRESS)
+trimArgs.add_argument("--norm_max_mismatch", metavar="INT", type=int,
+                      help=argparse.SUPPRESS)
 
 collapseArgs = parser.add_argument_group("Arguments used when Collapsing families into a consensus")
 collapseArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str,
@@ -707,7 +820,8 @@ argsToPipelineComponent = {
     "tag_family_members": ["collapse"],
     "filter" : ["call"],
     "threshold": ["call"],
-    "no_barcodes": ["collapse"]
+    "no_barcodes": ["collapse"],
+    "normal": ["call"]
 }
 
 
@@ -721,7 +835,6 @@ def main(args=None, sysStdin=None):
             args = vars(args)
 
     # If a config file was specified, parse the arguments out of it
-    confArgs = None
     if args["config"] is not None:
         confArgs = ConfigObj(args["config"])
         args = combineArgs(confArgs, args)
@@ -743,20 +856,24 @@ def main(args=None, sysStdin=None):
     # First, check to see if this output directory already exists in the specified path
     args["outdir"] = os.path.abspath(args["outdir"])
     baseOutDir = args["outdir"] + os.sep + args["directory_name"]
-    if os.path.exists(baseOutDir):
-        if not args["append_to_directory"]:
+    if os.path.exists(baseOutDir) and not args["append_to_directory"]:
             sys.stderr.write("ERROR: \'%s\' already exists in \'%s\'\n" % (args["directory_name"], args["outdir"]))
             sys.stderr.write("Use \'--append_to_directory\' to append results to the existing directory\n")
             sys.exit(1)
     else:
         os.mkdir(baseOutDir)
 
+    # For reproducability, copy the variant filter to the base output directory
+    filterBaseName = os.path.basename(args["filter"])
+    filterOutName = os.path.join(baseOutDir, filterBaseName)
+    shutil.copy(args["filter"], filterOutName)
+
     # Create a log file specifying the command line parameters
     logFileName = baseOutDir + os.sep + "ProDuSe_task.log"
     createLogFile(logFileName, args, bwa=bwaVer, samtools=samtoolsVer, python=pythonVer)
 
     # Finally, organize samples and prepare to run the entire pipeline on each sample
-    # If only a single sample was specified at the command (i.e. a single pair of FASTQ files, using -f)
+    # If only a single sample was specified at the command (i.e. a single pair of FASTQ files, using --fastqs)
     samples = {}
     if args["fastqs"]:
         # Generate a sample name
@@ -796,6 +913,11 @@ def main(args=None, sysStdin=None):
                 [printPrefix, time.strftime('%X'),
                  "WARNING: Two FASTQ files must be provided for \'%s\', Skipping...\n" % (sample)]))
             continue
+        elif runArgs["normal_fastqs"] is not None and len(runArgs["normal_fastqs"]) != 2:
+            sys.stderr.write("\t".join(
+                [printPrefix, time.strftime('%X'),
+                 "WARNING: If specifying normal FASTQs for \'%s\', two FASTQ files must be provided. Skipping...\n" % (sample)]))
+            continue
 
         # If a barcode was not specified, and there is one, estimate it using adapter_predict
         # Note that this will end catastrophically if the sample is multiplexed
@@ -808,11 +930,36 @@ def main(args=None, sysStdin=None):
             runArgs["barcode_sequence"] = AdapterPredict.main(sysStdin=adapterPredictArgs, supressOutput=True)
             # Check if the resulting barcode is garbage
             if set(runArgs["barcode_sequence"]) == {"N"}:
-                sys.stderr.write("WARNING: Unable to predict barcode sequence for \'%s\'. Skipping..." % sample)
+                sys.stderr.write("WARNING: Unable to predict barcode sequence for \'%s\'. Skipping..." % sample + os.linesep)
                 continue
             elif "N" in runArgs["barcode_sequence"]:  # TODO: Improve this estimate
                 sys.stderr.write("WARNING: The barcode sequence predicted for \'%s\' is quite broad\n" % sample)
                 sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the resulting analysis will merge those samples\n")
+
+        # If matched normal FASTQ files were provided, we also need to check for barcodes
+        if runArgs["normal_fastqs"] and not runArgs["no_norm_barcodes"] and runArgs["norm_barcode_sequence"] is None:
+            if not barcodeWarned:
+                sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Predicting Barcode Sequences...\n"]))
+                barcodeWarned = True
+            # If no barcode length was explicitly set for the normal FASTQs, assume it is the same as the tumour sample
+            if runArgs["norm_barcode_position"] is None:
+                runArgs["norm_barcode_position"] = runArgs["barcode_position"]
+            adapterPredictArgs = ["--max_barcode_length", str(len(runArgs["norm_barcode_position"])), "--input"]
+            adapterPredictArgs.extend(runArgs["normal_fastqs"])
+            runArgs["norm_barcode_sequence"] = AdapterPredict.main(sysStdin=adapterPredictArgs, supressOutput=True)
+            # Check if the resulting barcode is garbage
+            if set(runArgs["norm_barcode_sequence"]) == {"N"}:
+                sys.stderr.write("WARNING: Unable to predict normal sample barcode sequence for \'%s\'. Skipping..." % sample)
+                continue
+            elif "N" in runArgs["norm_barcode_sequence"]:  # TODO: Improve this estimate
+                sys.stderr.write("WARNING: The barcode sequence predicted for \'%s\' is quite broad\n" % sample)
+                sys.stderr.write("We'll continue anyways, but if these FASTQs are multiplexed, the resulting analysis will merge those samples\n")
+
+        # If matched normal FASTQ files were specified, there will be an output BAM file, so lets specify that to the
+        # tumour call script
+        if runArgs["normal_fastqs"] is not None:
+            normBam = os.path.join(baseOutDir, sample, "results", sample + ".normal.collapse.sort.bam")
+            runArgs["normal"] = normBam
 
         # Configure the output directories and config files for this sample
         sampleDir = configureOutput(sample, runArgs, baseOutDir, argsToPipelineComponent)
