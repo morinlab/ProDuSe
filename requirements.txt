@@ -1,11 +1,11 @@
 sortedcontainers
-numpy>=1.9.2
+numpy
 configobj
 scikit-bio
 pyfaidx
-pysam==0.13.0
+pysam
 packaging
-sklearn
+scikit-learn==0.20.1
 scipy
 seaborn
 fisher
