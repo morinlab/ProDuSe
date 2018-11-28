@@ -1510,7 +1510,10 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-COLLAPSE"):
             command += " " + str(parameter)
     header["PG"].append({"ID": "PRODUSE-COLLAPSE", "PN": "ProDuSe", "CL": command})
 
-    outFileExt = args["output"].split(".")[-1].upper()
+    try:
+        outFileExt = args["output"].split(".")[-1].upper()
+    except AttributeError:  # i.e. we are writing to a pipe. There is no file extension
+        outFileExt = None
     if outFileExt == "BAM":
         outBAM = pysam.AlignmentFile(args["output"], "wb", template=inBAM, header=header)
     elif outFileExt == "SAM":
