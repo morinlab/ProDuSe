@@ -1610,35 +1610,15 @@ class PileupEngine(object):
         indelSize = len(altPosition.alt) - len(altPosition.ref)
         pileupEnd = position - indelSize if indelSize < 0 else position + 1
         pileupEnd += self._softClipUntilIndel
-        windowStart = 0
-        first = True
-        windowEnd = 0
-        positions = self._normalFile.pileup(contig=chrom, start=pileupStart, stop=pileupEnd, maxDepth=20000)
         # Parse all reads which overlap this position
-        read1Reads = {}
-        read2Reads = {}
-        for pileupPos in positions:
-            if first:
-                windowStart = pileupPos.pos
-                first = False
-            windowEnd = pileupPos.pos
-            # Obtain all the reads which overlap this position
-            # If we have already included this read, don't double count it
-            for read in pileupPos.pileups:
-                read = read.alignment
-                if read.is_read1:
-                    read1Reads[read.query_name] = read
-                elif read.is_read2:
-                    read2Reads[read.query_name] = read
-
-        normalReads = tuple(read1Reads.values()) + tuple(read2Reads.values())
+        normalReads = tuple(self._normalFile.fetch(contig=chrom, start=pileupStart, stop=pileupEnd))
 
         # If there is too little coverage at this locus, then we can't accurately determine if this mutation is germline
         if len(normalReads) < minReadThreshold:
             return None
 
-        windowStart -= sequenceWindow
-        windowEnd += sequenceWindow
+        windowStart = pileupStart - sequenceWindow
+        windowEnd = pileupEnd + sequenceWindow
         # Set the reference buffer correctly so the correct haplotypes are generated
         self._refWindow = self._refGenome[self._chrom][windowStart - self._realignBuffer:windowEnd + self._realignBuffer].seq
         self._refStart = windowStart - self._realignBuffer
@@ -1654,6 +1634,7 @@ class PileupEngine(object):
         simRead = discountPysamRead(altSeq, windowStart, windowEnd - windowStart)
         # Create the relevant haplotypes
         refHap, altHap = self.generateHaplotypes([simRead], softclippingBuffer=0)
+
 
         # Align all reads in the normal against these haplotypes, and determine which reads support which haplotype
         refReads = []
@@ -1707,6 +1688,7 @@ class PileupEngine(object):
         :param mismatchMax: The lead length multiplied this is the maximum number of mismatched permitted before the read is flagged as supporting an indel
         """
 
+        refBases = {"A", "C", "G", "T"}
         if self._oBAM:
             self._oBAM.write(read)
         # Is this read valid? Check the naming scheme of the read, and identify each feature stored in the name
@@ -1805,6 +1787,10 @@ class PileupEngine(object):
                     # If this position has not been covered before, we need to generate a new pileup at this position
                     if position not in self.pileup[self._chrom]:
                         refBase = self._refWindow[position - self._refStart]
+                        # If the reference base at this position is degenerate, we should ignore this position,
+                        # as we can not be certain this position is even a variant
+                        if refBase not in refBases:
+                            continue
                         self.pileup[self._chrom][position] = Position(refBase)
 
                     pileupPos = self.pileup[self._chrom][position]
