@@ -294,7 +294,7 @@ class Family:
         self.size += family.size
         self.members.extend(family.members)
 
-    def consensus(self, abnormalityThresold=0.4):
+    def consensus(self):
         """
         Merge all sequences and quality scores stored in this read pair into a consensus
         """
@@ -303,26 +303,32 @@ class Family:
         # This "Family" object can store more than one read pair
         # And I think it's about time we fixed that
 
-        # First, because of some cigar sequence BS, we need to account for the fact that
-        # some of these families may have some leading soft clipping
-        # The easiest way to account for this is to simply figure out what the offset of each
-        # sequence is
-
-        R1consensus, R1qual, R1cigar, R1softClip = self._consensusByRead(self.R1sequence, self.R1qual, self.R1cigar, self.R1.is_reverse)
-        R2consensus, R2qual, R2cigar, R2softClip = self._consensusByRead(self.R2sequence, self.R2qual, self.R2cigar, self.R2.is_reverse)
-        self.R1sequence = [R1consensus]
-        self.R2sequence = [R2consensus]
-        self.R1qual = [R1qual]
-        self.R2qual = [R2qual]
-        self.R1cigar = [R1cigar]
-        self.R2cigar = [R2cigar]
-        self.R1start += R1softClip
-        self.R2start += R2softClip  # Compensate for any changes in soft-clipping
+        # If there is actually only one read pair stored in this family, we don't need to do anything
+        try:
+            self.R1sequence[1]
+            # First, because of some cigar sequence BS, we need to account for the fact that
+            # some of these families may have some leading soft clipping
+            # The easiest way to account for this is to simply figure out what the offset of each
+            # sequence is
+            R1consensus, R1qual, R1cigar, R1softClip = self._consensusByRead(self.R1sequence, self.R1qual, self.R1cigar, self.R1.is_reverse)
+            R2consensus, R2qual, R2cigar, R2softClip = self._consensusByRead(self.R2sequence, self.R2qual, self.R2cigar, self.R2.is_reverse)
+            self.R1sequence = [R1consensus]
+            self.R2sequence = [R2consensus]
+            self.R1qual = [R1qual]
+            self.R2qual = [R2qual]
+            self.R1cigar = [R1cigar]
+            self.R2cigar = [R2cigar]
+            self.R1start += R1softClip
+            self.R2start += R2softClip  # Compensate for any changes in soft-clipping
+        except IndexError:
+            # i.e. there is only one read pair stored at this position
+            # In this case, we should reset the read start positions back to the original position
+            self.R1start = self.R1.reference_start
+            self.R2start = self.R2.reference_start
 
     def _consensusByRead(self, sequences, qualities, cigars, reverseClip=False):
 
         # Generate a consensus for all reads in the family in the provided orientation
-
         consensusSeq = []
         consensusQual = []
         consensusCigar = []
@@ -409,9 +415,6 @@ class Family:
                         baseIndex[i] += 1
                     seqCollapsed += 1
 
-                #except IndexError:
-                #    pass
-
             if seqCollapsed / seqNumber < 0.5:
                 break
 
@@ -455,7 +458,6 @@ class Family:
                     maxCigOp = 0
 
             # Next, determine if the insertion is actually more common than the current base
-            # TODO: Check if this breaks anything. Because it looks like it might
             insertionWeight = sum(insertion[0][x][0] for x in insertion[0]) if len(insertion) != 0 else -1
             if insertionWeight > seqCollapsed/ 2:
 
