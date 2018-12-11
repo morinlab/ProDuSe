@@ -1078,13 +1078,13 @@ class FamilyCoordinator:
                 # Discard supplementary and secondary alignments
                 if read.is_supplementary or read.is_secondary:
                     continue
-                self.readCounter += 1
                 # If this read and it's mate are unmapped, ignore it
                 try:
                     currentPos = read.reference_start
                     currentChrom = read.reference_name
                 except ValueError:
                     continue
+                self.readCounter += 1
 
                 # If the start position of this read is not the same as the start position of the
                 # previous read, and assuming the input BAM file is sorted, then we can assume that
@@ -1159,18 +1159,21 @@ class FamilyCoordinator:
                 # Is this read pair missing a cigar string? If so, don't process it
                 if pair.malformed:
                     self.malformedCigar += 1
+                    self.readCounter -= 2
                     continue
 
                 # Is this read pair missing a barcode tag? If so, we can't process it, as we
                 # won't be able to find out which family it belongs to
                 if pair.invalidBarcode:
                     self.missingBarcode += 1
+                    self.readCounter -= 2
                     continue
 
                 # If this read pair is split(i.e. the reads map to different chromosomes), then it's very likely that
                 # one of the existing read's positions was processed a long time ago. In which case, we can no longer
                 # collapse it
                 if pair.isSplit:
+                    self.readCounter -= 2
                     continue
 
                 # if this read pair falls outside the capture space completely, don't process it
@@ -1178,6 +1181,7 @@ class FamilyCoordinator:
                     withinCapture = self._withinCaptureSpace(pair)
                     if not withinCapture:
                         self.outsideCaptureSpace += 1
+                        self.readCounter -= 2
                         continue
 
                 # If this read pair contains leading soft clipping, then the start position of
@@ -1309,23 +1313,23 @@ def validateArgs(args):
             listArgs.append(str(parameter))
 
     parser = argparse.ArgumentParser(description="Collapsed duplicate sequences into a consensus")
-    parser.add_argument("-c", "--config", type=lambda x: isValidFile(x, parser),
+    parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                         help="An optional configuration file, which can provide one or more arguments")
-    parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser, True), required=True,
+    parser.add_argument("-i", "--input", metavar="SAM/BAM/CRAM", type=lambda x: isValidFile(x, parser, True), required=True,
                         help="Input sorted SAM/BAM/CRAM file (use \"-\" to read from stdin [use control + d to stop reading])")
-    parser.add_argument("-o", "--output", required=True,
+    parser.add_argument("-o", "--output", metavar="SAM/BAM/CRAM", required=True,
                         help="Output SAM/BAM/CRAM file (use \"-\" to write to stdout). Will be unsorted")
-    parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
+    parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser),
                         help="A BED file listing targets of interest")
     parser.add_argument("--no_barcodes", action="store_true", help="This sample is not using barcoded adapters")
     parser.add_argument("--collapse_duplexes", action="store_true", help="Generate a consensus from the forward and reverse strands")
-    parser.add_argument("-fm", "--family_mask", type=str,
+    parser.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str,
                         help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
-    parser.add_argument("-dm", "--duplex_mask", type=str,
+    parser.add_argument("-dm", "--duplex_mask", metavar="0000000001111110", type=str,
                         help="Positions in the barcode to consider when determining if two families are in duplex (1=Consider, 0=Ignore)")
-    parser.add_argument("-fmm", "--family_mismatch", type=int,
+    parser.add_argument("-fmm", "--family_mismatch", metavar="INT", type=int,
                         help="Maximum number of mismatches permitted when collapsing reads into a family")
-    parser.add_argument("-dmm", "--duplex_mismatch", type=int,
+    parser.add_argument("-dmm", "--duplex_mismatch", metavar="INT", type=int,
                         help="Maximum number of mismatches permitted when identifying of two families are in duplex")
     parser.add_argument("--tag_family_members", action="store_true",
                         help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
@@ -1390,24 +1394,24 @@ def isValidFile(file, parser, allowStream=False):
 
 # Process command line arguments
 parser = argparse.ArgumentParser(description="Collapsed duplicate sequences into a consensus")
-parser.add_argument("-c", "--config", type=lambda x: isValidFile(x, parser),
+parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can provide one or more arguments")
-parser.add_argument("-i", "--input", type=lambda x: isValidFile(x, parser, True),
+parser.add_argument("-i", "--input", metavar="SAM/BAM/CRAM", type=lambda x: isValidFile(x, parser, True),
                     help="Input sorted SAM/BAM/CRAM file (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
-parser.add_argument("-o", "--output", help="Output SAM/BAM/CRAM file (use \"-\" to write to stdout). Will be unsorted")
-parser.add_argument("-r", "--reference", type=lambda x: isValidFile(x, parser),
+parser.add_argument("-o", "--output", metavar="SAM/BAM/CRAM", help="Output SAM/BAM/CRAM file (use \"-\" to write to stdout). Will be unsorted")
+parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser),
                     help="Reference genome, in FASTA format")
-parser.add_argument("-t", "--targets", type=lambda x: isValidFile(x, parser),
+parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile(x, parser),
                     help="A BED file listing target regions of interest")
 parser.add_argument("--no_barcodes", action="store_true", help="This sample is not using barcoded adapters")
 barcodeArgs = parser.add_argument_group(description="Arguments when using barcoded adapters")
-barcodeArgs.add_argument("-fm", "--family_mask", type=str,
+barcodeArgs.add_argument("-fm", "--family_mask", metavar="0001111111111110", type=str,
                     help="Positions in the barcode to consider when collapsing reads into a consensus (1=Consider, 0=Ignore)")
-barcodeArgs.add_argument("-dm", "--duplex_mask", type=str,
+barcodeArgs.add_argument("-dm", "--duplex_mask", metavar="0000000001111110", type=str,
                     help="Positions in the barcode to consider when determining if two families are in duplex (1=Consider, 0=Ignore)")
-barcodeArgs.add_argument("-fmm", "--family_mismatch", type=int,
+barcodeArgs.add_argument("-fmm", "--family_mismatch", metavar="INT", type=int,
                     help="Maximum number of mismatches permitted when collapsing reads into a family")
-barcodeArgs.add_argument("-dmm", "--duplex_mismatch", type=int,
+barcodeArgs.add_argument("-dmm", "--duplex_mismatch", metavar="INT", type=int,
                     help="Maximum number of mismatches permitted when identifying of two families are in duplex")
 miscArgs = parser.add_argument_group(description="Miscellaneous Arguments")
 miscArgs.add_argument("--tag_family_members", action="store_true", help="Store the names of all reads used to generate a consensus in the tag \'Zm\'")
