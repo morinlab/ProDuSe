@@ -87,9 +87,9 @@ def main(args=None, sysStdin=None):
             processPool.map(ProdusePipeline.runPipelineMultithread, multithreadArgs)
             processPool.close()
             processPool.join()
-        except KeyboardInterrupt as e:
+        except Exception as e:
+            sys.stderr.write("Error occured while processing sample. Terminating workers..." + os.linesep)
             processPool.terminate()
-            processPool.join()
             raise e
     # Obtain the sample name, and re-run this sample
     for sampleName, sPath in validSamples.items():

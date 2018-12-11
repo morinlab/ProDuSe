@@ -983,12 +983,13 @@ def main(args=None, sysStdin=None):
         multithreadArgs = list((x.ljust(maxLength, " "), y, args["cleanup"]) for x, y in samplesToProcess.items())
         try:
             # Run the jobs
-            processPool.map_async(runPipelineMultithread, multithreadArgs)
+            processPool.map(runPipelineMultithread, multithreadArgs)
             processPool.close()
             processPool.join()
-        except KeyboardInterrupt as e:
+        except Exception as e:
+            sys.stderr.write("Error occured while processing sample. Terminating workers..." + os.linesep)
+            # This is very likely to deadlock
             processPool.terminate()
-            processPool.join()
             raise e
 
     else:
