@@ -2701,8 +2701,11 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
         oVCFFiles = []
         uVCFFiles = []
         for contig in contigNames:
-            # Add output BAM name
-            oBAMName = args["realigned_BAM"] + "." + contig
+            # Specify the output BAM file for this contig
+            if args["realigned_BAM"] is not None:
+                oBAMName = args["realigned_BAM"] + "." + contig
+            else:
+                oBAMName = None
             bamFiles.append(oBAMName)
             multithreadArgs[i][0][outBAMIndex] = oBAMName
             # Add output VCF name
@@ -2730,9 +2733,10 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
             raise e
 
         # Finally, merge the output files
-        pysam.merge("-f", args["realigned_BAM"], *bamFiles)
-        for bFile in bamFiles:
-            os.remove(bFile)
+        if args["realigned_BAM"] is not None:
+            pysam.merge("-f", args["realigned_BAM"], *bamFiles)
+            for bFile in bamFiles:
+                os.remove(bFile)
         with open(args["output"], "w") as o:
             for oVCFFile in oVCFFiles:
                 with open(oVCFFile) as v:
