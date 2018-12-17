@@ -374,7 +374,7 @@ def checkCommand(command, path, versionStr=None, minVer=None):
     # Prints out an error if the command is not installed
     except OSError:
         sys.stderr.write("ERROR: Unable to run \'%s\'\n" % (command))
-        sys.stderr.write("Please ensure the executable exists, and try again\n")
+        sys.stderr.write("Please ensure the executable exists, and was installed correctly\n")
         sys.exit(1)
 
     return currentVer
@@ -983,7 +983,7 @@ def main(args=None, sysStdin=None):
         multithreadArgs = list((x.ljust(maxLength, " "), y, args["cleanup"]) for x, y in samplesToProcess.items())
         try:
             # Run the jobs
-            processPool.map(runPipelineMultithread, multithreadArgs)
+            processPool.imap_unordered(runPipelineMultithread, multithreadArgs)
             processPool.close()
             processPool.join()
         except Exception as e:
