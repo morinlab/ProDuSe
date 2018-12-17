@@ -1146,6 +1146,10 @@ class PileupEngine(object):
                 qual = int(float(filterCon[0]) * 100)
                 alleles = ("REF", "ALT")
                 alt = pos.alt
+                # For deletions, in a VCF file, the entry references the base before the indel
+                # In this case, we need to account for differences in indexing
+                if len(pos.alt) == 1:
+                    start -= 1
             else:
                 # Otherwise, we need to arrange the alternate alleles by their frequency
                 altAlleles = []
@@ -1579,7 +1583,7 @@ class PileupEngine(object):
         else:
             return True  # Germline
 
-    def _checkIfGermlineIndel(self, chrom, position, altPosition, pValThresh=0.05, minReadThreshold=6, sequenceWindow=200, minVafThreshold=0.33, maxVafThreshold=0.08):
+    def _checkIfGermlineIndel(self, chrom, position, altPosition, pValThresh=0.05, minReadThreshold=6, sequenceWindow=200, minVafThreshold=0.33):
         """
         Determines if a given indel is a germline mutation
 
@@ -1592,7 +1596,6 @@ class PileupEngine(object):
         :param pValThresh: A float indicating the p-value threshold. If the fisher's pvalue is above this threshold, the variant is flagged as germline
         :param minReadThreshold: An int indicating the minimum normal depth required to confidently assign a variant as germline or not
         :param minVafThreshold: A float. If the VAF in the normal sample is higher than this threshold, the variant is flagged as germline
-        :param maxVafThreshold: A flat. If the normal sample VAF is lower than this threshold, the variant is flagged as somatic
         :return: A boolean indicating if the variant is germline, or None, if there is insufficient depth
         """
 
@@ -1619,9 +1622,17 @@ class PileupEngine(object):
 
         windowStart = pileupStart - sequenceWindow
         windowEnd = pileupEnd + sequenceWindow
+
+        refWindowStart = windowStart - self._realignBuffer
+        if refWindowStart < 0:
+            refWindowStart = 0
+        refWindowEnd = windowEnd + self._realignBuffer
+        if refWindowEnd > self._refGenome.records[self._chrom].unpadded_len:
+            refWindowEnd = self._refGenome.records[self._chrom].unpadded_len
+
         # Set the reference buffer correctly so the correct haplotypes are generated
-        self._refWindow = self._refGenome[self._chrom][windowStart - self._realignBuffer:windowEnd + self._realignBuffer].seq
-        self._refStart = windowStart - self._realignBuffer
+        self._refWindow = self._refGenome[self._chrom][refWindowStart:refWindowEnd].seq
+        self._refStart = refWindowStart
 
         # If this is a deletion, remove bases from the sequence
         if indelSize < 0:
@@ -1665,12 +1676,13 @@ class PileupEngine(object):
         # Calculate normal VAF
         normVaf = altCount / (refCount + altCount)
         # Based on the VAF, can we assign this mutation as somatic or germline?
-        # We set a VAF threshold, as very low VAF variants in the tumour will be flagged as germline even if there
-        # are no reads supporting the alternate allele in the tumour
         if normVaf > minVafThreshold:
             return True  # Germline
-        elif normVaf < maxVafThreshold:
-            return False  # Somatic
+        # If there is only one read supporting the alternate allele, it is probably an artifact, and not a germline
+        # mutation. For low VAF somatic events, these will be flagged as germline
+        # Thus, flag events with only one read supporting it in the germline as somatic
+        if altCount < 2:
+            return False
 
         # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
         pVal = fisher_exact(refCount, altCount, altPosition.strandCounts["REF"], altPosition.strandCounts["ALT"]).right_tail
@@ -2724,7 +2736,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
         # Run the jobs
         processPool = multiprocessing.Pool(processes=threads)
         try:
-            processPool.map_async(runCallMultithreaded, multithreadArgs)
+            processPool.imap_unordered(runCallMultithreaded, multithreadArgs)
             processPool.close()
             processPool.join()
         except KeyboardInterrupt as e:
