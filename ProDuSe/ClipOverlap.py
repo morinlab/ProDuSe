@@ -692,11 +692,12 @@ def reparseArgs(args):
             listArgs.append(str(parameter))
 
     parser = argparse.ArgumentParser(
-        description="Generates a consensus for overlapping bases in a read pair, and assigns the consensus to a single read")
+        description="Generates a consensus for overlapping bases in a read pair, and assigns the consensus to a single read",
+        epilog="Note the output file will be unsorted")
     parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                         help="An optional configuration file, which can specify any parameters")
     parser.add_argument("-i", "--input", required=True, metavar="BAM/SAM", type=lambda x: isValidFile(x, parser, True),
-                        help="Input BAM file. Does not need to be sorted (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
+                        help="Input alignment file. Does not need to be sorted (use \"-\" to read from stdin)")
     parser.add_argument("-o", "--output", required=True, metavar="BAM/SAM",
                         help="A path to an output BAM file. Will be UNSORTED (use \"-\" for stdout)")
     parser.add_argument("--tag_origin", action="store_true",
@@ -730,11 +731,12 @@ def isValidFile(file, parser, allowStream=False):
 
 
 parser = argparse.ArgumentParser(
-    description="Generates a consensus for overlapping bases between a read pair, and assigns the consensus to a single read")
+    description="Generates a consensus for overlapping bases between a read pair, and assigns the consensus to a single read",
+    epilog="Note the output file will be unsorted")
 parser.add_argument("-c", "--config", metavar="INI", type=lambda x: isValidFile(x, parser),
                     help="An optional configuration file, which can specify any parameters")
 parser.add_argument("-i", "--input", metavar="SAM/BAM/CRAM", type=lambda x: isValidFile(x, parser, True),
-                    help="Input alignment (BAM) file. Does not need to be sorted (use \"-\" to read from stdin [and \"Control + D\" to stop reading])")
+                    help="Input alignment file. May be unsorted (use \"-\" to read from stdin)")
 parser.add_argument("-o", "--output", metavar="SAM/BAM/CRAM", help="A path to an output alignment file. Will be UNSORTED (use \"-\" for stdout)")
 parser.add_argument("--tag_origin", action="store_true", help="Add a read tag indicating from which read a consensus base originated")
 parser.add_argument("-r", "--reference", metavar="FASTA", type=lambda x: isValidFile(x, parser), help="Reference genome, in FASTA format. Only used for CRAM compression/decompression")
