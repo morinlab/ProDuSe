@@ -8,6 +8,7 @@ import argparse
 import os
 import sys
 import multiprocessing
+
 try:
     import ProdusePipeline
 except ImportError:
@@ -84,7 +85,7 @@ def main(args=None, sysStdin=None):
         processPool = multiprocessing.Pool(processes=threads)
         try:
             # Run the jobs
-            processPool.map(ProdusePipeline.runPipelineMultithread, multithreadArgs)
+            processPool.imap_unordered(ProdusePipeline.runPipelineMultithread, multithreadArgs)
             processPool.close()
             processPool.join()
         except Exception as e:
