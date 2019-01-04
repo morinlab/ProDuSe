@@ -145,6 +145,16 @@ def validateArgs(args):
 
     return args
 
+def processSampleMulti(args):
+    """
+    Unpacks processSample arguments
+
+    :param args: A list of arguments to be unpacked
+    :return: Two tuples which contain variant stats for true and false variants
+    """
+
+    return processSample(*args)
+
 def processSample(bamFile, refGenome, targets, contig, trueVariants, ignoreVariants, printPrefix):
 
     # Run the pileup to identify candidate variants
@@ -348,7 +358,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
             multiprocArgs = list([args["bam"][i], args["reference"], args["targets"][i], x, trueVariants, ignoreVariants, printPrefix] for x in contigNames)
             processPool = multiprocessing.Pool(processes=threads)
             try:
-                varStats = processPool.starmap_async(processSample, multiprocArgs).get()
+                varStats = processPool.imap(processSampleMulti, multiprocArgs).get()
                 processPool.close()
                 processPool.join()
             except KeyboardInterrupt as e:
@@ -366,8 +376,7 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
     varFeatures = ["Total_Supporting_Molecules", "Strand_Bias", "Mean_Base_Quality", "Base_Quality_Bias",
                            "Mean_Mapping_Quality", "Mapping_Quality_Bias", "Total_Depth", "Homopolymer",
                            "Nearby_Mismatch_Proportion", "Mean_Read_Mismatches", "Read_Mismatch_Bias",
-                           "Mean_Family_Size", "Family_Size_Bias", "Mean_Distance_To_Read_End",
-                           "Duplex_Counts", "C->A mutation"]
+                           "Mean_Family_Size", "Family_Size_Bias", "Duplex_Counts", "C->A mutation"]
 
     # Dump the stats used to train the filters to the specified output files
     with open(args["true_stats"] if args["true_stats"] is not None else os.devnull, "w") as t,\
