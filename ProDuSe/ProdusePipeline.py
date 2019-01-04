@@ -242,7 +242,7 @@ def checkArgs(rawArgs):
     parser.add_argument("-c", "--config", metavar="INI", default=None, type=lambda x: isValidFile(x, parser),
                         help="A configuration file, specifying one or more arguments. Overriden by command line parameters")
     parser.add_argument("-d", "--outdir", metavar="DIR", default="." + os.sep,
-                        help="Output directory for analysis directory")
+                        help="Output directory for \'--directory_name\'")
     parser.add_argument("-r", "--reference", metavar="FASTA", required=True,
                         help="Reference genome, in FASTA format. BWA indexes should be present in the same directory")
     parser.add_argument("--no_barcodes", action="store_true", help="Does not use semi-degenerate barcoded adapters")
@@ -252,9 +252,10 @@ def checkArgs(rawArgs):
     inputFiles.add_argument("-sc", "--sample_config", metavar="INI", default=None,
                             type=lambda x: isValidFile(x, parser),
                             help="A sample cofiguration file, specifying one or more samples")
-    parser.add_argument("--normal_fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
+    normalFiles = parser.add_mutually_exclusive_group(required=False)
+    normalFiles.add_argument("--normal_fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
                         help="An optional set of paired-end FASTQ files corresponding to the matched normal of \'--fastqs\'")
-    parser.add_argument("-n", "--normal", metavar="BAM", default=None, type=lambda x: isValidFile(x, parser),
+    normalFiles.add_argument("-n", "--normal", metavar="BAM", default=None, type=lambda x: isValidFile(x, parser),
                         help="An optional matched normal BAM file of \'--fastqs\'")
     parser.add_argument("--norm_barcodes", action="store_true",
                         help="The \'--normal_fastqs\' use barcoded adapters")
@@ -306,7 +307,7 @@ def checkArgs(rawArgs):
     miscArgs.add_argument("--directory_name", default="produse_analysis_directory",
                         help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
     miscArgs.add_argument("--append_to_directory", action="store_true",
-                        help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
+                        help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory")
     miscArgs.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
 
     validatedArgs = parser.parse_args(args=listArgs)
@@ -718,6 +719,7 @@ def runPipeline(sampleName, sampleDir, cleanup=False):
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Sorting final matched-normal BAM file, and recalculating tags...\n"]))
         bwaConfig = os.path.join(sampleDir, "config", "bwa_task.ini")
         sortAndRetag(sortInput, sortOutput, bwaConfig)
+        open(collapseNormDone, "w").close()
 
     # Run call (variant calling)
     callDone = os.path.join(sampleDir, "config", "Call_Complete")
@@ -750,11 +752,11 @@ parser.add_argument("-sc", "--sample_config", metavar="INI", default=None, type=
                     help="A sample cofiguration file, specifying one or more samples")
 parser.add_argument("-r", "--reference", metavar="FASTA",
                     help="Reference genome, in FASTA format. BWA indexes should present in the same directory")
-parser.add_argument("-d", "--outdir", metavar="DIR", help="Output directory for analysis directory")
+parser.add_argument("-d", "--outdir", metavar="DIR", help="Output directory for \'--directory_name\'")
 parser.add_argument("--no_barcodes", action="store_true", help="Does not use semi-degenerate barcoded adapters")
 parser.add_argument("--normal_fastqs", metavar="FASTQ", default=None, nargs=2, type=lambda x: isValidFile(x, parser),
                     help="An optional set of paired-end FASTQ files corresponding to the matched normal of \'--fastqs\'")
-parser.add_argument("--normal", metavar="BAM", default=None, type=lambda x: isValidFile(x, parser),
+parser.add_argument("-n", "--normal", metavar="BAM", default=None, type=lambda x: isValidFile(x, parser),
                     help="An optional matched normal BAM file of \'--fastqs\'")
 parser.add_argument("--norm_barcodes", action="store_true", help="The \'--normal_fastqs\' use barcoded adapters")
 
@@ -799,7 +801,7 @@ miscArgs.add_argument("--samtools", help="Path to samtools executable [Default: 
 miscArgs.add_argument("--directory_name",
                     help="Default output directory name. The results of running the pipeline will be placed in this directory [Default: \'produse_analysis_directory\']")
 miscArgs.add_argument("--append_to_directory", action="store_true",
-                    help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory [Default: False]")
+                    help="If \'--directory_name\' already exists in the specified output directory, simply append new results to that directory")
 miscArgs.add_argument("--cleanup", action="store_true", help="Remove intermediate files")
 
 # For config parsing purposes, assign each parameter to the pipeline component from which it originates
