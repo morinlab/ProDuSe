@@ -3,9 +3,9 @@ sudo: required
 
 language: python
 python:
-    - "3.4"
     - "3.5"
     - "3.6"
+    - "3.7"
 
 before_install:
     - sudo apt-get install -qq bwa
@@ -19,7 +19,6 @@ before_install:
     - cd ..
 
 install: 
-    - "pip install numpy"
     - "pip install -r requirements.txt"
     - python setup.py install
 
