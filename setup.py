@@ -2,7 +2,6 @@
 
 from setuptools import setup, find_packages
 import re
-import sys
 
 # Imports version number
 VERSIONFILE = "ProDuSe/__version.py"
@@ -13,12 +12,6 @@ if currentVer:
     version = currentVer.group(1)
 else:
     version = "Unknown"
-
-# Since scikit-bio hasn't been updated in a while, the version of
-# numpy it relies on is not compatible with python 3.7
-# To minimize user confusion, check the version number
-if sys.version_info >= (3, 7):
-    raise NotImplementedError("Python 3.7 and higher are not currently supported")
 
 setup(
     name='ProDuSe',
@@ -34,7 +27,6 @@ setup(
        ],
     setup_requires=["numpy"],
     install_requires=[  # This ordering is very important!!!!!!
-        "fisher",
         "seaborn",
         "scipy",
         "sortedcontainers",

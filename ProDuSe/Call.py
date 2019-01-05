@@ -11,7 +11,7 @@ from skbio import alignment
 from scipy.stats import ttest_ind
 from pyfaidx import Fasta
 import time
-from fisher import pvalue as fisher_exact
+from scipy.stats import fisher_exact
 from statistics import mean
 from configobj import ConfigObj
 import bisect
@@ -360,9 +360,8 @@ class Position(object):
                 self.alleleMismatch[base] = tuple(self.mismatchNum[x] for x in reads.values())
                 self.alleleAvFamSize[base] = tuple(self.famSizes[x] for x in reads.values())
                 # Calculate strand bias
-                self.alleleStrandBias[base] = fisher_exact(self.pMapStrand[base], self.nMapStrand[base],
-                                                      sum(self.pMapStrand[x] for x in ("A", "C", "G", "T")),
-                                                       sum(self.nMapStrand[x] for x in ("A", "C", "G", "T"))).two_tail
+                self.alleleStrandBias[base] = fisher_exact([[self.pMapStrand[base], self.nMapStrand[base]],
+                                                     [self.pMapStrand[self.ref], self.nMapStrand[self.ref]]])[1]
 
                 counts = len(reads.values())
                 self.strandCounts[base] = counts
@@ -763,7 +762,7 @@ class IndelPos(object):
                 self.alleleMapQual[base] = tuple(self.mappingQual[x] for x in reads.values())
 
                 # Calculate strand bias
-                self.alleleStrandBias[base] = fisher_exact(self.pMapStrand[base], self.nMapStrand[base], sum(self.pMapStrand[x] for x in ("ALT", "REF")), sum(self.nMapStrand[x] for x in ("ALT", "REF"))).two_tail
+                self.alleleStrandBias[base] = fisher_exact([[self.pMapStrand[base], self.nMapStrand[base]], [self.pMapStrand["REF"], self.nMapStrand["REF"]]])[1]
 
                 counts = len(reads.values())
                 self.strandCounts[base] = counts
@@ -1700,7 +1699,7 @@ class PileupEngine(object):
             return False
 
         # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
-        pVal = fisher_exact(refCount, altCount, altPosition.strandCounts["REF"], altPosition.strandCounts["ALT"]).right_tail
+        pVal = fisher_exact([[refCount, altCount], [altPosition.strandCounts["REF"], altPosition.strandCounts["ALT"]]], alternative="less")[1]
         if pVal < pValThresh:
             return False  # Somatic
         else:

@@ -8,4 +8,3 @@ packaging
 scikit-learn==0.20.1
 scipy
 seaborn
-fisher

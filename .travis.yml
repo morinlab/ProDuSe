@@ -19,6 +19,7 @@ before_install:
     - cd ..
 
 install: 
+    - "pip install numpy"
     - "pip install -r requirements.txt"
     - python setup.py install
 
