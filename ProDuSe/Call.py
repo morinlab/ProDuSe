@@ -1034,7 +1034,7 @@ class PileupEngine(object):
 
             # Mean base quality
             meanBaseQual = mean(pos.alleleBaseQual[allele])
-            # Calculate differences in base quality btwn reference and alternate alleles
+            # Calculate differences in base quality between reference and alternate alleles
             if pos.strandCounts[ref] > 2:
                 baseQualBias = ttest_ind(pos.alleleBaseQual[ref], pos.alleleBaseQual[allele], equal_var=False).pvalue
                 if baseQualBias != baseQualBias:  #i.e the base quality bias is NaN. Set it to 1
