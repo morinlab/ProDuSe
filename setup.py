@@ -22,6 +22,7 @@ with open("README.md", "r") as fh:
 # Due to dependency shenanigans, install all dependencies through pip install of easy_install
 # According to everything I have read, they should act the same, but they 100% do not
 dependencyList = [
+    "cython",
     "seaborn",
     "scipy",
     "fisher",
