@@ -712,7 +712,8 @@ class Position:
                 distance = 0
                 cFamilyName = list(familyName[x] for x in collapseIndices)
                 for b1, b2 in zip(cFamilyName, cBarcode):
-                    if b1 != b2:
+                    # Don't count bases which are "N"s as distance between barcodes
+                    if b1 != b2 and b1 != "N" and b2 != "N":
                         distance += 1
                 if distance < minDistance:
                     # In the case of a tie, the largest family will be taken
