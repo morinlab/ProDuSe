@@ -29,6 +29,27 @@ except ImportError:
     from ProDuSe import ProDuSeExceptions as pe
 
 
+class VariantStatsInNormal(object):
+    """
+    The allele counts of a variant in the matched normal sample, if provided
+
+    This class supports both indels and SNVs
+    """
+
+    def __init__(self, alleleCounts, negStrandCounts, posStrandCounts, isGermline):
+        """
+
+        :param alleleCounts: A dictionary containing total allele counts {Allele: Counts} ex. {A:5}
+        :param negStrandCounts: A dictionary containing allele counts for reads mapping to the negative strand
+        :param posStrandCounts: A dictionary containing allele counts for reads mapping to the positive strand
+        :param isGermline: A boolean indicating if this variant is a germline variant
+        """
+        self.alleleCounts = alleleCounts
+        self.negStrandCounts = negStrandCounts
+        self.posStrandCounts = posStrandCounts
+        self.isGermline = isGermline
+
+
 class Haplotype(object):
     """
     TODO: An object that stores an aligned sequence ("Haplotype"), it's differences relative to the reference, and
@@ -126,7 +147,7 @@ class Position(object):
         self.nearbyVar = nearbyVariants
         self.nWindow = nWindow  # How many positions were examined to find nearby variants?
 
-    def summarizeVariant(self, minAltDepth=2, strongMoleculeThreshold=3):
+    def summarizeVariant(self, minAltDepth=4, strongMoleculeThreshold=3):
         """
         Aggregate all statistics at this position
         :param strongMoleculeThreshold:
@@ -197,7 +218,6 @@ class Position(object):
                     readNameIndex[readName] = i
                     del readNameBaseIndex[otherBase][readName]
                     readNameBaseIndex[base][readName] = i
-                    depth -= 1
                 elif qual < otherQual:  # The other read has a higher quality score. Ignore this one
                     continue
                 else:
@@ -209,7 +229,6 @@ class Position(object):
                         readNameIndex[readName] = i
                         del readNameBaseIndex[otherBase][readName]
                         readNameBaseIndex[base][readName] = i
-                        depth -= 1
                     else:
                         # In the case of a tie, use the reference base to be conservative
                         if otherBase == self.ref:
@@ -218,7 +237,6 @@ class Position(object):
                             readNameIndex[readName] = i
                             del readNameBaseIndex[otherBase][readName]
                             readNameBaseIndex[base][readName] = i
-                            depth -= 1
                         else:  # Both bases have the same quality score, and support different alternate alleles
                             # Choose the alternate allele with the most support
                             try:
@@ -235,12 +253,12 @@ class Position(object):
                                 readNameIndex[readName] = i
                                 del readNameBaseIndex[otherBase][readName]
                                 readNameBaseIndex[base][readName] = i
-                                depth -= 1
                             else:
                                 # These bases have the same quality score, and support different alternate alleles which
                                 # are equally supported
                                 # I give up. Just take the first read encountered
-                                continue
+                                pass
+                continue
 
             else:
                 # This is the first time we have encountered this read name. Store it, in case we encounter the mate
@@ -354,6 +372,7 @@ class Position(object):
                 self.alleleVafs[base] = 0
                 self.alleleMismatch[base] = (0,)
                 self.alleleAvFamSize[base] = (0,)
+
             else:
                 self.alleleMapQual[base] = tuple(self.mappingQual[x] for x in reads.values())
                 self.alleleBaseQual[base] = tuple(self.qualities[x] for x in reads.values())
@@ -366,7 +385,6 @@ class Position(object):
                 counts = len(reads.values())
                 self.strandCounts[base] = counts
                 self.alleleVafs[base] = counts / self.molecDepth
-
 
         # If no alternate alleles pass the minimum depth filter, than this position is not a real variant
         failedDepth = []
@@ -496,7 +514,7 @@ class IndelPos(object):
         self.nearbyVar = nearbyVar
         self.nWindow = noiseWindow
 
-    def summarizeVariant(self, minAltDepth=2, strongMoleculeThreshold=3, delBaseQual=38):
+    def summarizeVariant(self, minAltDepth=4, strongMoleculeThreshold=3, delBaseQual=38):
         """
         Summarize the statistics for this variant
         Generate a by-allele summary of the number of reads/molecules which support each
@@ -838,6 +856,7 @@ class PileupEngine(object):
             raise pe.IndexNotFound("Unable to locate BAM index \'%s.bai\': No such file or directory" % inBAM) from e
         self._refGenome = Fasta(refGenome, read_ahead=20000)
         self._captureSpace = self._loadCaptureSpace(targetRegions)
+        # self._mappability = self._loadMappabilityWig(mappabilityTrack)
         self.candidateIndels = {}
         self.rawIndels = {}
         self.pileup = {}
@@ -942,6 +961,78 @@ class PileupEngine(object):
             sys.stderr.write("Ensure the file is a valid BED file, and try again\n")
             exit(1)
 
+
+    def _loadMappabilityWig(self, mapFile):
+        """
+        Loads a mappability wiggle file
+
+        The mappability track is used when variant filtering to determine if a set of reads are likely mismapped.
+
+        File format:
+        fixedStep chrom=chr1 start=1 step=1000 span=1000
+        0
+        0
+        0
+        0
+        0
+
+        :param mapFile: A string containing a filepath to a wiggle file
+        :return:
+        """
+
+        # For everyone's sanity, we are going to assume that the user could use files which
+        # contain a mix of chr prefix and no chr prefix
+        # Is the BAM chr prefixed?
+        # Check the first reference sequence listed in the BAM header. This isn't perfect, but it should handle most cases
+        isChrPrefixed = self._inFile.header["SQ"][0]["SN"].startswith("chr")
+
+        mappability = {}  # Store as "{chromosome: {windowStart: mappability}}
+
+        with open(mapFile) as f:
+
+            windowStart = 0
+            step = 0
+            chrom = 0
+            for line in f:
+                try:  # If this is the mappability value, it will be a number
+                    # Move window
+                    mapVal = float(line)  # Python automatically ignores newlines during conversion, so we do not need to strip those
+                    mappability[chrom][windowStart] = mapVal
+                    windowStart += step
+
+                except ValueError:  # A header line specifying the chromosome and step
+                    # Parse the header line
+                    cols = line.split()
+                    # Sanity check
+                    if cols[0] != "fixedStep":
+                        raise AttributeError("Mappability file \'%s\' does not appear to be a UCSC wiggle file" % mapFile)
+                    for col in cols:
+                        if col == "fixedStep":
+                            continue
+                        else:
+                            attribute, value = col.split("=")
+                            if attribute == "chrom":
+                                # Match the chr prefix status of the BAM file
+                                if value.startswith("chr"):
+                                    if isChrPrefixed:
+                                        chrom = value
+                                    else:  # Strip chr prefix
+                                        chrom = value.replace("chr", "")
+                                else:  # Wiggle is not chr prefixed
+                                    if isChrPrefixed:
+                                        chrom = "chr" + value
+                                    else:
+                                        chrom = value
+                                mappability[chrom] = {}
+                            elif attribute == "start":
+                                windowStart = int(value)
+                            elif attribute == "step":
+                                step = int(value)
+                            else:  # We don't need anything else
+                                continue
+
+        return mappability
+
     def _insideCaptureSpace(self, read):
         """
         Does this read fall within our capture space? Note that this excludes soft-clipping
@@ -973,7 +1064,7 @@ class PileupEngine(object):
         header = ["##fileformat=VCFv4.3",  # Mandatory
                   "##source=ProDuSe",
                   "##source_version=" + pVer.__version__,
-                  "##analysis_date=" + time.strftime('%Y%m%d'),
+                  "##analysis_date=" + time.strftime('%Y-%m-%d'),
                   "##reference=" + self._refGenome.filename]
 
         # Add the contig information
@@ -1011,16 +1102,22 @@ class PileupEngine(object):
         header.append('##FORMAT=<ID=ADF,Number=R,Type=Integer,Description="Number of READS mapped to the forward strand for each allele">')
         header.append('##FORMAT=<ID=ADR,Number=R,Type=Integer,Description="Number of READS mapped to the reverse strand for each allele">')
 
-        header.append("\t".join(["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "TUMOR" + os.linesep]))
+        vcfFieldNames = ["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", "TUMOR"]
+        if self._normalFile is not None:
+            vcfFieldNames.append("NORMAL")
+
+        header.append("\t".join(vcfFieldNames))
         file.write(os.linesep.join(header))
+        file.write(os.linesep)
 
-
-    def varToFilteringStats(self, pos, allele):
+    def varToFilteringStats(self, pos, allele, chrom, position):
         """
         Summarizes various statistics that a variant is to be filtered based upon
 
         :param pos: A Position or IndelPos object to be filtered
         :param allele: A string containing a nucleotide, or (for IndelPos) "REF" or "ALT", which is the allele to be filtered
+        :param chrom: A string specifying the contig name of this variant
+        :param position: An int specifying the genomic position of the variant
         :return: A tuple containing the various variant stats
         """
 
@@ -1071,6 +1168,11 @@ class PileupEngine(object):
         except AttributeError:  # i.e. this is an indel. This filter does not apply
             dnaDamageMut = False
 
+        # What is the mappability of the reference genome in this position?
+        # Determine this using the mappability tract
+        #mapBins = list(self._mappability[chrom].keys())
+        #mappabilityIndex = bisect.bisect_left(mapBins, position) - 1
+        #refMappability = self._mappability[chrom][mapBins[mappabilityIndex]]
 
         posStats = (
             pos.strandCounts[allele],
@@ -1088,6 +1190,7 @@ class PileupEngine(object):
             fSizeBias,
             pos.duplexCounts[allele],
             dnaDamageMut
+            # refMappability
         )
 
         return posStats
@@ -1108,7 +1211,7 @@ class PileupEngine(object):
         :return:
         """
 
-        def _generateVCFEntry(pos, chrom, start, filterCon, filterField):
+        def _generateVCFEntry(pos, chrom, start, filterCon, filterField, germlineStats = None):
             """
             Generates a VCF entry of the specified variant
 
@@ -1119,6 +1222,7 @@ class PileupEngine(object):
             :param start: An int corresponding to the start position of this variant
             :param filterCon: A string (or iterable of strings) indicating how confident the filter is that this variant is real (btwn 0 and 1)
             :param filterField: A string to be used for the info field
+            :param germlineStats: A VariantStatsInNormal object containg allele counts for this variant in the normal
             :return: A string coresponding to the VCF entry of the provided position
             """
 
@@ -1170,6 +1274,16 @@ class PileupEngine(object):
                 ",".join(str(pos.pMapStrand[x]) for x in alleles),
                 ",".join(str(pos.nMapStrand[x]) for x in alleles)
             ]
+
+            if germlineStats is not None:
+                normalGenotype = [
+                    str(sum(x for x in germlineStats.alleleCounts.values())),
+                    ",".join(str(germlineStats.alleleCounts[x]) for x in alleles),
+                    ",".join(str(germlineStats.posStrandCounts[x]) for x in alleles),
+                    ",".join(str(germlineStats.negStrandCounts[x]) for x in alleles)
+                ]
+            else:
+                normalGenotype = None
             variant =   [chrom,  # CHROM
                         str(start + 1),   # POS, add 1 to account for differences in indexing btwn pysam and vcf spec
                         ".",     # ID  (No ID)
@@ -1181,6 +1295,8 @@ class PileupEngine(object):
                          self._genotypeFormat,  # Genotype format field
                          ":".join(genotype) # GENOTYPE
                         ]
+            if normalGenotype is not None:
+                variant.append(":".join(normalGenotype))  # Genotype of the normal sample
 
             return "\t".join(variant) + os.linesep
 
@@ -1212,7 +1328,7 @@ class PileupEngine(object):
                             if altAllele:  # Passed basic alt depth filters
 
                                 # Filter indel
-                                stats = [self.varToFilteringStats(indel, "ALT")]
+                                stats = [self.varToFilteringStats(indel, "ALT", chrom, iPos)]
                                 filterResults = filter.predict_proba(stats)[0][0]
 
                                 passesConfFilter = True
@@ -1247,20 +1363,23 @@ class PileupEngine(object):
 
                                 # Is this event germline?
                                 isGermline = False
+                                germlineCounts = None
                                 if self._normalFile is not None:
-                                    isGermline = self._checkIfGermlineIndel(chrom, iPos, indel)
-                                    if isGermline is True:
+                                    germlineCounts = self._checkIfGermlineIndel(chrom, iPos, indel)
+                                    isGermline = germlineCounts.isGermline
+                                    if germlineCounts.isGermline is True:
                                         if filterField == "PASS":
                                             filterField = "GERMLINE"
                                         else:
                                             filterField = filterField + ";GERMLINE"
-                                    elif isGermline is None:  # Insufficient depth in normal.
+                                    elif germlineCounts.isGermline is None:  # Insufficient depth in normal.
                                         if filterField == "PASS":
                                             filterField = "NO_DEPTH_NORMAL"
                                         else:
                                             filterField = filterField + ";NO_DEPTH_NORMAL"
+
                                 # Write out the unfiltered variant
-                                vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField)
+                                vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField, germlineCounts)
                                 u.write(vcfEntry)
 
                                 if passesConfFilter and duplexSupportFilt and isGermline is False:  # This variant passes filters
@@ -1289,7 +1408,7 @@ class PileupEngine(object):
                     if altAllele:
 
                         # Summarize the filter stats of each allele
-                        alleleStats = tuple(self.varToFilteringStats(candidateSNV, allele) for allele in candidateSNV.altAlleles.keys())
+                        alleleStats = tuple(self.varToFilteringStats(candidateSNV, allele, chrom, position) for allele in candidateSNV.altAlleles.keys())
 
                         try:
                             filterResults = filter.predict_proba(alleleStats)
@@ -1324,8 +1443,10 @@ class PileupEngine(object):
                                     filterField = "NO_DUPLEX"
                             # Is this variant germline? Check if it's in the normal sample (if provided)
                             isGermline = False
+                            germlineCounts = None
                             if self._normalFile is not None:
-                                isGermline = self._checkIfGermlineSNV(chrom, position, allele, candidateSNV)
+                                germlineCounts = self._checkIfGermlineSNV(chrom, position, allele, candidateSNV)
+                                isGermline = germlineCounts.isGermline
                                 if isGermline is True:
                                     if filterField == "PASS":
                                       filterField = "GERMLINE"
@@ -1345,7 +1466,7 @@ class PileupEngine(object):
                             allFiltResults.append(filterField)
                             allFiltConf.append(result)
 
-                        vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, allFiltConf, ";".join(allFiltResults))
+                        vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, allFiltConf, ";".join(allFiltResults), germlineCounts)
                         u.write(vcfEntry)
 
                         # Remove failed alleles
@@ -1354,7 +1475,7 @@ class PileupEngine(object):
 
                         # If any alt alleles passed filters, print them out
                         if candidateSNV.altAlleles:
-                            vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, passFiltConf, ";".join(passFiltResults))
+                            vcfEntry = _generateVCFEntry(candidateSNV, chrom, position, passFiltConf, ";".join(passFiltResults), germlineCounts)
                             o.write(vcfEntry)
 
                     del positions[position]  # Delete variants after processing them to reduce memory consumption
@@ -1371,7 +1492,7 @@ class PileupEngine(object):
 
                         if altAllele:
                             # Filter indel
-                            stats = [self.varToFilteringStats(indel, "ALT")]
+                            stats = [self.varToFilteringStats(indel, "ALT", chrom, iPos)]
                             filterResults = filter.predict_proba(stats)[0][0]
 
                             passesConfFilter = True
@@ -1407,21 +1528,23 @@ class PileupEngine(object):
 
                             # Is this event germline?
                             isGermline = False
+                            germlineCounts = None
                             if self._normalFile is not None:
-                                isGermline = self._checkIfGermlineIndel(chrom, iPos, indel)
-                                if isGermline is True:
+                                germlineCounts = self._checkIfGermlineIndel(chrom, iPos, indel)
+                                isGermline = germlineCounts.isGermline
+                                if germlineCounts.isGermline is True:
                                     if filterField == "PASS":
                                         filterField = "GERMLINE"
                                     else:
                                         filterField = filterField + ";GERMLINE"
-                                elif isGermline is None:  # Insufficient depth in normal.
+                                elif germlineCounts.isGermline is None:  # Insufficient depth in normal.
                                     if filterField == "PASS":
                                         filterField = "NO_DEPTH_NORMAL"
                                     else:
                                         filterField = filterField + ";NO_DEPTH_NORMAL"
 
                             # Write out the unfiltered variant
-                            vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField)
+                            vcfEntry = _generateVCFEntry(indel, chrom, iPos, [str(filterResults)], filterField, germlineCounts)
                             u.write(vcfEntry)
 
                             if passesConfFilter and duplexSupportFilt and isGermline is False:  # This variant passes filters
@@ -1442,7 +1565,7 @@ class PileupEngine(object):
                     hasAlt = indel.summarizeVariant()
                     if hasAlt:
                         # Filter indel
-                        stats = [self.varToFilteringStats(indel, "ALT")]
+                        stats = [self.varToFilteringStats(indel, "ALT", chrom, iPos)]
                         filterResults = filter.predict_proba(stats)[0][0]
 
                         passesConfFilter = True
@@ -1563,13 +1686,14 @@ class PileupEngine(object):
         :param minReadThreshold: An int indicating the minimum normal depth required to confidently assign a variant as germline or not
         :param vafThreshold: A float. If the VAF in the normal sample is higher than this threshold, the variant is flagged as germline
         :param minBaseQual: An int specifying the minimum base quality to count a base
-        :return: A boolean indicating if the variant is germline, or None, if there is insufficient depth
+        :return: A VariantStatsInNormal object containing the allele counts for this variant in the normal, and if the variant is considered germline
         """
 
         # Count the number of reads which support the reference and alternate alleles in the normal
         refAllele = altPosition.ref
-        refCount = 0
-        altCount = 0
+        alleleCounts = {"A": 0, "C":0, "G":0, "T":0}
+        negStrandCounts = {"A": 0, "C":0, "G":0, "T":0}
+        posStrandCounts = {"A": 0, "C":0, "G":0, "T":0}
         pileup = self._normalFile.pileup(contig=chrom, start=position, stop=position+1, maxDepth=20000, min_base_quality = minBaseQual)
         for pileupPos in pileup:
             # Since pysam's pileup generates an iterable of all positions covered by reads which overlap the specified
@@ -1582,22 +1706,43 @@ class PileupEngine(object):
                         continue
 
                     base = read.alignment.query_sequence[read.query_position]
-                    if base == refAllele:
-                        refCount += 1
-                    elif base == altAllele:
-                        altCount += 1
+                    if base not in alleleCounts:
+                        alleleCounts[base] = 0
+                    alleleCounts[base] += 1
+                    # Add the strand count information
+                    if read.alignment.is_reverse:  # Maps to the negative strand
+                        if base not in negStrandCounts:
+                            negStrandCounts[base] = 0
+                        negStrandCounts[base] += 1
+                    else: # The read maps to the positive strand
+                        if base not in posStrandCounts:
+                            posStrandCounts[base] = 0
+                        posStrandCounts[base] += 1
+
+        # Parse allele counts
+        refCount = alleleCounts[refAllele]
+        altCount = alleleCounts[altAllele]
+        isGermline = None
 
         # Is there sufficient normal depth?
         if refCount + altCount < minReadThreshold:
-            return None
-
-        # Calculate the VAF of the mutation in the normal
-        normVaf = altCount / (refCount + altCount)
-        # Based on the VAF, is this variant germline?
-        if normVaf > vafThreshold:  # Germline
-            return True
+            isGermline = None
         else:
-            return False
+            # Calculate the VAF of the mutation in the normal
+            try:
+                normVaf = altCount / (refCount + altCount)
+            except ZeroDivisionError:
+                normVaf = 0
+            # Based on the VAF, is this variant germline?
+            if normVaf > vafThreshold:  # Germline
+                isGermline = True
+            else:
+                isGermline = False
+
+        # Generate an object which stores the germline allele counts for this variant
+        normVar = VariantStatsInNormal(alleleCounts, negStrandCounts, posStrandCounts, isGermline)
+        return normVar
+
 
     def _checkIfGermlineIndel(self, chrom, position, altPosition, pValThresh=0.05, minReadThreshold=6, sequenceWindow=200, minVafThreshold=0.03):
         """
@@ -1612,7 +1757,7 @@ class PileupEngine(object):
         :param pValThresh: A float indicating the p-value threshold. If the fisher's pvalue is above this threshold, the variant is flagged as germline
         :param minReadThreshold: An int indicating the minimum normal depth required to confidently assign a variant as germline or not
         :param minVafThreshold: A float. If the VAF in the normal sample is higher than this threshold, the variant is flagged as germline
-        :return: A boolean indicating if the variant is germline, or None, if there is insufficient depth
+        :return: A VariantStatsInNormal object, containg the allele counts for the reference and alternate genotype
         """
 
         class discountPysamRead:
@@ -1631,10 +1776,6 @@ class PileupEngine(object):
         pileupEnd += self._softClipUntilIndel
         # Parse all reads which overlap this position
         normalReads = tuple(self._normalFile.fetch(contig=chrom, start=pileupStart, stop=pileupEnd))
-
-        # If there is too little coverage at this locus, then we can't accurately determine if this mutation is germline
-        if len(normalReads) < minReadThreshold:
-            return None
 
         windowStart = pileupStart - sequenceWindow
         windowEnd = pileupEnd + sequenceWindow
@@ -1683,27 +1824,49 @@ class PileupEngine(object):
         altCount = len(altReads)
         refCount = len(refReads)
 
+        # Count the number of reads supporting the reference and alternate allele on the + and - strand
+        readCounts = {"REF": refCount, "ALT": altCount}
+        negStrandCounts = {"REF": 0, "ALT": 0}
+        posStrandCounts = {"REF": 0, "ALT": 0}
+        for read in normalReads:
+            if read.query_name in refReads:
+                if read.is_reverse:
+                    negStrandCounts["REF"] += 1
+                else:
+                    posStrandCounts["REF"] += 1
+            elif read.query_name in altReads:
+                if read.is_reverse:
+                    negStrandCounts["ALT"] += 1
+                else:
+                    posStrandCounts["ALT"] += 1
+
         # Check for sufficient coverage again
+        isGermline = None
         if altCount + refCount < minReadThreshold:
-            return None
-
-        # Calculate normal VAF
-        normVaf = altCount / (refCount + altCount)
-        # Based on the VAF, can we assign this mutation as somatic or germline?
-        if normVaf > minVafThreshold:
-            return True  # Germline
-        # If there is only one read supporting the alternate allele, it is probably an artifact, and not a germline
-        # mutation. For low VAF somatic events, these will be flagged as germline
-        # Thus, flag events with only one read supporting it in the germline as somatic
-        if altCount < 2:
-            return False
-
-        # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
-        pVal = fisher_exact([[refCount, altCount], [altPosition.strandCounts["REF"], altPosition.strandCounts["ALT"]]], alternative="less")[1]
-        if pVal < pValThresh:
-            return False  # Somatic
+            isGermline = None
         else:
-            return True  # Germline
+            # Calculate normal VAF
+            normVaf = altCount / (refCount + altCount)
+            # Based on the VAF, can we assign this mutation as somatic or germline?
+            if normVaf > minVafThreshold:
+                isGermline = True
+            # If there is only one read supporting the alternate allele, it is probably an artifact, and not a germline
+            # mutation. For low VAF somatic events, these will be flagged as germline
+            # Thus, flag events with only one read supporting it in the germline as somatic
+            elif altCount < 2:
+                isGermline = False
+            else:
+                # Perform a fisher's exact test to determine the mutation occurs more frequently in the tumour
+                pVal = fisher_exact([[refCount, altCount], [altPosition.strandCounts["REF"], altPosition.strandCounts["ALT"]]], alternative="less")[1]
+                if pVal < pValThresh:
+                    isGermline = False  # Somatic
+                else:
+                    isGermline = True  # Germline
+
+        # Create a variant object to store the allele counts in the normal samples
+        germVar = VariantStatsInNormal(readCounts, negStrandCounts, posStrandCounts, isGermline)
+
+        return germVar
 
     def processRead(self, read, rCigar, knownMatch = None):
         """
@@ -1979,7 +2142,7 @@ class PileupEngine(object):
                         for pos, eAttributes in eventLoc.items():
                             eLength = eAttributes[0]
                             eType = eAttributes[1]
-                            ePos = self._refStart + pos + refStart + altAlignment.target_begin
+                            ePos = self._refStart + pos + refStart # + altAlignment.target_begin
 
                             if ePos not in self.rawIndels[self._chrom]:
                                 self.rawIndels[self._chrom][ePos] = {}
@@ -2149,7 +2312,6 @@ class PileupEngine(object):
         haplotype were processed in an earlier window, don't process all indel-supporting reads in the earlier window
         :return:
         """
-
 
         i = 0
         for read in self._indelReads:
@@ -2585,6 +2747,8 @@ def validateArgs(args):
                         help="A pickle file containing the trained filter. Can be generated using \'produse train\'")
     parser.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
                         help="How many chromosomes to process simultaneously")
+    #parser.add_argument("-m", "--mappability", metavar="WIG", type=lambda x: isValidFile(x, parser), required=True,
+    #                    help="Genome mappability wiggle file")
     parser.add_argument("--threshold", metavar="FLOAT", type=float, default=0.65,
                         help="Filtering threshold (lower=more lenient) [Default: 0.65]")
     parser.add_argument("--repeat_count_threshold", metavar="INT", type=int, default=4,
@@ -2621,6 +2785,8 @@ parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile
 parser.add_argument("-f", "--filter", metavar="PICKLE", type=lambda x: isValidFile(x, parser),
                     help="A pickle file containing a trained filter. Can be generated using \'produse train\'")
 parser.add_argument("-j", "--jobs", metavar="INT", type=int, help="How many chromosomes to process simultaneously")
+#parser.add_argument("-m", "--mappability", metavar="WIG", type=lambda x: isValidFile(x, parser),
+#                    help="Genome mappability wiggle file")
 parser.add_argument("--threshold", metavar="FLOAT", type=float,
                     help="Filtering threshold (lower=more lenient) [Default: 0.65]")
 parser.add_argument("--repeat_count_threshold", metavar="INT", type=int, help="If an indel is an expansion or contraction of a nearby repeat which occurs at least this many times, filter it [Default: 4]")
