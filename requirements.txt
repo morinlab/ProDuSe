@@ -3,8 +3,8 @@ numpy
 configobj
 scikit-bio
 pyfaidx
-pysam
 packaging
-scikit-learn==0.20.1
+pysam
+scikit-learn==0.22.1
 scipy
 seaborn
