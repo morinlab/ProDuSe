@@ -858,7 +858,8 @@ def main(args=None, sysStdin=None):
     # First, check to see if this output directory already exists in the specified path
     args["outdir"] = os.path.abspath(args["outdir"])
     baseOutDir = args["outdir"] + os.sep + args["directory_name"]
-    if os.path.exists(baseOutDir) and not args["append_to_directory"]:
+    if os.path.exists(baseOutDir):
+        if not args["append_to_directory"]:
             sys.stderr.write("ERROR: \'%s\' already exists in \'%s\'\n" % (args["directory_name"], args["outdir"]))
             sys.stderr.write("Use \'--append_to_directory\' to append results to the existing directory\n")
             sys.exit(1)
