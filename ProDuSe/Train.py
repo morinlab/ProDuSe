@@ -125,12 +125,12 @@ def validateArgs(args):
     parser.add_argument("-t", "--targets", metavar="BED", nargs="+", type=lambda x: isValidFile(x, parser),
                         help="A BED file containing regions in which to restrict variant calling")
     miscArgs = parser.add_argument_group(description="Miscellaneous arguments")
-    miscArgs.add_argument("--ignore_vcfs", metavar="VCF", type=lambda x: isValidFile(x, parser), nargs="+",
-                        help="One or more optional VCF files listing variants that are to be excluded from filter training")
+    miscArgs.add_argument("--ignore_vcf", metavar="VCF", type=lambda x: isValidFile(x, parser),
+                        help="An optional VCF file listing variants that are to be excluded from filter training")
     miscArgs.add_argument("-j", "--jobs", metavar="INT", type=int, default=1,
                           help="Number of chromosomes to process simultaneously")
     miscArgs.add_argument("--input_files", metavar="TSV", type=lambda x: isValidFile(x, parser),
-                          help="An input tab-deliniated file listing \'validations1.vcf input1.bam\'. May be used instead of \'-v\' and \'-b\'. May also specify targets.")
+                          help="An input tab-deliniated file listing \'validations1.vcf input1.bam\'. May be used instead of \'-v\' and \'-b\'. May also specify \'-t\'.")
     miscArgs.add_argument("--true_stats", metavar="TSV", type=str,
                           help="An output file containing all true variant status used to train the filter")
     miscArgs.add_argument("--false_stats", metavar="TSV", type=str,
@@ -303,7 +303,7 @@ parser.add_argument("-t", "--targets", metavar="BED", type=lambda x: isValidFile
 parser.add_argument("-v", "--validations", metavar="VCF", type=lambda x: isValidFile(x, parser), nargs="+", help="One or more VCF files listing validated variants.")
 # parser.add_argument("-m", "--mappability", metavar="WIG", type=lambda x: isValidFile(x, parser), help="UCSC genome mappability file in wiggle format")
 miscArgs = parser.add_argument_group(description="Miscellaneous arguments")
-miscArgs.add_argument("--ignore_vcfs", metavar="VCF", type=lambda x: isValidFile(x, parser, allowNone=True), nargs="+", help="One or more optional VCF files listing variants that are to be excluded from filter training")
+miscArgs.add_argument("--ignore_vcf", metavar="VCF", type=lambda x: isValidFile(x, parser, allowNone=True), help="An optional VCF file listing variants that are to be excluded from filter training")
 miscArgs.add_argument("-j", "--jobs", metavar="INT", type=int, help="Number of chromosomes to process simultaneously")
 miscArgs.add_argument("--input_files", metavar="TSV", type=lambda x:isValidFile(x, parser), help="An input tab-deliniated file listing \'validations1.vcf input1.bam\'. May be used instead of \'-v\' and \'-b\'. May also specify targets.")
 miscArgs.add_argument("--true_stats", metavar="TSV", type=str, help="An output file containing all true variant status used to train the filter")
@@ -335,8 +335,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
         args["targets"] = [None] * len(args["bam"])
     elif len(args["targets"]) == 1:  # i.e. all samples have the same capture space
         args["targets"] = args["targets"] * len(args["bam"])
-    if args["ignore_vcfs"] is None:
-        args["ignore_vcfs"] = [None] * len(args["bam"])
 
     # Parse contig names
     contigNames = Fasta(args["reference"]).records.keys()
@@ -348,9 +346,9 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRAIN\t"):
 
     # Load validated variants
     i = 0
+    ignoreVariants = loadVariants(args["ignore_vcf"])
     for validations in args["validations"]:
         trueVariants = loadVariants(validations)
-        ignoreVariants = loadVariants(args["ignore_vcfs"][i])
 
         sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Processing Sample \'%s\'\n" % os.path.basename(args["bam"][i])]))
 
