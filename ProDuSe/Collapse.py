@@ -367,10 +367,21 @@ class Family:
                         softClippedNum += 1
 
                     # If this sequence has an insertion at this position,
-                    # We need to account for it, and store it seperatly for comparison
+                    # We need to account for it, and store it separately for comparison
                     j = 0
                     while cigar == 1:
+                        invalidInsertion = False
                         try:
+                            previousCigar = cigars[i][cigarIndex[i] - 1]
+                            if previousCigar == 4:
+                                raise IndexError("Insertion following soft-clipped bases")
+                        except IndexError:
+                            # In this case, we will have to soft-clip the insertion after processing it
+                            # This isn't perfect, but I don't want to duplicate a whole block of code
+                            invalidInsertion = True
+                        try:
+                            # As a sanity check, make sure this insertion doesn't occur after soft-clipping or at the
+                            # start of the read, as that is not a valid cigar sequence
                             if i == 0:
                                 refLength += 1
                             base = sequences[i][baseIndex[i]]
@@ -389,10 +400,26 @@ class Family:
                             baseIndex[i] += 1
                             j += 1
                             cigar = cigars[i][cigarIndex[i]]
+                            if cigar == 4 or invalidInsertion:
+                                raise IndexError("Invalid Cigar Sequence")
 
-                        except IndexError as e: # This record ends with an insertion, which is not valid
-                            badCigar = self.listToCigar(cigars[i])
-                            raise TypeError("Invalid Cigar Sequence %s" % badCigar) from e
+                        except IndexError:
+                            # This record ends with an insertion, or the next base is soft-clipped
+                            # As this cigar is invalid, lets just soft-clip the entire insertion
+                            for k in range(0, j):
+                                cigars[i][cigarIndex[i] - j + k] = 4
+                                # Since we previously counted the insertion, remove the bases from the insertion construct
+                                iBaseIndex = baseIndex[i] - j + k
+                                base = sequences[i][iBaseIndex]
+                                qual = qualities[i][iBaseIndex]
+                                insertion[k][base][0] -= 1  # Deincriment the counter for this base in the index
+                                insertion[k][base][2] -= qual
+                                # Since we don't know the previous max base quality, we can't revert that change
+                                # Hence its a feature, not a bug ;)
+                            cigarIndex[i] -= j
+                            baseIndex[i] -= j
+                            if i == 0:
+                                refLength -= 1
 
                     # In the case of a deletion, all we need to do is indicate that there is
                     # a deletion at this position
@@ -496,7 +523,7 @@ class Family:
                 consensusCigar.append(2)
             refLength += 1
 
-        # To handle the extremely rare cases which may cause a consensus read to start or end with a INDEL
+        # To handle the extremely rare cases which may cause a consensus read to start or end with a indel
         # Remove such events from the start or end of the read
         # From the start of the read
         i = 0
@@ -577,6 +604,7 @@ class Family:
         self.R1.reference_start = self.R1start
         self.R2.query_name = self.name
         self.R2.reference_start = self.R2start
+
         if tagOrig:
             self.R1.set_tag("Zm", ",".join(self.members))
             self.R2.set_tag("Zm", ",".join(self.members))
