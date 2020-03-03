@@ -1190,12 +1190,12 @@ class PileupEngine(object):
             fSizeBias,
             pos.duplexCounts[allele],
             dnaDamageMut
-            # refMappability
         )
 
         return posStats
 
-    def filterAndWriteVariants(self, outFile, filter, unfilteredOut=None, filtThreshold=0.6, onlyDuplex=False, indelRepeatThresh=4, writeHeader=False):
+    def filterAndWriteVariants(self, outFile, filter, unfilteredOut=None, filtThreshold=0.6, onlyDuplex=False, minAltDepth=4,
+                               indelRepeatThresh=4, writeHeader=False):
         """
 
         Filters candidate variants based upon specified characteristics, and writes the output to the output file
@@ -1206,6 +1206,7 @@ class PileupEngine(object):
         :param unfilteredOut: A sting containing a filepath to an output VCF file which will contain ALL variants, even those that do not pass filters
         :param filtThreshold: A float representing the classification threshold in which to filter variants
         :param onlyDuplex: A boolean indicating if only variants with duplex support should pass filters. Not recommended
+        :param minAltDepth: An int indicating the minimum number of unique molecules required to call a variant
         :param indelRepeatThresh: An int indicating the number of times a repeat has to occur before an indel which is an expansion/contraction of this repeat is filtered out
         :param writeHeader: A boolean. If true, any existing file outFile will be overwritten, and a VCF header will be added to the file
         :return:
@@ -1323,7 +1324,7 @@ class PileupEngine(object):
                         posToDelete = []
                         for iPos in self.candidateIndels[chrom].irange(maximum = position, inclusive=(True, False)):
                             indel = self.candidateIndels[chrom][iPos]
-                            altAllele = indel.summarizeVariant()
+                            altAllele = indel.summarizeVariant(minAltDepth=minAltDepth)
 
                             if altAllele:  # Passed basic alt depth filters
 
@@ -1403,7 +1404,7 @@ class PileupEngine(object):
                         raise AttributeError("It appears that the variant classifier specified with "
                                              "\'-f/--filter\' is obsolete. Try using the default variant classifier") from e
 
-                    altAllele = candidateSNV.summarizeVariant()
+                    altAllele = candidateSNV.summarizeVariant(minAltDepth=minAltDepth)
                     self.varCount += 1
                     if altAllele:
 
@@ -1488,7 +1489,7 @@ class PileupEngine(object):
                 # Process any remaining indels on this chromosome
                 try:
                     for iPos, indel in self.candidateIndels[chrom].items():
-                        altAllele = indel.summarizeVariant()
+                        altAllele = indel.summarizeVariant(minAltDepth=minAltDepth)
 
                         if altAllele:
                             # Filter indel
@@ -1562,7 +1563,7 @@ class PileupEngine(object):
             # Finally, process any indels on remaining contigs
             for chrom in self.candidateIndels:
                 for iPos, indel in self.candidateIndels[chrom].items():
-                    hasAlt = indel.summarizeVariant()
+                    hasAlt = indel.summarizeVariant(minAltDepth=minAltDepth)
                     if hasAlt:
                         # Filter indel
                         stats = [self.varToFilteringStats(indel, "ALT", chrom, iPos)]
@@ -2970,11 +2971,11 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-CALL\t"):
             # Filter variants
             if first:
                 pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"],
-                                              args["duplex_support_only"], args["repeat_count_threshold"], writeHeader=True)
+                                              args["duplex_support_only"], args["min_alt_depth"], args["repeat_count_threshold"], writeHeader=True)
                 first = False
             else:
                 pileup.filterAndWriteVariants(args["output"], filterModel, args["unfiltered"], args["threshold"],
-                                              args["duplex_support_only"], args["repeat_count_threshold"])
+                                              args["duplex_support_only"], args["min_alt_depth"], args["repeat_count_threshold"])
             pileup.reset()
 
     sys.stderr.write("\t".join([printPrefix, time.strftime('%X'), "Call Complete\n"]))

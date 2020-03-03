@@ -284,7 +284,6 @@ def main(args=None, sysStdin=None, printPrefix="PRODUSE-TRIM\t"):
                 # If we are checking the other end of the read for the presence of a barcode, do so now
                 # Note that we do NOT discard reads here
                 if args["trim_other_end"] and not args["no_trim"]:
-                    # Yeah yeah, I know I'm duplicating code. But it's not that much code
                     # Obtain the candidate reverse barcode sequence
                     barcode1 =r1seq.rstrip()[-barcodeLength:]  # Ignore the newline
                     barcode2 = r1seq.rstrip()[-barcodeLength:]
